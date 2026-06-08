@@ -125,6 +125,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEXT_TELEMETRY_DISABLED: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName: ${{ needs.create_tag.outputs.tag }}
@@ -132,4 +134,5 @@ jobs:
           releaseBody: "Self-contained installers for macOS, Windows (x64/arm64) and Linux (x64/arm64)."
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
