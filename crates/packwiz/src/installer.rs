@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256, Sha512};
 
+use crate::curseforge::{self, Curseforge};
 use crate::error::{PackwizError, Result};
 use crate::manifest::{FileRecord, ManagedMod, Manifest};
 use crate::model::{Index, MetaFile, Pack};
@@ -41,6 +42,14 @@ impl Installer {
 
     pub fn modrinth(&self, cache_dir: impl Into<PathBuf>) -> Modrinth {
         Modrinth::new(self.client.clone(), cache_dir)
+    }
+
+    pub fn curseforge(
+        &self,
+        cache_dir: impl Into<PathBuf>,
+        api_key: impl Into<String>,
+    ) -> Curseforge {
+        Curseforge::new(self.client.clone(), cache_dir, api_key)
     }
 
 
@@ -127,9 +136,6 @@ impl Installer {
                 if !opts.side.wants(&meta.side) {
                     continue;
                 }
-                let Some(url) = meta.download.url.clone() else {
-                    continue;
-                };
 
                 let dest = sibling_path(&entry.file, &meta.filename);
                 let category = top_dir(&dest);
@@ -138,6 +144,24 @@ impl Installer {
                 let modrinth_version = modrinth
                     .map(|m| m.version.clone())
                     .filter(|v| !v.is_empty());
+                let cf = meta.update.as_ref().and_then(|u| u.curseforge.as_ref());
+
+                let url = match meta.download.url.clone() {
+                    Some(url) => url,
+                    None => match cf.filter(|c| c.file_id != 0) {
+                        Some(c) => curseforge::cdn_url(c.file_id, &meta.filename),
+                        None => continue,
+                    },
+                };
+
+                let (source, curseforge_id, curseforge_file) = if cf.is_some() {
+                    let c = cf.unwrap();
+                    ("curseforge".to_string(), Some(c.project_id), Some(c.file_id))
+                } else if modrinth_id.is_some() {
+                    ("modrinth".to_string(), None, None)
+                } else {
+                    (String::new(), None, None)
+                };
 
                 plan.push(Planned {
                     dest: dest.clone(),
@@ -153,6 +177,9 @@ impl Installer {
                         category,
                         modrinth_id,
                         modrinth_version,
+                        source,
+                        curseforge_id,
+                        curseforge_file,
                     }),
                 });
             } else {
@@ -382,6 +409,9 @@ fn content_override_meta(path: &str) -> Option<ManagedMod> {
         category,
         modrinth_id: None,
         modrinth_version: None,
+        source: String::new(),
+        curseforge_id: None,
+        curseforge_file: None,
     })
 }
 

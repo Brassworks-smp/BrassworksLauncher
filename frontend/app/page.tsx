@@ -8,11 +8,14 @@ import { TitleBar } from "@/components/TitleBar";
 import { AccountMenu } from "@/components/AccountMenu";
 import { PlayView } from "@/components/PlayView";
 import { ModsView } from "@/components/ModsView";
+import { ScreenshotsView } from "@/components/ScreenshotsView";
 import { SettingsView } from "@/components/SettingsView";
 import { MicrosoftModal, type MsAuthState } from "@/components/MicrosoftModal";
 import { LogUploadModal } from "@/components/LogUploadModal";
 import { LogViewer } from "@/components/LogViewer";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
+import { ToastHost, toast } from "@/lib/toast";
 import type {
   AccountStore,
   Instance,
@@ -56,6 +59,26 @@ export default function Home() {
 
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  const theme = settings?.theme ?? "system";
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    root.classList.toggle("reduce-motion", !!settings?.reduce_motion);
+
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = () => {
+      const light = theme === "brass-light" || (theme === "system" && mq.matches);
+      root.classList.toggle("theme-light", light);
+    };
+    apply();
+    if (theme === "system") {
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
+  }, [theme, settings?.reduce_motion]);
 
   useEffect(() => {
     if (!api.isTauri()) return;
@@ -86,47 +109,42 @@ export default function Home() {
   }, []);
   useEffect(refreshModStatus, [refreshModStatus]);
 
-  useEffect(() => {
-    if (!api.isTauri()) return;
-    let alive = true;
-    const tick = () =>
-      api
-        .getPlayercount()
-        .then((p) => {
-          if (alive) {
-            setPlayers(p);
-            setPlayersError(false);
-          }
-        })
-        .catch(() => alive && setPlayersError(true));
-    tick();
-    const h = setInterval(tick, PLAYERCOUNT_INTERVAL);
-    return () => {
-      alive = false;
-      clearInterval(h);
-    };
-  }, []);
+  const checkUpdates = useCallback(
+    () => api.modpackStatus(PRIMARY_ID).then(setModStatus),
+    [],
+  );
 
+  const refreshPlayers = useCallback(async () => {
+    if (!api.isTauri()) return;
+    try {
+      setPlayers(await api.getPlayercount());
+      setPlayersError(false);
+    } catch {
+      setPlayersError(true);
+    }
+  }, []);
   useEffect(() => {
     if (!api.isTauri()) return;
-    let alive = true;
-    const tick = () =>
-      api
-        .getNews()
-        .then((n) => {
-          if (alive) {
-            setNews(n);
-            setNewsError(false);
-          }
-        })
-        .catch(() => alive && setNewsError(true));
-    tick();
-    const h = setInterval(tick, NEWS_INTERVAL);
-    return () => {
-      alive = false;
-      clearInterval(h);
-    };
+    void refreshPlayers();
+    const h = setInterval(refreshPlayers, PLAYERCOUNT_INTERVAL);
+    return () => clearInterval(h);
+  }, [refreshPlayers]);
+
+  const refreshNews = useCallback(async () => {
+    if (!api.isTauri()) return;
+    try {
+      setNews(await api.getNews());
+      setNewsError(false);
+    } catch {
+      setNewsError(true);
+    }
   }, []);
+  useEffect(() => {
+    if (!api.isTauri()) return;
+    void refreshNews();
+    const h = setInterval(refreshNews, NEWS_INTERVAL);
+    return () => clearInterval(h);
+  }, [refreshNews]);
 
   useEffect(() => {
     if (!api.isTauri()) return;
@@ -135,7 +153,16 @@ export default function Home() {
         if (p.instance_id === PRIMARY_ID) setProgress(p);
       }),
       api.onLaunchStarted((id) => {
-        if (id === PRIMARY_ID) setPhase("running");
+        if (id !== PRIMARY_ID) return;
+        setPhase("running");
+        const s = settingsRef.current;
+        if (s?.console_on_launch) setLogView(true);
+        const behavior = s?.launch_behavior ?? "keep";
+        if (api.isTauri()) {
+          const win = getCurrentWindow();
+          if (behavior === "hide") win.minimize().catch(() => {});
+          else if (behavior === "quit") win.close().catch(() => {});
+        }
       }),
       api.onLaunchExited((info) => {
         if (info.instance_id !== PRIMARY_ID) return;
@@ -144,6 +171,16 @@ export default function Home() {
         if (info.error) setError(info.error);
         api.getInstance(PRIMARY_ID).then(setInstance).catch(() => {});
         api.modpackStatus(PRIMARY_ID).then(setModStatus).catch(() => {});
+
+        const s = settingsRef.current;
+        if (api.isTauri() && s?.launch_behavior === "hide") {
+          const win = getCurrentWindow();
+          win.unminimize().catch(() => {});
+          win.setFocus().catch(() => {});
+        }
+        const crashed = !!info.error || (info.code !== null && info.code !== 0);
+        if ((crashed && s?.console_on_crash) || (!crashed && s?.console_on_quit))
+          setLogView(false);
       }),
     ];
     return () => {
@@ -163,7 +200,12 @@ export default function Home() {
         if (d.instance_id !== PRIMARY_ID) return;
         setMaintaining(false);
         setProgress(null);
-        if (d.error) setError(d.error);
+        if (d.error) {
+          setError(d.error);
+          toast("Modpack update failed", "error");
+        } else if (!d.cancelled) {
+          toast("Modpack is up to date", "success");
+        }
         refreshModStatus();
       }),
     ];
@@ -295,10 +337,15 @@ export default function Home() {
               canPlay={canPlay}
               modStatus={modStatus}
               locked={locked}
+              notInstalled={!!modStatus && !modStatus.installed_version}
+              showPlaytime={settings?.show_playtime ?? true}
+              playtimeHours={settings?.playtime_in_hours ?? false}
               players={players}
               playersError={playersError}
               news={news}
               newsError={newsError}
+              onRefreshPlayers={refreshPlayers}
+              onRefreshNews={refreshNews}
               onPlay={onPlay}
               onUpdate={onUpdate}
               onStop={onStop}
@@ -314,6 +361,8 @@ export default function Home() {
             />
           )}
 
+          {view === "screenshots" && <ScreenshotsView instanceId={PRIMARY_ID} />}
+
           {view === "settings" && (
             <SettingsView
               settings={settings}
@@ -321,6 +370,7 @@ export default function Home() {
               modStatus={modStatus}
               maintaining={maintaining}
               progress={progress}
+              onCheckUpdates={checkUpdates}
               onSaveSettings={(s) => {
                 setSettings(s);
                 api.saveSettings(s).catch((e) => setError(String(e)));
@@ -348,6 +398,7 @@ export default function Home() {
       {logUpload && (
         <LogUploadModal upload={logUpload} onClose={() => setLogUpload(null)} />
       )}
+      <ToastHost />
     </div>
   );
 }

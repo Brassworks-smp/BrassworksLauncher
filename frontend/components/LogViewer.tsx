@@ -1,8 +1,39 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { X, Copy, Check, FileUp, Loader2, ScrollText } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  X,
+  Copy,
+  Check,
+  FileUp,
+  Loader2,
+  ScrollText,
+  Search,
+  FolderOpen,
+} from "lucide-react";
 import * as api from "@/lib/api";
+
+type Level = "error" | "warn" | "info" | "debug" | "default";
+
+const LEVEL_CLASS: Record<Level, string> = {
+  error: "log-error",
+  warn: "log-warn",
+  info: "log-info",
+  debug: "log-debug",
+  default: "log-default",
+};
+
+function lineLevel(line: string): Level {
+  const m = line.match(/\/(FATAL|ERROR|WARN|WARNING|INFO|DEBUG|TRACE)\]/i);
+  const lvl = m?.[1]?.toUpperCase();
+  if (lvl === "FATAL" || lvl === "ERROR") return "error";
+  if (lvl === "WARN" || lvl === "WARNING") return "warn";
+  if (lvl === "INFO") return "info";
+  if (lvl === "DEBUG" || lvl === "TRACE") return "debug";
+  if (/^\s+at\s|^Caused by:|^\s*\.\.\.\s\d|Exception(?::|\s)/.test(line))
+    return "error";
+  return "default";
+}
 
 export function LogViewer({
   instanceId,
@@ -20,7 +51,8 @@ export function LogViewer({
   const [text, setText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [follow, setFollow] = useState(true);
-  const bodyRef = useRef<HTMLPreElement>(null);
+  const [query, setQuery] = useState("");
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -37,10 +69,17 @@ export function LogViewer({
     };
   }, [instanceId, live]);
 
+  const lines = useMemo(() => (text ? text.split("\n") : []), [text]);
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(
+    () => (q ? lines.filter((l) => l.toLowerCase().includes(q)) : lines),
+    [lines, q],
+  );
+
   useEffect(() => {
-    if (follow && bodyRef.current)
+    if (follow && !q && bodyRef.current)
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [text, follow]);
+  }, [shown, follow, q]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -60,8 +99,8 @@ export function LogViewer({
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="rise flex h-[82vh] w-[860px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 border-b border-edge px-5 py-3">
+          <div className="flex shrink-0 items-center gap-2">
             <ScrollText size={17} className="text-brass-400" />
             <h2 className="font-mc text-base tracking-wide text-gray-100">
               {live ? "Live logs" : "Last session log"}
@@ -73,7 +112,34 @@ export function LogViewer({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-600"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search logs…"
+              className="w-full rounded-md bg-ink-950/60 py-1.5 pl-8 pr-3 text-xs outline-none ring-1 ring-edge focus:ring-brass-500/60"
+              spellCheck={false}
+            />
+            {q && (
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] tabular-nums text-ink-600">
+                {shown.length} match{shown.length === 1 ? "" : "es"}
+              </span>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => api.openDir(instanceId, "logs").catch(() => {})}
+              title="Open the logs folder"
+              className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <FolderOpen size={13} /> Folder
+            </button>
             <button
               onClick={copy}
               className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
@@ -102,20 +168,35 @@ export function LogViewer({
           </div>
         </div>
 
-        <pre
+        <div
           ref={bodyRef}
           onScroll={(e) => {
             const el = e.currentTarget;
             setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
           }}
-          className="flex-1 overflow-auto whitespace-pre-wrap break-words bg-ink-950/60 px-4 py-3 font-mono text-[12px] leading-relaxed text-ink-600"
+          className="selectable flex-1 overflow-auto bg-ink-950/60 px-4 py-3 font-mono text-[12px] leading-relaxed"
         >
-          {text === null
-            ? "Loading…"
-            : text.length === 0
-              ? "No log found for this session yet."
-              : text}
-        </pre>
+          {text === null ? (
+            <span className="text-ink-600">Loading…</span>
+          ) : lines.length === 0 || (lines.length === 1 && lines[0] === "") ? (
+            <span className="text-ink-600">
+              No log found for this session yet.
+            </span>
+          ) : shown.length === 0 ? (
+            <span className="text-ink-600">No lines match “{query}”.</span>
+          ) : (
+            shown.map((line, i) => (
+              <div
+                key={i}
+                className={`whitespace-pre-wrap break-words ${
+                  LEVEL_CLASS[lineLevel(line)]
+                }`}
+              >
+                {line || " "}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

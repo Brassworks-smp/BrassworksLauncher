@@ -18,6 +18,7 @@
 
 mod auth_window;
 mod commands;
+mod discord;
 mod state;
 
 use std::collections::{HashMap, HashSet};
@@ -26,6 +27,7 @@ use std::sync::{Arc, Mutex};
 use brassworks_core::Launcher;
 use tauri::Manager;
 
+use discord::Discord;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,11 +40,17 @@ pub fn run() {
                 .bootstrap()
                 .map_err(|e| format!("bootstrap: {e}"))?;
 
+            let discord = Arc::new(Discord::new());
+            if launcher.settings().map(|s| s.discord_rpc).unwrap_or(true) {
+                discord.set_idle();
+            }
+
             app.manage(AppState {
                 launcher,
                 running: Arc::new(Mutex::new(HashSet::new())),
                 children: Arc::new(Mutex::new(HashMap::new())),
                 cancels: Arc::new(Mutex::new(HashMap::new())),
+                discord,
             });
             Ok(())
         })
@@ -74,10 +82,19 @@ pub fn run() {
             commands::content_detail,
             commands::content_versions,
             commands::install_content_version,
+            commands::update_all_content,
+            commands::update_selected_content,
+            commands::content_changelog,
+            commands::uninstall_game,
+            commands::list_screenshots,
+            commands::delete_screenshot,
             commands::set_modpack_locked,
             commands::read_log,
             commands::upload_log,
             commands::open_dir,
+            commands::java_info,
+            commands::cache_size,
+            commands::clear_cache,
             commands::get_news,
             commands::get_playercount,
         ])

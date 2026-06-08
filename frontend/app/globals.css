@@ -1,5 +1,32 @@
 @import "tailwindcss";
 
+/* ---- Bundled UI font (Inter, OFL) so every OS renders identically instead of
+   falling back to each platform's system font (SF on macOS, Segoe on Windows…). */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* ---- Minecraft brand font (from the Brassworks website) ---- */
 @font-face {
   font-family: "minecraft";
@@ -43,7 +70,7 @@
   /* Hairline borders (website uses gray-200/10) */
   --color-edge: rgba(229, 231, 235, 0.1);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mc: "minecraft", ui-monospace, monospace;
 
   --radius-xl: 0.5rem;
@@ -58,10 +85,45 @@
   body {
     margin: 0;
     background: var(--color-ink-900);
-    color: #ededed;
+    color: var(--color-fg, #ededed);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+  }
+
+  /* ---- Light mode: remap the dark ink scale to light surfaces. Every
+     `bg-ink-*` / `text-ink-*` utility resolves through these vars, so flipping
+     them here recolors the whole app while keeping the brass/patina accents. */
+  :root.theme-light {
+    --color-fg: #1c1c1a;
+    --color-ink-950: #ececea;
+    --color-ink-900: #faf9f7;
+    --color-ink-850: #f2f1ee;
+    --color-ink-800: #eceae6;
+    --color-ink-700: #dcdad5;
+    --color-ink-600: #6b6a66;
+    --color-edge: rgba(20, 20, 20, 0.12);
+    /* Readable green accents for text/icons on white… */
+    --color-brass-300: #15803d;
+    --color-brass-400: #15803d;
+    /* …and a vivid green for filled buttons/toggles. */
+    --color-brass-500: #1bbf5f;
+    --color-brass-600: #15a34a;
+    --color-brass-700: #0e7a37;
+    /* Patina (online/installed) needs darkening for light surfaces. */
+    --color-patina-400: #0f766e;
+    --color-patina-500: #14b8a6;
+  }
+  :root.theme-light body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Reduced motion: drop decorative animations/transitions, keep spinners. */
+  :root.reduce-motion *:not(.animate-spin),
+  :root.reduce-motion *:not(.animate-spin)::before,
+  :root.reduce-motion *:not(.animate-spin)::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
   }
 
   /* Feel like a native app, not a web page: no text selection or image drag,
@@ -136,6 +198,15 @@
     border: 1px solid var(--color-edge);
   }
 
+  /* Re-enable text selection (the global `*` rule disables it app-wide) so
+     users can highlight and copy parts of the log. */
+  .selectable,
+  .selectable * {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
   .brass-text {
     color: var(--color-brass-400);
   }
@@ -182,47 +253,121 @@
 
 /* ---- Rendered Modrinth markdown ---- */
 .markdown {
-  color: var(--color-ink-600);
-  font-size: 13px;
-  line-height: 1.6;
+  color: #c7c7c7;
+  font-size: 13.5px;
+  line-height: 1.65;
   word-break: break-word;
 }
+/* Collapse the leading/trailing margins so the block sits flush in its panel. */
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+
 .markdown h1,
 .markdown h2,
 .markdown h3,
-.markdown h4 {
-  color: #ededed;
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  color: #f3f3f3;
   font-family: var(--font-mc);
-  margin: 0.8em 0 0.4em;
+  font-weight: bold;
+  letter-spacing: 0.01em;
+  margin: 1.4em 0 0.55em;
   line-height: 1.3;
 }
-.markdown h1 { font-size: 1.25rem; }
-.markdown h2 { font-size: 1.1rem; }
-.markdown h3 { font-size: 1rem; }
-.markdown p { margin: 0.5em 0; }
-.markdown a { color: var(--color-brass-300); text-decoration: underline; }
-.markdown ul { margin: 0.5em 0; padding-left: 1.2em; list-style: disc; }
-.markdown li { margin: 0.2em 0; }
-.markdown img { max-width: 100%; height: auto; border-radius: 6px; margin: 0.4em 0; }
+/* Brass underline rule on the top-level headings to match the schematic theme. */
+.markdown h1,
+.markdown h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-edge);
+}
+.markdown h1 { font-size: 1.4rem; color: var(--color-brass-300); }
+.markdown h2 { font-size: 1.15rem; }
+.markdown h3 { font-size: 1.02rem; }
+.markdown h4 { font-size: 0.95rem; color: var(--color-brass-400); }
+.markdown h5,
+.markdown h6 { font-size: 0.9rem; color: var(--color-ink-600); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.markdown p { margin: 0.65em 0; }
+.markdown strong, .markdown b { color: #ededed; font-weight: 700; }
+.markdown em, .markdown i { color: #e0e0e0; }
+.markdown del { color: var(--color-ink-600); }
+
+.markdown a {
+  color: var(--color-brass-300);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(95, 227, 147, 0.35);
+  transition: color 0.12s, border-color 0.12s;
+  cursor: pointer;
+}
+.markdown a:hover { color: var(--color-brass-400); border-bottom-color: var(--color-brass-400); }
+
+.markdown ul,
+.markdown ol { margin: 0.65em 0; padding-left: 1.4em; }
+.markdown ul { list-style: disc; }
+.markdown ol { list-style: decimal; }
+.markdown ul ul { list-style: circle; }
+.markdown li { margin: 0.3em 0; }
+.markdown li::marker { color: var(--color-brass-500); }
+
+.markdown blockquote {
+  margin: 0.8em 0;
+  padding: 0.3em 0 0.3em 0.9em;
+  border-left: 3px solid var(--color-brass-600);
+  background: rgba(31, 191, 99, 0.06);
+  color: var(--color-ink-600);
+  border-radius: 0 4px 4px 0;
+}
+.markdown blockquote p { margin: 0.35em 0; }
+
+/* Inline so several small badges/images on one source line sit side by side
+   (like GitHub / Modrinth) instead of stacking. */
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0.15em 0.25em 0.15em 0;
+}
+
 .markdown code {
   background: var(--color-ink-950);
-  padding: 0.1em 0.35em;
+  padding: 0.12em 0.4em;
   border-radius: 4px;
+  border: 1px solid var(--color-edge);
   font-family: ui-monospace, monospace;
-  font-size: 0.9em;
+  font-size: 0.88em;
   color: var(--color-brass-300);
 }
 .markdown pre {
   background: var(--color-ink-950);
-  padding: 0.8em;
+  padding: 0.9em 1em;
   border-radius: 6px;
+  border: 1px solid var(--color-edge);
   overflow-x: auto;
-  margin: 0.6em 0;
+  margin: 0.8em 0;
+  line-height: 1.5;
 }
-.markdown pre code { background: none; padding: 0; color: #ddd; }
-.markdown hr { border: none; border-top: 1px solid var(--color-edge); margin: 1em 0; }
-.markdown table { border-collapse: collapse; margin: 0.5em 0; }
-.markdown td, .markdown th { border: 1px solid var(--color-edge); padding: 0.3em 0.6em; }
+.markdown pre code { background: none; border: none; padding: 0; color: #ddd; font-size: 0.85em; }
+
+.markdown hr { border: none; border-top: 1px solid var(--color-edge); margin: 1.4em 0; }
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  width: 100%;
+  font-size: 0.92em;
+}
+.markdown th {
+  background: var(--color-ink-700);
+  color: #ededed;
+  font-weight: 700;
+  text-align: left;
+}
+.markdown td,
+.markdown th { border: 1px solid var(--color-edge); padding: 0.4em 0.7em; }
+.markdown tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
 
 /* ---- Themed range slider (brass) ---- */
 .brass-range {
@@ -257,4 +402,97 @@
   background: var(--color-brass-500);
   border: 1px solid var(--color-brass-700);
   cursor: pointer;
+}
+
+/* ============================================================================
+   Light-mode readability overrides. These are intentionally UNLAYERED: Tailwind
+   ships its utilities in `@layer utilities`, and unlayered rules win over any
+   layered rule regardless of specificity — which is what we need to recolor the
+   fixed `text-gray-*` utilities that don't go through our CSS vars.
+   ============================================================================ */
+:root.theme-light .text-gray-100,
+:root.theme-light .text-gray-200,
+:root.theme-light .text-gray-300 {
+  color: #1b1b19;
+}
+:root.theme-light .text-gray-400 {
+  color: #45443f;
+}
+:root.theme-light .text-gray-500 {
+  color: #6b6a66;
+}
+/* (Brass accent text is handled by the remapped --color-brass-* vars so that an
+   inline accent override — e.g. CurseForge orange — still wins.) */
+
+/* Featured-pack hero: light grid + light fade so the dark title text reads. */
+:root.theme-light .schem-bg {
+  background-image:
+    linear-gradient(rgba(20, 20, 20, 0.05) 3px, transparent 3px),
+    linear-gradient(90deg, rgba(20, 20, 20, 0.05) 3px, transparent 3px),
+    linear-gradient(rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px);
+}
+:root.theme-light .play-hero-overlay {
+  background:
+    radial-gradient(80% 70% at 50% 0%, rgba(31, 191, 99, 0.18), transparent 60%),
+    linear-gradient(180deg, transparent, rgba(250, 249, 247, 0.85)) !important;
+}
+
+/* Rendered markdown uses fixed near-white colours; darken for light mode. */
+:root.theme-light .markdown {
+  color: #33322f;
+}
+:root.theme-light .markdown h1,
+:root.theme-light .markdown h2,
+:root.theme-light .markdown h3,
+:root.theme-light .markdown h4 {
+  color: #15140f;
+}
+:root.theme-light .markdown strong,
+:root.theme-light .markdown b,
+:root.theme-light .markdown em,
+:root.theme-light .markdown i {
+  color: #15140f;
+}
+:root.theme-light .markdown pre,
+:root.theme-light .markdown code {
+  background: #efeee9;
+}
+:root.theme-light .markdown pre code {
+  color: #33322f;
+}
+
+/* `ink-950` doubles as the deepest background AND as dark text on bright accent
+   buttons. In light mode keep the *text* usage dark so button labels stay legible
+   on green (the background usage still flips light via the var). */
+:root.theme-light .text-ink-950 {
+  color: #14140f;
+}
+
+/* ---- Theme-aware log levels (used by the log viewer) ---- */
+.log-error { color: #f3795f; }
+.log-warn { color: #e0b15a; }
+.log-info { color: #5fc88a; }
+.log-debug { color: #7c7b76; }
+.log-default { color: #c9c7c1; }
+:root.theme-light .log-error { color: #b91c1c; }
+:root.theme-light .log-warn { color: #b45309; }
+:root.theme-light .log-info { color: #15803d; }
+:root.theme-light .log-debug { color: #8a8884; }
+:root.theme-light .log-default { color: #36352f; }
+
+/* ---- Source badges (Modrinth / CurseForge) — readable in both themes ---- */
+.badge-modrinth { background: rgba(31, 191, 99, 0.15); color: #2fa45f; }
+.badge-curseforge { background: rgba(241, 100, 54, 0.16); color: #f58c6b; }
+:root.theme-light .badge-modrinth { color: #0f7a3a; }
+:root.theme-light .badge-curseforge { color: #c2410c; }
+
+/* ---- Primary call-to-action buttons get a nicer, brighter look in light mode
+   (a soft green gradient + crisp ledge shadow) so they don't look out of place
+   on white. Class is a no-op in dark mode (utilities apply there). ---- */
+:root.theme-light .brass-btn {
+  background: linear-gradient(180deg, #2bd36c, #16a34a);
+}
+:root.theme-light .brass-btn:hover {
+  background: linear-gradient(180deg, #36e078, #18ad50);
 }

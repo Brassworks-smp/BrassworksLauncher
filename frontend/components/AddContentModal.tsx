@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   X,
   Search,
@@ -13,13 +13,14 @@ import {
   ExternalLink,
   Users,
   ChevronLeft,
+  ChevronDown,
   ListChecks,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { toast } from "@/lib/toast";
+import { Markdown, Changelog } from "./Markdown";
 import type {
+  ContentSource,
   ContentVersion,
   InstalledMod,
   ProjectDetail,
@@ -27,6 +28,30 @@ import type {
 } from "@/lib/types";
 
 type ProjectType = "mod" | "resourcepack" | "shader";
+type Source = "modrinth" | "curseforge";
+
+const SOURCES: { id: Source; label: string; color: string }[] = [
+  { id: "modrinth", label: "Modrinth", color: "#54e596" },
+  { id: "curseforge", label: "CurseForge", color: "#f58c6b" },
+];
+
+const keyOf = (h: { source: string; project_id: string }) =>
+  `${h.source}:${h.project_id}`;
+
+const CURSEFORGE_ACCENT_DARK: CSSProperties = {
+  ["--color-brass-300" as string]: "#ffb591",
+  ["--color-brass-400" as string]: "#f58c6b",
+  ["--color-brass-500" as string]: "#f16436",
+  ["--color-brass-600" as string]: "#d8521f",
+  ["--color-brass-700" as string]: "#a83f17",
+};
+const CURSEFORGE_ACCENT_LIGHT: CSSProperties = {
+  ["--color-brass-300" as string]: "#c2410c",
+  ["--color-brass-400" as string]: "#c2410c",
+  ["--color-brass-500" as string]: "#ea580c",
+  ["--color-brass-600" as string]: "#c2410c",
+  ["--color-brass-700" as string]: "#9a3412",
+};
 
 const TABS: { id: ProjectType; label: string; icon: typeof Box }[] = [
   { id: "mod", label: "Mods", icon: Box },
@@ -58,6 +83,9 @@ export function AddContentModal({
   const [type, setType] = useState<ProjectType>(
     (initial?.project_type as ProjectType) || "mod",
   );
+  const [source, setSource] = useState<Source>(
+    (initial?.source as Source) === "curseforge" ? "curseforge" : "modrinth",
+  );
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,6 +94,12 @@ export function AddContentModal({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SearchHit | null>(initial ?? null);
   const lockedSet = new Set(lockedIds ?? []);
+  const detailOnly = !!initial;
+  const cfAccent =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("theme-light")
+      ? CURSEFORGE_ACCENT_LIGHT
+      : CURSEFORGE_ACCENT_DARK;
   const reqId = useRef(0);
   const hitsRef = useRef<SearchHit[]>([]);
   hitsRef.current = hits;
@@ -75,13 +109,13 @@ export function AddContentModal({
   const PAGE = 20;
 
   const search = useCallback(
-    (q: string, t: ProjectType) => {
+    (q: string, t: ProjectType, s: Source) => {
       if (!api.isTauri()) return;
       const id = ++reqId.current;
       setLoading(true);
       setError(null);
       api
-        .searchContent(instanceId, q, t, 0)
+        .searchContent(instanceId, q, t, s, 0)
         .then((res) => {
           if (id !== reqId.current) return;
           setHits(res);
@@ -98,7 +132,7 @@ export function AddContentModal({
     const id = reqId.current;
     setLoadingMore(true);
     api
-      .searchContent(instanceId, query, type, hitsRef.current.length)
+      .searchContent(instanceId, query, type, source, hitsRef.current.length)
       .then((res) => {
         if (id !== reqId.current) return;
         setHits((prev) => {
@@ -109,35 +143,39 @@ export function AddContentModal({
       })
       .catch(() => {})
       .finally(() => setLoadingMore(false));
-  }, [instanceId, query, type]);
+  }, [instanceId, query, type, source]);
 
   useEffect(() => {
     setHits([]);
     setHasMore(true);
     setLoading(true);
-    const h = setTimeout(() => search(query, type), 250);
+    const h = setTimeout(() => search(query, type, source), 250);
     return () => clearTimeout(h);
-  }, [query, type, search]);
+  }, [query, type, source, search]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
-      e.key === "Escape" && (selected ? setSelected(null) : onClose());
+      e.key === "Escape" &&
+      (selected && !detailOnly ? setSelected(null) : onClose());
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, selected]);
+  }, [onClose, selected, detailOnly]);
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="rise flex h-[80vh] w-[780px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
+      <div
+        className="rise flex h-[80vh] w-[780px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-colors"
+        style={source === "curseforge" ? cfAccent : undefined}
+      >
         {}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <div className="flex items-center gap-2">
             {selected && (
               <button
-                onClick={() => setSelected(null)}
+                onClick={() => (detailOnly ? onClose() : setSelected(null))}
                 className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
               >
                 <ChevronLeft size={18} />
@@ -146,9 +184,38 @@ export function AddContentModal({
             <h2 className="font-mc text-lg tracking-wide text-gray-100">
               {selected ? selected.title : "Add content"}
             </h2>
-            <span className="rounded bg-[#1bd96a]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#54e596]">
-              Modrinth
-            </span>
+            {selected ? (
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  selected.source === "curseforge"
+                    ? "badge-curseforge"
+                    : "badge-modrinth"
+                }`}
+              >
+                {api.sourceLabel(selected.source)}
+              </span>
+            ) : (
+              <div className="flex gap-1 rounded-lg border border-edge bg-ink-950/50 p-0.5">
+                {SOURCES.map((s) => {
+                  const active = source === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSource(s.id)}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                        active
+                          ? s.id === "curseforge"
+                            ? "badge-curseforge"
+                            : "badge-modrinth"
+                          : "text-ink-600"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -163,9 +230,9 @@ export function AddContentModal({
             instanceId={instanceId}
             hit={selected}
             type={type}
-            installedVersion={installed[selected.project_id]}
-            isInstalled={selected.project_id in installed}
-            locked={lockedSet.has(selected.project_id)}
+            installedVersion={installed[keyOf(selected)]}
+            isInstalled={keyOf(selected) in installed}
+            locked={lockedSet.has(keyOf(selected))}
             onInstalled={onInstalled}
           />
         ) : (
@@ -200,7 +267,7 @@ export function AddContentModal({
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder={`Search Modrinth for ${
+                  placeholder={`Search ${api.sourceLabel(source)} for ${
                     TABS.find((t) => t.id === type)?.label.toLowerCase() ??
                     "content"
                   }…`}
@@ -233,7 +300,7 @@ export function AddContentModal({
                 <div className="grid h-full place-items-center text-center text-sm text-ink-600">
                   {query
                     ? "No results — try a different search."
-                    : "Start typing to search Modrinth."}
+                    : `Start typing to search ${api.sourceLabel(source)}.`}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -241,7 +308,7 @@ export function AddContentModal({
                     <ResultRow
                       key={hit.project_id}
                       hit={hit}
-                      installed={hit.project_id in installed}
+                      installed={keyOf(hit) in installed}
                       onOpen={() => setSelected(hit)}
                     />
                   ))}
@@ -354,17 +421,17 @@ function DetailView({
   useEffect(() => {
     let alive = true;
     api
-      .contentDetail(instanceId, hit.project_id)
+      .contentDetail(instanceId, hit.project_id, hit.source)
       .then((d) => alive && setDetail(d))
-      .catch(() => {});
+      .catch((e) => alive && setError(String(e)));
     api
-      .contentVersions(instanceId, hit.project_id, type)
+      .contentVersions(instanceId, hit.project_id, type, hit.source)
       .then((v) => alive && setVersions(v))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [instanceId, hit.project_id, type]);
+  }, [instanceId, hit.project_id, hit.source, type]);
 
   const latest = versions?.[0];
   const updateAvailable =
@@ -374,9 +441,24 @@ function DetailView({
     setBusy(versionId ?? "latest");
     setError(null);
     const p = versionId
-      ? api.installContentVersion(instanceId, hit.project_id, versionId, type)
-      : api.installContent(instanceId, hit.project_id, type);
-    p.then((mod) => onInstalled(mod))
+      ? api.installContentVersion(
+          instanceId,
+          hit.project_id,
+          versionId,
+          type,
+          hit.source,
+        )
+      : api.installContent(instanceId, hit.project_id, type, hit.source);
+    p.then((res) => {
+      const n = res.dependencies.length;
+      toast(
+        `Installed ${res.item.name}${
+          n ? ` + ${n} ${n === 1 ? "dependency" : "dependencies"}` : ""
+        }`,
+        "success",
+      );
+      onInstalled(res.item);
+    })
       .catch((e) => setError(String(e)))
       .finally(() => setBusy(null));
   };
@@ -398,10 +480,13 @@ function DetailView({
             <button
               onClick={() =>
                 api
-                  .openExternal(api.modrinthUrl(hit.slug || hit.project_id))
+                  .openExternal(
+                    detail?.url ??
+                      api.sourceUrl(hit.source, hit.slug || hit.project_id),
+                  )
                   .catch(() => {})
               }
-              title="View on Modrinth"
+              title={`View on ${api.sourceLabel(hit.source)}`}
               className="text-ink-600 hover:text-brass-300"
             >
               <ExternalLink size={14} />
@@ -411,7 +496,8 @@ function DetailView({
             {detail?.description ?? hit.description}
           </p>
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-600">
-            <Users size={11} /> {fmtDownloads(hit.downloads)} downloads
+            <Users size={11} /> {fmtDownloads(hit.downloads || detail?.downloads || 0)}{" "}
+            downloads
             {latest && (
               <span className="ml-2 font-mono">latest {latest.version_number}</span>
             )}
@@ -463,6 +549,9 @@ function DetailView({
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {showVersions ? (
           <VersionList
+            instanceId={instanceId}
+            projectId={hit.project_id}
+            source={hit.source}
             versions={versions}
             installedVersion={installedVersion}
             busy={busy}
@@ -470,26 +559,7 @@ function DetailView({
             onPick={(v) => install(v)}
           />
         ) : detail ? (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
-            components={{
-              a: ({href, children, ...props}) => (
-                <a
-                  href={href}
-                  onClick={e => {
-                    e.preventDefault();
-                    if (href) api.openExternal(href);
-                  }}
-                  {...props}
-                >
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {detail.body || detail.description}
-          </ReactMarkdown>
+          <Markdown>{detail.body || detail.description}</Markdown>
         ) : (
           <div className="grid place-items-center py-10 text-ink-600">
             <Loader2 className="animate-spin" />
@@ -501,18 +571,25 @@ function DetailView({
 }
 
 function VersionList({
+  instanceId,
+  projectId,
+  source,
   versions,
   installedVersion,
   busy,
   locked,
   onPick,
 }: {
+  instanceId: string;
+  projectId: string;
+  source: string;
   versions: ContentVersion[] | null;
   installedVersion: string | null | undefined;
   busy: string | null;
   locked: boolean;
   onPick: (versionId: string) => void;
 }) {
+  const [open, setOpen] = useState<string | null>(null);
   if (!versions)
     return (
       <div className="grid place-items-center py-10 text-ink-600">
@@ -529,45 +606,75 @@ function VersionList({
     <div className="flex flex-col gap-1.5">
       {versions.map((v, i) => {
         const isInstalled = installedVersion === v.version_id;
+        const expanded = open === v.version_id;
         return (
           <div
             key={v.version_id}
-            className="flex items-center gap-2 rounded-md border border-edge bg-ink-850/40 px-3 py-2"
+            className="overflow-hidden rounded-md border border-edge bg-ink-850/40"
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate font-mono text-[13px] text-gray-100">
-                  {v.version_number}
-                </span>
-                {i === 0 && (
-                  <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
-                    latest
+            <div className="flex items-center gap-2 px-3 py-2">
+              <button
+                onClick={() =>
+                  setOpen(expanded ? null : v.version_id)
+                }
+                title="Show changelog"
+                className={`grid h-6 w-6 shrink-0 place-items-center rounded transition ${
+                  expanded
+                    ? "bg-brass-500/15 text-brass-300"
+                    : "text-ink-600 hover:text-brass-300"
+                }`}
+              >
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+                />
+              </button>
+              <button
+                onClick={() => setOpen(expanded ? null : v.version_id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate font-mono text-[13px] text-gray-100">
+                    {v.version_number}
                   </span>
+                  {i === 0 && (
+                    <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
+                      latest
+                    </span>
+                  )}
+                  {isInstalled && (
+                    <span className="rounded bg-patina-500/15 px-1.5 text-[9px] text-patina-400">
+                      installed
+                    </span>
+                  )}
+                </div>
+                <div className="truncate text-[10px] text-ink-600">
+                  {v.game_versions.join(", ")}
+                  {v.loaders.length ? ` · ${v.loaders.join(", ")}` : ""}
+                </div>
+              </button>
+              <button
+                disabled={!!busy || isInstalled || locked}
+                onClick={() => onPick(v.version_id)}
+                className="shrink-0 rounded-md bg-brass-500/15 px-3 py-1.5 text-xs font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
+              >
+                {busy === v.version_id ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : isInstalled ? (
+                  "Current"
+                ) : (
+                  "Install"
                 )}
-                {isInstalled && (
-                  <span className="rounded bg-patina-500/15 px-1.5 text-[9px] text-patina-400">
-                    installed
-                  </span>
-                )}
-              </div>
-              <div className="truncate text-[10px] text-ink-600">
-                {v.game_versions.join(", ")}
-                {v.loaders.length ? ` · ${v.loaders.join(", ")}` : ""}
-              </div>
+              </button>
             </div>
-            <button
-              disabled={!!busy || isInstalled || locked}
-              onClick={() => onPick(v.version_id)}
-              className="shrink-0 rounded-md bg-brass-500/15 px-3 py-1.5 text-xs font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
-            >
-              {busy === v.version_id ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : isInstalled ? (
-                "Current"
-              ) : (
-                "Install"
-              )}
-            </button>
+            {expanded && (
+              <Changelog
+                instanceId={instanceId}
+                projectId={projectId}
+                versionId={v.version_id}
+                source={source}
+              />
+            )}
           </div>
         );
       })}

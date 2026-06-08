@@ -58,6 +58,14 @@ impl Paths {
         self.shared_dir().join("modrinth-cache")
     }
 
+    pub fn curseforge_cache_dir(&self) -> PathBuf {
+        self.shared_dir().join("curseforge-cache")
+    }
+
+    pub fn jvm_dir(&self) -> PathBuf {
+        self.shared_dir().join("jvm")
+    }
+
     pub fn settings_file(&self) -> PathBuf {
         self.root.join("settings.json")
     }

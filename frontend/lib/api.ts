@@ -1,5 +1,5 @@
 
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
@@ -8,8 +8,10 @@ import type {
   AuthEvent,
   ContentVersion,
   ExitInfo,
+  InstallResult,
   InstalledMod,
   Instance,
+  JavaReport,
   LaunchProgress,
   LauncherSettings,
   LogUpload,
@@ -19,6 +21,7 @@ import type {
   NewsItem,
   PlayerCount,
   ProjectDetail,
+  Screenshot,
   SearchHit,
 } from "./types";
 
@@ -90,10 +93,11 @@ export const listMods = (instanceId: string): Promise<InstalledMod[]> =>
   invoke("list_mods", { instanceId });
 export const modInfo = (
   instanceId: string,
-  modrinthId: string,
+  source: string,
+  projectId: string,
   versionId: string | null,
 ): Promise<ModInfo> =>
-  invoke("mod_info", { instanceId, modrinthId, versionId });
+  invoke("mod_info", { instanceId, source, projectId, versionId });
 export const setContentEnabled = (
   instanceId: string,
   path: string,
@@ -106,37 +110,59 @@ export const searchContent = (
   instanceId: string,
   query: string,
   projectType: string,
+  source: string,
   offset: number,
 ): Promise<SearchHit[]> =>
-  invoke("search_content", { instanceId, query, projectType, offset });
+  invoke("search_content", { instanceId, query, projectType, source, offset });
 export const installContent = (
   instanceId: string,
   projectId: string,
   projectType: string,
-): Promise<InstalledMod> =>
-  invoke("install_content", { instanceId, projectId, projectType });
+  source: string,
+): Promise<InstallResult> =>
+  invoke("install_content", { instanceId, projectId, projectType, source });
+export const updateAllContent = (instanceId: string): Promise<string[]> =>
+  invoke("update_all_content", { instanceId });
+export const updateSelectedContent = (
+  instanceId: string,
+  keys: string[],
+): Promise<string[]> =>
+  invoke("update_selected_content", { instanceId, keys });
+export const contentChangelog = (
+  instanceId: string,
+  projectId: string,
+  versionId: string,
+  source: string,
+): Promise<string> =>
+  invoke("content_changelog", { instanceId, projectId, versionId, source });
+export const uninstallGame = (instanceId: string): Promise<void> =>
+  invoke("uninstall_game", { instanceId });
 export const contentDetail = (
   instanceId: string,
   projectId: string,
+  source: string,
 ): Promise<ProjectDetail> =>
-  invoke("content_detail", { instanceId, projectId });
+  invoke("content_detail", { instanceId, projectId, source });
 export const contentVersions = (
   instanceId: string,
   projectId: string,
   projectType: string,
+  source: string,
 ): Promise<ContentVersion[]> =>
-  invoke("content_versions", { instanceId, projectId, projectType });
+  invoke("content_versions", { instanceId, projectId, projectType, source });
 export const installContentVersion = (
   instanceId: string,
   projectId: string,
   versionId: string,
   projectType: string,
-): Promise<InstalledMod> =>
+  source: string,
+): Promise<InstallResult> =>
   invoke("install_content_version", {
     instanceId,
     projectId,
     versionId,
     projectType,
+    source,
   });
 export const setModpackLocked = (
   instanceId: string,
@@ -155,6 +181,31 @@ export const copyText = async (text: string): Promise<void> => {
 };
 export const openDir = (instanceId: string, sub?: string): Promise<void> =>
   invoke("open_dir", { instanceId, sub: sub ?? null });
+
+export const cacheSize = (): Promise<number> => invoke("cache_size");
+export const clearCache = (): Promise<number> => invoke("clear_cache");
+
+export const listScreenshots = (): Promise<Screenshot[]> =>
+  invoke("list_screenshots");
+export const deleteScreenshot = (
+  instanceId: string,
+  name: string,
+): Promise<void> => invoke("delete_screenshot", { instanceId, name });
+export const fileSrc = (path: string): string => convertFileSrc(path);
+
+export const javaInfo = (instanceId: string): Promise<JavaReport> =>
+  invoke("java_info", { instanceId });
+
+export const formatBytes = (bytes: number): string => {
+  if (!bytes || bytes < 1) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+  );
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
 
 export const onModpackProgress = (
   cb: (p: LaunchProgress) => void,
@@ -179,5 +230,14 @@ export const openExternal = (url: string): Promise<void> => openUrl(url);
 
 export const modrinthUrl = (slugOrId: string): string =>
   `https://modrinth.com/project/${slugOrId}`;
+
+export const curseforgeUrl = (slugOrId: string): string =>
+  `https://www.curseforge.com/minecraft/mc-mods/${slugOrId}`;
+
+export const sourceUrl = (source: string, slugOrId: string): string =>
+  source === "curseforge" ? curseforgeUrl(slugOrId) : modrinthUrl(slugOrId);
+
+export const sourceLabel = (source: string): string =>
+  source === "curseforge" ? "CurseForge" : "Modrinth";
 
 export type { Account };

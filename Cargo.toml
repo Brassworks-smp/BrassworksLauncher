@@ -1,10 +1,10 @@
 [workspace]
-members = ["crates/portablemc", "crates/packwiz", "crates/brassworks-core", "frontend/src-tauri"]
+members = ["crates/portablemc", "crates/packwiz", "crates/java", "crates/brassworks-core", "frontend/src-tauri"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Brassworks SMP"]
 homepage = "https://github.com/brassworks"
 repository = "https://github.com/brassworks/launcher"
@@ -16,6 +16,7 @@ rust-version = "1.88.0"
 brassworks-core = { path = "crates/brassworks-core" }
 portablemc = { path = "crates/portablemc" }
 packwiz = { path = "crates/packwiz" }
+java = { path = "crates/java" }
 
 thiserror = "2.0.3"
 anyhow = "1.0"

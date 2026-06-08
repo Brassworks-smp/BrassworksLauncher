@@ -18,6 +18,8 @@ pub struct ModrinthProject {
     pub body: String,
     #[serde(default)]
     pub icon_url: Option<String>,
+    #[serde(default)]
+    pub downloads: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +40,12 @@ pub struct SearchHit {
     pub project_type: String,
     #[serde(default)]
     pub versions: Vec<String>,
+    #[serde(default = "default_source")]
+    pub source: String,
+}
+
+fn default_source() -> String {
+    "modrinth".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +60,15 @@ pub struct ResolvedVersion {
     pub game_versions: Vec<String>,
     #[serde(default)]
     pub loaders: Vec<String>,
+    #[serde(default)]
+    pub dependencies: Vec<VersionDep>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionDep {
+    pub project_id: Option<String>,
+    pub version_id: Option<String>,
+    pub required: bool,
 }
 
 
@@ -70,6 +87,20 @@ struct ApiVersion {
     loaders: Vec<String>,
     #[serde(default)]
     files: Vec<ApiFile>,
+    #[serde(default)]
+    dependencies: Vec<ApiDep>,
+    #[serde(default)]
+    changelog: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+struct ApiDep {
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    version_id: Option<String>,
+    #[serde(default)]
+    dependency_type: String,
 }
 
 impl ApiVersion {
@@ -80,6 +111,20 @@ impl ApiVersion {
             .find(|f| f.primary)
             .or_else(|| self.files.first())
             .cloned()?;
+        let dependencies = self
+            .dependencies
+            .into_iter()
+            .filter_map(|d| {
+                if d.project_id.is_none() && d.version_id.is_none() {
+                    return None;
+                }
+                Some(VersionDep {
+                    project_id: d.project_id,
+                    version_id: d.version_id,
+                    required: d.dependency_type == "required",
+                })
+            })
+            .collect();
         Some(ResolvedVersion {
             version_id: self.id,
             version_number: self.version_number,
@@ -89,6 +134,7 @@ impl ApiVersion {
             sha1: file.hashes.sha1,
             game_versions: self.game_versions,
             loaders: self.loaders,
+            dependencies,
         })
     }
 }
@@ -152,6 +198,16 @@ impl Modrinth {
         let project: ModrinthProject = resp.json().ok()?;
         self.write_cache(id, &project);
         Some(project)
+    }
+
+    pub fn version_changelog(&self, version_id: &str) -> Option<String> {
+        let url = format!("https://api.modrinth.com/v2/version/{version_id}");
+        let resp = self.client.get(&url).send().ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let v: ApiVersion = resp.json().ok()?;
+        v.changelog.filter(|c| !c.trim().is_empty())
     }
 
     pub fn version_number(&self, version_id: &str) -> Option<String> {

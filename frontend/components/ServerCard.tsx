@@ -1,22 +1,26 @@
 "use client";
 
-import { Users, Signal, ListOrdered } from "lucide-react";
+import { useState } from "react";
+import { Users, Signal, ListOrdered, RefreshCw } from "lucide-react";
 import type { PlayerCount } from "@/lib/types";
 
 export function ServerCard({
   address,
   data,
   error,
+  onRefresh,
 }: {
   address: string;
   data: PlayerCount | null;
   error?: boolean;
+  onRefresh?: () => Promise<void> | void;
 }) {
   const online = data?.main.online ?? false;
   const hasQueue = !!data?.queue.online && (data?.queue.players_online ?? 0) > 0;
 
   return (
-    <div className="w-[240px] rounded-xl panel p-4">
+    <div className="group relative w-[240px] rounded-xl panel p-4 transition-colors hover:border-brass-600/40 hover:bg-ink-800/80">
+      <CardRefresh onRefresh={onRefresh} />
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-widest text-ink-600">
           Server
@@ -59,5 +63,33 @@ export function ServerCard({
         </div>
       )}
     </div>
+  );
+}
+
+export function CardRefresh({
+  onRefresh,
+}: {
+  onRefresh?: () => Promise<void> | void;
+}) {
+  const [spinning, setSpinning] = useState(false);
+  if (!onRefresh) return null;
+  return (
+    <button
+      title="Refresh"
+      onClick={async () => {
+        if (spinning) return;
+        setSpinning(true);
+        try {
+          await onRefresh();
+        } finally {
+          setTimeout(() => setSpinning(false), 400);
+        }
+      }}
+      className={`absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md border border-edge bg-ink-900/80 text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 ${
+        spinning ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+      }`}
+    >
+      <RefreshCw size={13} className={spinning ? "animate-spin" : ""} />
+    </button>
   );
 }

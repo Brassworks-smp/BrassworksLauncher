@@ -1,0 +1,11 @@
+[package]
+name = "java"
+description = "Java runtime discovery & selection for the Brassworks Launcher. Downloading is delegated to portablemc, this crate only finds and picks runtimes."
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }

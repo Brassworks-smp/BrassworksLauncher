@@ -17,8 +17,13 @@ import {
   History,
   Loader2,
   AlertTriangle,
+  ArrowUpCircle,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { toast } from "@/lib/toast";
+import { Changelog } from "./Markdown";
 import { getCachedInfo, setCachedInfo } from "@/lib/modcache";
 import type {
   ContentVersion,
@@ -65,9 +70,20 @@ export function ModsView({
   const [error, setError] = useState<string | null>(null);
   const [cat, setCat] = useState<CategoryId>("all");
   const [query, setQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<
+    "all" | "modrinth" | "curseforge" | "local"
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "enabled" | "disabled"
+  >("all");
+  const [originFilter, setOriginFilter] = useState<"all" | "modpack" | "user">(
+    "all",
+  );
   const [adding, setAdding] = useState(false);
   const [detail, setDetail] = useState<SearchHit | null>(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
+  const [confirmUpdateAll, setConfirmUpdateAll] = useState(false);
+  const [updatingAll, setUpdatingAll] = useState(false);
 
   const applyInfo = useCallback((path: string, info: ModInfo) => {
     setMods((prev) =>
@@ -90,7 +106,7 @@ export function ModsView({
   const enrich = useCallback(
     async (list: InstalledMod[]) => {
       const queue = list.filter(
-        (m) => m.modrinth_id && (!m.title || !m.icon_url),
+        (m) => m.project_id && (!m.title || !m.icon_url),
       );
       let i = 0;
       const worker = async () => {
@@ -99,10 +115,11 @@ export function ModsView({
           try {
             const info = await api.modInfo(
               instanceId,
-              m.modrinth_id!,
-              m.modrinth_version,
+              m.source,
+              m.project_id!,
+              m.version_id,
             );
-            setCachedInfo(m.modrinth_id!, m.modrinth_version, info);
+            setCachedInfo(m.source, m.project_id!, m.version_id, info);
             applyInfo(m.path, info);
           } catch {
           }
@@ -123,8 +140,8 @@ export function ModsView({
       .listMods(instanceId)
       .then((list) => {
         const merged = list.map((m) => {
-          if (m.modrinth_id) {
-            const c = getCachedInfo(m.modrinth_id, m.modrinth_version);
+          if (m.project_id) {
+            const c = getCachedInfo(m.source, m.project_id, m.version_id);
             if (c)
               return {
                 ...m,
@@ -157,7 +174,7 @@ export function ModsView({
   const installedMap = useMemo(() => {
     const r: Record<string, string | null> = {};
     for (const m of mods ?? [])
-      if (m.modrinth_id) r[m.modrinth_id] = m.modrinth_version;
+      if (m.project_id) r[`${m.source}:${m.project_id}`] = m.version_id;
     return r;
   }, [mods]);
 
@@ -165,17 +182,17 @@ export function ModsView({
     () =>
       locked
         ? (mods ?? [])
-            .filter((m) => m.managed && m.modrinth_id)
-            .map((m) => m.modrinth_id!)
+            .filter((m) => m.managed && m.project_id)
+            .map((m) => `${m.source}:${m.project_id}`)
         : [],
     [mods, locked],
   );
 
   const openDetail = (m: InstalledMod) => {
-    if (!m.modrinth_id) return;
+    if (!m.project_id) return;
     setDetail({
-      project_id: m.modrinth_id,
-      slug: m.modrinth_id,
+      project_id: m.project_id,
+      slug: m.project_id,
       title: m.title ?? m.name,
       description: m.description ?? "",
       icon_url: m.icon_url,
@@ -183,12 +200,23 @@ export function ModsView({
       author: "",
       project_type: projectTypeOf(m.category),
       versions: [],
+      source: m.source === "local" ? "modrinth" : m.source,
     });
   };
 
   const filtered = useMemo(() => {
     let list = mods ?? [];
     if (cat !== "all") list = list.filter((m) => m.category === cat);
+    if (sourceFilter !== "all")
+      list = list.filter((m) => m.source === sourceFilter);
+    if (statusFilter !== "all")
+      list = list.filter((m) =>
+        statusFilter === "enabled" ? m.enabled : !m.enabled,
+      );
+    if (originFilter !== "all")
+      list = list.filter((m) =>
+        originFilter === "modpack" ? m.managed : !m.managed,
+      );
     const q = query.trim().toLowerCase();
     if (q)
       list = list.filter(
@@ -201,7 +229,66 @@ export function ModsView({
         .toLowerCase()
         .localeCompare((b.title ?? b.name).toLowerCase()),
     );
-  }, [mods, cat, query]);
+  }, [mods, cat, query, sourceFilter, statusFilter, originFilter]);
+
+  const conflicts = useMemo(() => {
+    const groups = new Map<string, Set<string>>();
+    for (const m of mods ?? []) {
+      if (!m.enabled) continue;
+      const base = m.filename
+        .replace(/\.(jar|zip)(\.disabled)?$/i, "")
+        .replace(/[-_ ]?v?\d[\d.+]*$/i, "")
+        .replace(/[-_ ]?(mc)?1\.\d+(\.\d+)?$/i, "")
+        .trim()
+        .toLowerCase();
+      if (!base) continue;
+      const key = `${m.category}:${base}`;
+      if (!groups.has(key)) groups.set(key, new Set());
+      groups.get(key)!.add(m.title ?? m.name);
+    }
+    return [...groups.values()]
+      .filter((s) => s.size > 1)
+      .map((s) => [...s]);
+  }, [mods]);
+
+  const userMods = useMemo(
+    () => (mods ?? []).filter((m) => !m.managed && m.project_id),
+    [mods],
+  );
+  const userContentCount = userMods.length;
+  const [updateSel, setUpdateSel] = useState<Set<string>>(new Set());
+
+  const openUpdatePicker = () => {
+    setUpdateSel(new Set(userMods.map((m) => `${m.source}:${m.project_id}`)));
+    setConfirmUpdateAll(true);
+  };
+
+  const runUpdate = () => {
+    const keys = [...updateSel];
+    setConfirmUpdateAll(false);
+    if (keys.length === 0) return;
+    setUpdatingAll(true);
+    toast(
+      `Checking ${keys.length} mod${keys.length === 1 ? "" : "s"} for updates…`,
+      "info",
+    );
+    api
+      .updateSelectedContent(instanceId, keys)
+      .then((names) => {
+        if (names.length === 0) toast("Everything is already up to date", "info");
+        else
+          toast(
+            `Updated ${names.length} mod${names.length === 1 ? "" : "s"}: ${names.join(", ")}`,
+            "success",
+          );
+        load();
+      })
+      .catch((e) => {
+        setError(String(e));
+        toast("Update failed", "error");
+      })
+      .finally(() => setUpdatingAll(false));
+  };
 
   const openFolder = (folder?: string) =>
     api.openDir(instanceId, folder).catch((e) => setError(String(e)));
@@ -259,8 +346,21 @@ export function ModsView({
             {locked ? "Locked" : "Unlocked"}
           </button>
           <button
+            onClick={openUpdatePicker}
+            disabled={updatingAll || userContentCount === 0}
+            title="Update all your added mods to their latest compatible version (modpack-locked mods are untouched)"
+            className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {updatingAll ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <ArrowUpCircle size={15} />
+            )}
+            Update all
+          </button>
+          <button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 shadow-[0_3px_0_var(--color-brass-700)] transition hover:bg-brass-400 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-700)]"
+            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 shadow-[0_3px_0_var(--color-brass-700)] transition hover:bg-brass-400 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-700)]"
           >
             <Plus size={16} /> Add content
           </button>
@@ -315,6 +415,53 @@ export function ModsView({
           />
         </div>
       </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+        <Segmented
+          label="Source"
+          value={sourceFilter}
+          onChange={(v) => setSourceFilter(v as typeof sourceFilter)}
+          options={[
+            { id: "all", label: "All" },
+            { id: "modrinth", label: "Modrinth" },
+            { id: "curseforge", label: "CurseForge" },
+            { id: "local", label: "Local" },
+          ]}
+        />
+        <Segmented
+          label="Status"
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+          options={[
+            { id: "all", label: "All" },
+            { id: "enabled", label: "Enabled" },
+            { id: "disabled", label: "Disabled" },
+          ]}
+        />
+        <Segmented
+          label="Origin"
+          value={originFilter}
+          onChange={(v) => setOriginFilter(v as typeof originFilter)}
+          options={[
+            { id: "all", label: "All" },
+            { id: "modpack", label: "Modpack" },
+            { id: "user", label: "Added by you" },
+          ]}
+        />
+      </div>
+
+      {conflicts.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          <div className="flex items-center gap-1.5 font-medium">
+            <AlertTriangle size={13} /> Possible duplicate mods detected
+          </div>
+          <ul className="mt-1 list-disc pl-5 text-amber-200/80">
+            {conflicts.map((g, i) => (
+              <li key={i}>{g.join("  ·  ")}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -401,6 +548,141 @@ export function ModsView({
           </div>
         </div>
       )}
+
+      {confirmUpdateAll && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+          onMouseDown={(e) =>
+            e.target === e.currentTarget && setConfirmUpdateAll(false)
+          }
+        >
+          <div className="rise flex max-h-[80vh] w-[480px] max-w-full flex-col rounded-xl border border-brass-600/30 bg-ink-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-edge px-5 py-3">
+              <div className="flex items-center gap-2 text-brass-300">
+                <ArrowUpCircle size={18} />
+                <h2 className="font-mc text-base tracking-wide">
+                  Update mods
+                </h2>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-ink-600">
+                <button
+                  onClick={() =>
+                    setUpdateSel(
+                      new Set(userMods.map((m) => `${m.source}:${m.project_id}`)),
+                    )
+                  }
+                  className="hover:text-brass-300"
+                >
+                  Select all
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => setUpdateSel(new Set())}
+                  className="hover:text-brass-300"
+                >
+                  None
+                </button>
+              </div>
+            </div>
+            <p className="px-5 pt-3 text-xs text-ink-600">
+              Pick which of your added mods to update to the latest compatible
+              version. Modpack-managed mods are never touched.
+            </p>
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              {userMods.map((m) => {
+                const key = `${m.source}:${m.project_id}`;
+                const on = updateSel.has(key);
+                return (
+                  <button
+                    key={m.path}
+                    onClick={() =>
+                      setUpdateSel((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })
+                    }
+                    className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition hover:bg-ink-800/60"
+                  >
+                    <span
+                      className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                        on
+                          ? "border-brass-500 bg-brass-500 text-ink-950"
+                          : "border-ink-600"
+                      }`}
+                    >
+                      {on && <Check size={11} />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-gray-200">
+                      {m.title ?? m.name}
+                      {m.version && (
+                        <span className="ml-1.5 font-mono text-[10px] text-ink-600">
+                          {m.version}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-600">
+                      {m.source}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-edge px-5 py-3">
+              <button
+                onClick={() => setConfirmUpdateAll(false)}
+                className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runUpdate}
+                disabled={updateSel.size === 0}
+                className="flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-40"
+              >
+                <ArrowUpCircle size={15} /> Update {updateSel.size || ""}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Segmented({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; label: string }[];
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-ink-600">{label}</span>
+      <div className="flex gap-1 rounded-lg border border-edge bg-ink-900/50 p-1">
+        {options.map((o) => {
+          const active = value === o.id;
+          return (
+            <button
+              key={o.id}
+              onClick={() => onChange(o.id)}
+              className={`rounded-md px-2.5 py-1 font-medium transition ${
+                active
+                  ? "bg-brass-500/15 text-brass-300"
+                  : "text-ink-600 hover:text-brass-300/80"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -427,10 +709,11 @@ function ModRow({
   const [iconFailed, setIconFailed] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const title = mod.title ?? mod.name;
-  const hasModrinth = !!mod.modrinth_id;
+  const hasSource = !!mod.project_id;
+  const sourceLabel = api.sourceLabel(mod.source);
   const controllable = !mod.managed || unlocked;
-  const canVersion = hasModrinth && controllable;
-  const open = () => hasModrinth && onOpenDetail();
+  const canVersion = hasSource && controllable;
+  const open = () => hasSource && onOpenDetail();
 
   return (
     <div
@@ -443,8 +726,8 @@ function ModRow({
       <div className="flex items-center gap-3 p-2.5">
         <button
           onClick={open}
-          disabled={!hasModrinth}
-          title={hasModrinth ? "View on Modrinth" : undefined}
+          disabled={!hasSource}
+          title={hasSource ? `View on ${sourceLabel}` : undefined}
           className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600 disabled:cursor-default"
         >
           {mod.icon_url && !iconFailed ? (
@@ -464,9 +747,9 @@ function ModRow({
           <div className="flex items-center gap-1.5">
             <button
               onClick={open}
-              disabled={!hasModrinth}
+              disabled={!hasSource}
               className={`truncate text-sm font-medium text-gray-100 ${
-                hasModrinth ? "hover:text-brass-300" : "cursor-default"
+                hasSource ? "hover:text-brass-300" : "cursor-default"
               }`}
             >
               {title}
@@ -476,14 +759,20 @@ function ModRow({
                 {mod.version}
               </span>
             )}
-            {hasModrinth && (
+            {hasSource && (
               <ExternalLink size={10} className="shrink-0 text-ink-600" />
             )}
           </div>
           <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-600">
-            {hasModrinth && (
-              <span className="shrink-0 rounded bg-[#1bd96a]/15 px-1.5 text-[9px] font-medium text-[#54e596]">
-                Modrinth
+            {hasSource && (
+              <span
+                className={`shrink-0 rounded px-1.5 text-[9px] font-medium ${
+                  mod.source === "curseforge"
+                    ? "badge-curseforge"
+                    : "badge-modrinth"
+                }`}
+              >
+                {sourceLabel}
               </span>
             )}
             <span className="truncate">{mod.description || mod.filename}</span>
@@ -557,24 +846,40 @@ function RowVersions({
 }) {
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [openLog, setOpenLog] = useState<string | null>(null);
   const projectType = projectTypeOf(mod.category);
 
   useEffect(() => {
     let alive = true;
     api
-      .contentVersions(instanceId, mod.modrinth_id!, projectType)
+      .contentVersions(instanceId, mod.project_id!, projectType, mod.source)
       .then((v) => alive && setVersions(v))
       .catch((e) => alive && onError(String(e)));
     return () => {
       alive = false;
     };
-  }, [instanceId, mod.modrinth_id, projectType, onError]);
+  }, [instanceId, mod.project_id, mod.source, projectType, onError]);
 
   const pick = (versionId: string) => {
     setBusy(versionId);
     api
-      .installContentVersion(instanceId, mod.modrinth_id!, versionId, projectType)
-      .then(() => onPicked())
+      .installContentVersion(
+        instanceId,
+        mod.project_id!,
+        versionId,
+        projectType,
+        mod.source,
+      )
+      .then((res) => {
+        const n = res.dependencies.length;
+        toast(
+          `${mod.title ?? mod.name} updated${
+            n ? ` (+${n} ${n === 1 ? "dependency" : "dependencies"})` : ""
+          }`,
+          "success",
+        );
+        onPicked();
+      })
       .catch((e) => {
         onError(String(e));
         setBusy(null);
@@ -590,35 +895,57 @@ function RowVersions({
       ) : versions.length === 0 ? (
         <div className="py-2 text-xs text-ink-600">No compatible versions.</div>
       ) : (
-        <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
           {versions.map((v, i) => {
-            const isCurrent = mod.modrinth_version === v.version_id;
+            const isCurrent = mod.version_id === v.version_id;
+            const expanded = openLog === v.version_id;
             return (
-              <div
-                key={v.version_id}
-                className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-ink-700/40"
-              >
-                <span className="flex-1 truncate font-mono text-[12px] text-gray-200">
-                  {v.version_number}
-                </span>
-                {i === 0 && (
-                  <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
-                    latest
+              <div key={v.version_id} className="rounded">
+                <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-ink-700/40">
+                  <button
+                    onClick={() => setOpenLog(expanded ? null : v.version_id)}
+                    title="Show changelog"
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded ${
+                      expanded
+                        ? "text-brass-300"
+                        : "text-ink-600 hover:text-brass-300"
+                    }`}
+                  >
+                    <ChevronDown
+                      size={13}
+                      className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  <span className="flex-1 truncate font-mono text-[12px] text-gray-200">
+                    {v.version_number}
                   </span>
-                )}
-                <button
-                  disabled={!!busy || isCurrent}
-                  onClick={() => pick(v.version_id)}
-                  className="rounded bg-brass-500/15 px-2.5 py-1 text-[11px] font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
-                >
-                  {busy === v.version_id ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : isCurrent ? (
-                    "Current"
-                  ) : (
-                    "Install"
+                  {i === 0 && (
+                    <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
+                      latest
+                    </span>
                   )}
-                </button>
+                  <button
+                    disabled={!!busy || isCurrent}
+                    onClick={() => pick(v.version_id)}
+                    className="rounded bg-brass-500/15 px-2.5 py-1 text-[11px] font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
+                  >
+                    {busy === v.version_id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : isCurrent ? (
+                      "Current"
+                    ) : (
+                      "Install"
+                    )}
+                  </button>
+                </div>
+                {expanded && (
+                  <Changelog
+                    instanceId={instanceId}
+                    projectId={mod.project_id!}
+                    versionId={v.version_id}
+                    source={mod.source}
+                  />
+                )}
               </div>
             );
           })}
@@ -639,19 +966,17 @@ function RowToggle({
     <button
       type="button"
       onClick={onChange}
+      role="switch"
+      aria-checked={checked}
       title={checked ? "Disable" : "Enable"}
-      className={`relative h-6 w-11 shrink-0 border-2 transition-colors ${
-        checked ? "border-brass-700 bg-brass-500/80" : "border-ink-700 bg-ink-900"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[4px] border transition-colors ${
+        checked ? "border-brass-600 bg-brass-500" : "border-edge bg-ink-700"
       }`}
-      style={{ borderRadius: 3 }}
     >
       <span
-        className={`absolute top-[2px] h-[14px] w-[14px] border-2 transition-all ${
-          checked
-            ? "left-[24px] border-brass-300 bg-brass-400"
-            : "left-[2px] border-ink-600 bg-ink-700"
+        className={`h-[16px] w-[16px] rounded-[2px] transition-transform duration-150 ${
+          checked ? "translate-x-[25px] bg-white" : "translate-x-[3px] bg-ink-600"
         }`}
-        style={{ borderRadius: 2 }}
       />
     </button>
   );

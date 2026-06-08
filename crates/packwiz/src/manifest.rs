@@ -43,6 +43,12 @@ pub struct ManagedMod {
     pub modrinth_id: Option<String>,
     #[serde(default)]
     pub modrinth_version: Option<String>,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub curseforge_id: Option<i64>,
+    #[serde(default)]
+    pub curseforge_file: Option<i64>,
 }
 
 impl Manifest {

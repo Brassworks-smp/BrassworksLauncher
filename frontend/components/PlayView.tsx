@@ -43,7 +43,11 @@ function loaderLabel(i: Instance): string {
   return map[i.loader] ?? i.loader;
 }
 
-function formatPlaytime(seconds: number): string {
+function formatPlaytime(seconds: number, alwaysHours = false): string {
+  if (alwaysHours) {
+    const hrs = seconds / 3600;
+    return `${hrs.toFixed(1)}h`;
+  }
   if (!seconds || seconds < 60) return "Under a minute";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -59,10 +63,15 @@ export function PlayView({
   canPlay,
   modStatus,
   locked,
+  notInstalled,
+  showPlaytime,
+  playtimeHours,
   players,
   playersError,
   news,
   newsError,
+  onRefreshPlayers,
+  onRefreshNews,
   onPlay,
   onUpdate,
   onStop,
@@ -75,10 +84,15 @@ export function PlayView({
   canPlay: boolean;
   modStatus: ModpackStatus | null;
   locked: boolean;
+  notInstalled: boolean;
+  showPlaytime: boolean;
+  playtimeHours: boolean;
   players: PlayerCount | null;
   playersError: boolean;
   news: NewsItem | null;
   newsError: boolean;
+  onRefreshPlayers: () => Promise<void> | void;
+  onRefreshNews: () => Promise<void> | void;
   onPlay: () => void;
   onUpdate: () => void;
   onStop: () => void;
@@ -105,7 +119,7 @@ export function PlayView({
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
         <div
-          className="pointer-events-none absolute inset-0"
+          className="play-hero-overlay pointer-events-none absolute inset-0"
           style={{
             background:
               "radial-gradient(80% 70% at 50% 0%, rgba(31,191,99,0.16), transparent 60%), linear-gradient(180deg, transparent, rgba(8,8,8,0.85))",
@@ -125,9 +139,12 @@ export function PlayView({
               <Chip icon={<Box size={13} />}>
                 {loaderLabel(instance)} {instance.minecraft_version}
               </Chip>
-              <Chip icon={<Clock size={13} />}>
-                {formatPlaytime(instance.playtime_seconds)} played
-              </Chip>
+              {showPlaytime && (
+                <Chip icon={<Clock size={13} />}>
+                  {formatPlaytime(instance.playtime_seconds, playtimeHours)}{" "}
+                  played
+                </Chip>
+              )}
               {modStatus?.installed_version && (
                 <Chip>Pack v{modStatus.installed_version}</Chip>
               )}
@@ -194,6 +211,7 @@ export function PlayView({
               running={running}
               canPlay={canPlay}
               updateAvailable={updateAvailable}
+              notInstalled={notInstalled}
               onPlay={onPlay}
               onUpdate={onUpdate}
               onStop={onStop}
@@ -232,8 +250,13 @@ export function PlayView({
 
       {}
       <div className="flex w-[240px] shrink-0 flex-col gap-4 overflow-y-auto">
-        <ServerCard address="brassworks.opnsoc.org" data={players} error={playersError} />
-        <NewsCard news={news} error={newsError} />
+        <ServerCard
+          address="brassworks.opnsoc.org"
+          data={players}
+          error={playersError}
+          onRefresh={onRefreshPlayers}
+        />
+        <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
       </div>
     </div>
   );
@@ -259,6 +282,7 @@ function MainButton({
   running,
   canPlay,
   updateAvailable,
+  notInstalled,
   onPlay,
   onUpdate,
   onStop,
@@ -268,6 +292,7 @@ function MainButton({
   running: boolean;
   canPlay: boolean;
   updateAvailable: boolean;
+  notInstalled: boolean;
   onPlay: () => void;
   onUpdate: () => void;
   onStop: () => void;
@@ -320,10 +345,19 @@ function MainButton({
     <button
       disabled={!canPlay}
       onClick={onPlay}
-      className="group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-brass-500 text-xl text-ink-950 shadow-[0_5px_0_var(--color-brass-700)] transition-all hover:bg-brass-400 active:translate-y-[3px] active:shadow-[0_2px_0_var(--color-brass-700)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+      className="brass-btn group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-brass-500 text-xl text-ink-950 shadow-[0_5px_0_var(--color-brass-700)] transition-all hover:bg-brass-400 active:translate-y-[3px] active:shadow-[0_2px_0_var(--color-brass-700)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
     >
-      <Play size={22} className="fill-current" />
-      PLAY
+      {notInstalled ? (
+        <>
+          <Download size={22} />
+          INSTALL
+        </>
+      ) : (
+        <>
+          <Play size={22} className="fill-current" />
+          PLAY
+        </>
+      )}
     </button>
   );
 }

@@ -139,23 +139,25 @@ fn configure_mojang(req: &LaunchRequest, mojang: &mut moj::Installer) -> Result<
 
     base.set_main_dir(req.paths.shared_dir());
     base.set_mc_dir(req.paths.instance_game_dir(&req.instance.id));
+    base.set_jvm_dir(req.paths.jvm_dir());
 
     base.set_launcher_name("BrassworksLauncher");
     base.set_launcher_version(env!("CARGO_PKG_VERSION"));
 
-    let java = req
-        .instance
-        .java_path
-        .as_deref()
-        .or(req.settings.java_path.as_deref());
-    match java {
-        Some(path) => {
-            base.set_jvm_policy(JvmPolicy::Static(PathBuf::from(path)));
-        }
-        None => {
-            base.set_jvm_policy(JvmPolicy::SystemThenMojang);
-        }
-    }
+    let policy = match req.instance.java_path.as_deref() {
+        Some(path) => JvmPolicy::Static(PathBuf::from(path)),
+        None => match req.settings.java_policy.as_str() {
+            "system" => JvmPolicy::System,
+            "custom" => match req.settings.java_path.as_deref() {
+                Some(path) if !path.trim().is_empty() => {
+                    JvmPolicy::Static(PathBuf::from(path))
+                }
+                _ => JvmPolicy::Mojang,
+            },
+            _ => JvmPolicy::Mojang,
+        },
+    };
+    base.set_jvm_policy(policy);
 
     match req.account.kind {
         AccountKind::Offline => {
@@ -181,7 +183,7 @@ fn configure_mojang(req: &LaunchRequest, mojang: &mut moj::Installer) -> Result<
         }
     }
 
-    if let Some((w, h)) = req.instance.resolution {
+    if let Some((w, h)) = req.instance.resolution.or(req.settings.default_resolution) {
         mojang.set_resolution(w, h);
     }
 

@@ -29,13 +29,24 @@ pub use error::{CoreError, Result};
 pub use instance::{Instance, InstanceManager, LoaderKind, LoaderVersion};
 pub use launch::{launch_instance, LaunchRequest};
 pub use modpack::{
-    ContentVersion, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
+    ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
 pub use packwiz::SearchHit;
 pub use paths::Paths;
 pub use progress::{LaunchProgress, LaunchStage, ProgressSink};
 pub use remote::{news, player_count, upload_log, LogUpload, NewsItem, PlayerCount, PlayerGroup};
 pub use settings::LauncherSettings;
+
+pub use java::{JavaInstall, JavaKind};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JavaReport {
+    pub system: Option<JavaInstall>,
+    pub runtimes: Vec<JavaInstall>,
+    pub required_major: u32,
+    pub policy: String,
+    pub custom_path: Option<String>,
+}
 
 use packwiz::{SyncProgress, SyncStage};
 
@@ -191,11 +202,16 @@ impl Launcher {
 
 
     fn modpack_for(&self, instance_id: &str) -> Modpack<'_> {
-        let url = self
-            .settings()
-            .map(|s| modpack::resolve_pack_url(&s))
-            .unwrap_or_else(|_| modpack::PACK_URL.to_string());
-        Modpack::with_url(&self.paths, instance_id, url)
+        let settings = self.settings().ok();
+        let url = settings
+            .as_ref()
+            .map(modpack::resolve_pack_url)
+            .unwrap_or_else(|| modpack::PACK_URL.to_string());
+        let cf_key = settings
+            .and_then(|s| s.curseforge_api_key)
+            .filter(|k| !k.trim().is_empty())
+            .unwrap_or_else(|| modpack::DEFAULT_CURSEFORGE_API_KEY.to_string());
+        Modpack::with_url(&self.paths, instance_id, url).with_curseforge_key(Some(cf_key))
     }
 
     pub fn modpack_status(&self, instance_id: &str) -> Result<ModpackStatus> {
@@ -236,10 +252,12 @@ impl Launcher {
     pub fn mod_info(
         &self,
         instance_id: &str,
-        modrinth_id: &str,
+        source: &str,
+        project_id: &str,
         version_id: Option<&str>,
     ) -> ModInfo {
-        self.modpack_for(instance_id).mod_info(modrinth_id, version_id)
+        self.modpack_for(instance_id)
+            .mod_info(source, project_id, version_id)
     }
 
     pub fn set_content_enabled(
@@ -262,17 +280,21 @@ impl Launcher {
         instance_id: &str,
         query: &str,
         project_type: &str,
+        source: &str,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
-        self.modpack_for(instance_id).search(query, project_type, offset)
+        self.modpack_for(instance_id)
+            .search(query, project_type, source, offset)
     }
 
     pub fn content_detail(
         &self,
         instance_id: &str,
         project_id: &str,
+        source: &str,
     ) -> Result<modpack::ProjectDetail> {
-        self.modpack_for(instance_id).project_detail(project_id)
+        self.modpack_for(instance_id)
+            .project_detail(project_id, source)
     }
 
     pub fn content_versions(
@@ -280,9 +302,10 @@ impl Launcher {
         instance_id: &str,
         project_id: &str,
         project_type: &str,
+        source: &str,
     ) -> Result<Vec<modpack::ContentVersion>> {
         self.modpack_for(instance_id)
-            .list_versions(project_id, project_type)
+            .list_versions(project_id, project_type, source)
     }
 
     pub fn install_content(
@@ -290,9 +313,10 @@ impl Launcher {
         instance_id: &str,
         project_id: &str,
         project_type: &str,
-    ) -> Result<InstalledMod> {
+        source: &str,
+    ) -> Result<InstallResult> {
         self.modpack_for(instance_id)
-            .install_from_modrinth(project_id, project_type)
+            .install_from_source(project_id, project_type, source)
     }
 
     pub fn install_content_version(
@@ -301,10 +325,38 @@ impl Launcher {
         project_id: &str,
         version_id: &str,
         project_type: &str,
-    ) -> Result<InstalledMod> {
+        source: &str,
+    ) -> Result<InstallResult> {
         let unlocked = !self.modpack_locked();
         self.modpack_for(instance_id)
-            .install_version(project_id, version_id, project_type, unlocked)
+            .install_version(project_id, version_id, project_type, source, unlocked)
+    }
+
+    pub fn update_all_content(&self, instance_id: &str) -> Result<Vec<String>> {
+        self.modpack_for(instance_id).update_all()
+    }
+
+    pub fn content_changelog(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        version_id: &str,
+        source: &str,
+    ) -> Result<String> {
+        self.modpack_for(instance_id)
+            .content_changelog(project_id, version_id, source)
+    }
+
+    pub fn uninstall_game(&self, instance_id: &str) -> Result<()> {
+        self.modpack_for(instance_id).uninstall()
+    }
+
+    pub fn update_selected_content(
+        &self,
+        instance_id: &str,
+        keys: &[String],
+    ) -> Result<Vec<String>> {
+        self.modpack_for(instance_id).update_selected(keys)
     }
 
     pub fn modpack_locked(&self) -> bool {
@@ -340,6 +392,44 @@ impl Launcher {
         upload_log(&content)
     }
 
+    pub fn java_report(&self, instance_id: &str) -> JavaReport {
+        let mc = self
+            .instances()
+            .get(instance_id)
+            .map(|i| i.minecraft_version)
+            .unwrap_or_else(|_| "1.21.1".to_string());
+        let settings = self.settings().unwrap_or_default();
+        JavaReport {
+            system: java::detect_system(),
+            runtimes: java::list_runtimes(&self.paths.jvm_dir()),
+            required_major: java::major_for_minecraft(&mc),
+            policy: settings.java_policy,
+            custom_path: settings.java_path,
+        }
+    }
+
+    pub fn cache_size(&self) -> u64 {
+        [
+            self.paths.modrinth_cache_dir(),
+            self.paths.curseforge_cache_dir(),
+        ]
+        .iter()
+        .map(|d| dir_size(d))
+        .sum()
+    }
+
+    pub fn clear_cache(&self) -> Result<()> {
+        for dir in [
+            self.paths.modrinth_cache_dir(),
+            self.paths.curseforge_cache_dir(),
+        ] {
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn add_playtime(&self, instance_id: &str, seconds: u64) -> Result<()> {
         let mut instance = self.instances().get(instance_id)?;
         instance.playtime_seconds = instance.playtime_seconds.saturating_add(seconds);
@@ -362,6 +452,22 @@ impl Launcher {
             (on_progress)(p);
         }
     }
+}
+
+fn dir_size(path: &std::path::Path) -> u64 {
+    let mut total = 0;
+    if let Ok(read) = std::fs::read_dir(path) {
+        for entry in read.flatten() {
+            match entry.file_type() {
+                Ok(ft) if ft.is_dir() => total += dir_size(&entry.path()),
+                Ok(ft) if ft.is_file() => {
+                    total += entry.metadata().map(|m| m.len()).unwrap_or(0)
+                }
+                _ => {}
+            }
+        }
+    }
+    total
 }
 
 fn read_json_or_default<T>(path: &std::path::Path, what: &str) -> Result<T>

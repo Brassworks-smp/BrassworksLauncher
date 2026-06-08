@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 portablemc.workspace = true
 packwiz.workspace = true
+java.workspace = true
 
 thiserror.workspace = true
 serde.workspace = true

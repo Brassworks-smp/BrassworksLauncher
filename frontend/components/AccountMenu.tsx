@@ -119,7 +119,7 @@ export function AccountMenu({
               setOpen(false);
               onMicrosoftLogin();
             }}
-            className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-[#2d7d2d]/40 bg-[#107c10]/15 px-2 py-2 text-sm text-[#7fe07f] transition hover:bg-[#107c10]/25"
+            className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-md bg-[#107c10] px-2 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#0c660c]"
           >
             <MicrosoftLogo /> Sign in with Microsoft
           </button>

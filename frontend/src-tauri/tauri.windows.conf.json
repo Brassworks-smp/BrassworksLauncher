@@ -1,0 +1,18 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "Brassworks Launcher",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "backgroundColor": "#0d0d0d"
+      }
+    ]
+  }
+}

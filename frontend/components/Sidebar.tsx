@@ -1,13 +1,21 @@
 "use client";
 
-import { Play, Settings, Package, Square, ScrollText } from "lucide-react";
+import {
+  Play,
+  Settings,
+  Package,
+  Square,
+  ScrollText,
+  Image as ImageIcon,
+} from "lucide-react";
 import { Logo } from "./Logo";
 
-export type View = "play" | "mods" | "settings";
+export type View = "play" | "mods" | "screenshots" | "settings";
 
 const NAV: { id: View; label: string; icon: typeof Play }[] = [
   { id: "play", label: "Play", icon: Play },
   { id: "mods", label: "Content", icon: Package },
+  { id: "screenshots", label: "Screenshots", icon: ImageIcon },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

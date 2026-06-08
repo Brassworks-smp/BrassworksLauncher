@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use packwiz::{Installer, Manifest, ResolvedVersion, SearchHit, Side, SyncOptions, SyncProgress};
+use packwiz::{
+    Curseforge, Installer, Manifest, ResolvedVersion, SearchHit, Side, SyncOptions, SyncProgress,
+};
 
 use crate::error::{CoreError, Result};
 use crate::paths::Paths;
@@ -12,6 +14,11 @@ use crate::settings::LauncherSettings;
 
 pub const PACK_URL: &str =
     "https://raw.githubusercontent.com/salem-5/Brassworks-SMP-Season-2/master/pack.toml";
+
+pub const DEFAULT_CURSEFORGE_API_KEY: &str = match option_env!("CURSEFORGE_API_KEY") {
+    Some(k) => k,
+    None => "$2a$10$dpx2qFIGDGtt0dWZHJ1fPeMN1UyPHp5/qBOeMSKgODujN3Qul2MVa",
+};
 
 pub fn resolve_pack_url(settings: &LauncherSettings) -> String {
     if let Some(url) = settings
@@ -52,8 +59,9 @@ pub struct InstalledMod {
     pub category: String,
     pub enabled: bool,
     pub managed: bool,
-    pub modrinth_id: Option<String>,
-    pub modrinth_version: Option<String>,
+    pub source: String,
+    pub project_id: Option<String>,
+    pub version_id: Option<String>,
     pub version: Option<String>,
     pub title: Option<String>,
     pub description: Option<String>,
@@ -75,6 +83,8 @@ pub struct ProjectDetail {
     pub description: String,
     pub body: String,
     pub icon_url: Option<String>,
+    pub url: Option<String>,
+    pub downloads: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +93,12 @@ pub struct ContentVersion {
     pub version_number: String,
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallResult {
+    pub item: InstalledMod,
+    pub dependencies: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -96,15 +112,56 @@ struct UserItem {
     filename: String,
     path: String,
     category: String,
+    #[serde(default)]
+    modrinth_id: Option<String>,
+    #[serde(default)]
+    modrinth_version: Option<String>,
+    #[serde(default)]
+    source: String,
+    #[serde(default)]
+    curseforge_id: Option<i64>,
+    #[serde(default)]
+    curseforge_file: Option<i64>,
+    version: Option<String>,
+}
+
+impl UserItem {
+    fn ids(&self) -> (String, Option<String>, Option<String>) {
+        resolve_ids(
+            &self.source,
+            self.modrinth_id.clone(),
+            self.modrinth_version.clone(),
+            self.curseforge_id,
+            self.curseforge_file,
+        )
+    }
+}
+
+fn resolve_ids(
+    stored_source: &str,
     modrinth_id: Option<String>,
     modrinth_version: Option<String>,
-    version: Option<String>,
+    curseforge_id: Option<i64>,
+    curseforge_file: Option<i64>,
+) -> (String, Option<String>, Option<String>) {
+    if curseforge_id.is_some() || stored_source == "curseforge" {
+        (
+            "curseforge".to_string(),
+            curseforge_id.map(|i| i.to_string()),
+            curseforge_file.map(|i| i.to_string()),
+        )
+    } else if modrinth_id.is_some() {
+        ("modrinth".to_string(), modrinth_id, modrinth_version)
+    } else {
+        ("local".to_string(), None, None)
+    }
 }
 
 pub struct Modpack<'a> {
     paths: &'a Paths,
     instance_id: String,
     pack_url: String,
+    cf_api_key: Option<String>,
 }
 
 impl<'a> Modpack<'a> {
@@ -121,7 +178,23 @@ impl<'a> Modpack<'a> {
             paths,
             instance_id: instance_id.into(),
             pack_url,
+            cf_api_key: None,
         }
+    }
+
+    pub fn with_curseforge_key(mut self, key: Option<String>) -> Self {
+        self.cf_api_key = key.filter(|k| !k.trim().is_empty());
+        self
+    }
+
+    fn curseforge(&self) -> Result<Curseforge> {
+        let key = self.cf_api_key.clone().ok_or_else(|| {
+            CoreError::Modpack(
+                "Add a CurseForge API key in Settings to browse CurseForge content".to_string(),
+            )
+        })?;
+        let installer = Installer::new();
+        Ok(installer.curseforge(self.paths.curseforge_cache_dir(), key))
     }
 
     fn game_dir(&self) -> PathBuf {
@@ -226,6 +299,13 @@ impl<'a> Modpack<'a> {
         for m in manifest.mods {
             tracked.insert(m.path.clone());
             let enabled = game_dir.join(&m.path).exists();
+            let (source, project_id, version_id) = resolve_ids(
+                &m.source,
+                m.modrinth_id,
+                m.modrinth_version,
+                m.curseforge_id,
+                m.curseforge_file,
+            );
             out.push(InstalledMod {
                 name: m.name,
                 filename: m.filename,
@@ -234,8 +314,9 @@ impl<'a> Modpack<'a> {
                 category: m.category,
                 enabled,
                 managed: true,
-                modrinth_id: m.modrinth_id,
-                modrinth_version: m.modrinth_version,
+                source,
+                project_id,
+                version_id,
                 version: None,
                 title: None,
                 description: None,
@@ -248,8 +329,9 @@ impl<'a> Modpack<'a> {
             let enabled = game_dir.join(&u.path).exists();
             let disabled = game_dir.join(format!("{}.disabled", u.path)).exists();
             if !enabled && !disabled {
-                continue; 
+                continue;
             }
+            let (source, project_id, version_id) = u.ids();
             out.push(InstalledMod {
                 name: u.name,
                 filename: u.filename,
@@ -258,8 +340,9 @@ impl<'a> Modpack<'a> {
                 category: u.category,
                 enabled,
                 managed: false,
-                modrinth_id: u.modrinth_id,
-                modrinth_version: u.modrinth_version,
+                source,
+                project_id,
+                version_id,
                 version: u.version,
                 title: None,
                 description: None,
@@ -298,8 +381,9 @@ impl<'a> Modpack<'a> {
                     category: folder.to_string(),
                     enabled,
                     managed: false,
-                    modrinth_id: None,
-                    modrinth_version: None,
+                    source: "local".to_string(),
+                    project_id: None,
+                    version_id: None,
                     version: None,
                     title: None,
                     description: None,
@@ -316,10 +400,31 @@ impl<'a> Modpack<'a> {
         Ok(out)
     }
 
-    pub fn mod_info(&self, modrinth_id: &str, version_id: Option<&str>) -> ModInfo {
+    pub fn mod_info(&self, source: &str, project_id: &str, version_id: Option<&str>) -> ModInfo {
+        if source == "curseforge" {
+            let Ok(cf) = self.curseforge() else {
+                return ModInfo {
+                    title: None,
+                    description: None,
+                    icon_url: None,
+                    version: None,
+                };
+            };
+            let project = cf.project(project_id);
+            let version = version_id
+                .and_then(|v| cf.resolve_version(project_id, v).ok().flatten())
+                .map(|r| r.version_number);
+            return ModInfo {
+                title: project.as_ref().map(|p| p.title.clone()),
+                description: project.as_ref().map(|p| p.description.clone()),
+                icon_url: project.and_then(|p| p.icon_url),
+                version,
+            };
+        }
+
         let installer = Installer::new();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        let project = modrinth.project(modrinth_id);
+        let project = modrinth.project(project_id);
         let version = version_id.and_then(|v| modrinth.version_number(v));
         ModInfo {
             title: project.as_ref().map(|p| p.title.clone()),
@@ -379,26 +484,51 @@ impl<'a> Modpack<'a> {
         &self,
         query: &str,
         project_type: &str,
+        source: &str,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
+        let loader = loader_for(project_type);
+        let game_version = self.game_version();
+        if source == "curseforge" {
+            return Ok(self
+                .curseforge()?
+                .search(query, project_type, loader, &game_version, 20, offset)?);
+        }
         let installer = Installer::new();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        let loader = loader_for(project_type);
-        Ok(modrinth.search(query, project_type, loader, &self.game_version(), 20, offset)?)
+        Ok(modrinth.search(query, project_type, loader, &game_version, 20, offset)?)
     }
 
-    pub fn project_detail(&self, project_id: &str) -> Result<ProjectDetail> {
+    pub fn project_detail(&self, project_id: &str, source: &str) -> Result<ProjectDetail> {
+        if source == "curseforge" {
+            let p = self
+                .curseforge()?
+                .project(project_id)
+                .ok_or_else(|| CoreError::Modpack("Project not found".to_string()))?;
+            return Ok(ProjectDetail {
+                id: p.id,
+                title: p.title,
+                description: p.description,
+                body: p.body,
+                icon_url: p.icon_url,
+                url: p.url,
+                downloads: p.downloads,
+            });
+        }
         let installer = Installer::new();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
         let p = modrinth
             .project(project_id)
             .ok_or_else(|| CoreError::Modpack("Project not found".to_string()))?;
+        let slug = if p.slug.is_empty() { p.id.clone() } else { p.slug.clone() };
         Ok(ProjectDetail {
             id: p.id,
             title: p.title,
             description: p.description,
             body: p.body,
             icon_url: p.icon_url,
+            url: Some(format!("https://modrinth.com/project/{slug}")),
+            downloads: p.downloads,
         })
     }
 
@@ -406,11 +536,19 @@ impl<'a> Modpack<'a> {
         &self,
         project_id: &str,
         project_type: &str,
+        source: &str,
     ) -> Result<Vec<ContentVersion>> {
-        let installer = Installer::new();
-        let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        let versions =
-            modrinth.list_versions(project_id, &self.game_version(), loader_for(project_type))?;
+        let loader = loader_for(project_type);
+        let game_version = self.game_version();
+        let versions = if source == "curseforge" {
+            self.curseforge()?
+                .list_versions(project_id, &game_version, loader)?
+        } else {
+            let installer = Installer::new();
+            installer
+                .modrinth(self.paths.modrinth_cache_dir())
+                .list_versions(project_id, &game_version, loader)?
+        };
         Ok(versions
             .into_iter()
             .map(|v| ContentVersion {
@@ -422,24 +560,78 @@ impl<'a> Modpack<'a> {
             .collect())
     }
 
-    pub fn install_from_modrinth(
+    fn best_one(
+        &self,
+        source: &str,
+        project_id: &str,
+        project_type: &str,
+    ) -> Result<Option<ResolvedVersion>> {
+        let game_version = self.game_version();
+        let loader = loader_for(project_type);
+        if source == "curseforge" {
+            Ok(self
+                .curseforge()?
+                .best_version(project_id, &game_version, loader)?)
+        } else {
+            let installer = Installer::new();
+            Ok(installer
+                .modrinth(self.paths.modrinth_cache_dir())
+                .best_version(project_id, &game_version, loader)?)
+        }
+    }
+
+    fn resolve_one(
+        &self,
+        source: &str,
+        project_id: &str,
+        version_id: &str,
+    ) -> Result<Option<ResolvedVersion>> {
+        if source == "curseforge" {
+            Ok(self
+                .curseforge()?
+                .resolve_version(project_id, version_id)?)
+        } else {
+            let installer = Installer::new();
+            Ok(installer
+                .modrinth(self.paths.modrinth_cache_dir())
+                .resolve_version(version_id)?)
+        }
+    }
+
+    pub fn content_changelog(
+        &self,
+        project_id: &str,
+        version_id: &str,
+        source: &str,
+    ) -> Result<String> {
+        let changelog = if source == "curseforge" {
+            self.curseforge()?.file_changelog(project_id, version_id)
+        } else {
+            let installer = Installer::new();
+            installer
+                .modrinth(self.paths.modrinth_cache_dir())
+                .version_changelog(version_id)
+        };
+        Ok(changelog.unwrap_or_else(|| "_No changelog provided for this version._".to_string()))
+    }
+
+    pub fn install_from_source(
         &self,
         project_id: &str,
         project_type: &str,
-    ) -> Result<InstalledMod> {
-        let installer = Installer::new();
-        let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        let game_version = self.game_version();
-        let loader = loader_for(project_type);
-        let version = modrinth
-            .best_version(project_id, &game_version, loader)?
-            .ok_or_else(|| {
-                CoreError::Modpack(format!(
-                    "No {project_type} version for Minecraft {game_version}{}",
-                    loader.map(|l| format!(" / {l}")).unwrap_or_default()
-                ))
-            })?;
-        self.place_version(project_id, project_type, version, true)
+        source: &str,
+    ) -> Result<InstallResult> {
+        let version = self.best_one(source, project_id, project_type)?.ok_or_else(|| {
+            let loader = loader_for(project_type);
+            CoreError::Modpack(format!(
+                "No {project_type} version for Minecraft {}{}",
+                self.game_version(),
+                loader.map(|l| format!(" / {l}")).unwrap_or_default()
+            ))
+        })?;
+        let item = self.place_version(source, project_id, project_type, version.clone(), true)?;
+        let dependencies = self.install_dependencies(source, &version);
+        Ok(InstallResult { item, dependencies })
     }
 
     pub fn install_version(
@@ -447,15 +639,12 @@ impl<'a> Modpack<'a> {
         project_id: &str,
         version_id: &str,
         project_type: &str,
+        source: &str,
         unlocked: bool,
-    ) -> Result<InstalledMod> {
+    ) -> Result<InstallResult> {
         let managed = self
             .manifest()
-            .map(|m| {
-                m.mods
-                    .iter()
-                    .any(|x| x.modrinth_id.as_deref() == Some(project_id))
-            })
+            .map(|m| m.mods.iter().any(|x| managed_matches(x, source, project_id)))
             .unwrap_or(false);
         if managed && !unlocked {
             return Err(CoreError::Modpack(
@@ -463,26 +652,118 @@ impl<'a> Modpack<'a> {
             ));
         }
 
-        let installer = Installer::new();
-        let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        let version = modrinth
-            .resolve_version(version_id)?
+        let version = self
+            .resolve_one(source, project_id, version_id)?
             .ok_or_else(|| CoreError::Modpack("Version not found".to_string()))?;
-        self.place_version(project_id, project_type, version, unlocked)
+        let item = self.place_version(source, project_id, project_type, version.clone(), unlocked)?;
+        let dependencies = self.install_dependencies(source, &version);
+        Ok(InstallResult { item, dependencies })
+    }
+
+    fn already_present(&self, source: &str, project_id: &str) -> bool {
+        if self
+            .manifest()
+            .map(|m| m.mods.iter().any(|x| managed_matches(x, source, project_id)))
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        self.load_user().items.iter().any(|i| {
+            let (s, pid, _) = i.ids();
+            s == source && pid.as_deref() == Some(project_id)
+        })
+    }
+
+    fn install_dependencies(&self, source: &str, version: &ResolvedVersion) -> Vec<String> {
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut installed: Vec<String> = Vec::new();
+        self.install_deps_inner(source, version, &mut visited, &mut installed, 0);
+        installed
+    }
+
+    fn install_deps_inner(
+        &self,
+        source: &str,
+        version: &ResolvedVersion,
+        visited: &mut HashSet<String>,
+        installed: &mut Vec<String>,
+        depth: u32,
+    ) {
+        if depth > 4 {
+            return;
+        }
+        for dep in version.dependencies.iter().filter(|d| d.required) {
+            let Some(pid) = dep.project_id.clone() else {
+                continue;
+            };
+            if !visited.insert(format!("{source}:{pid}")) {
+                continue;
+            }
+            if self.already_present(source, &pid) {
+                continue;
+            }
+            let resolved = match &dep.version_id {
+                Some(vid) => self.resolve_one(source, &pid, vid).ok().flatten(),
+                None => self.best_one(source, &pid, "mod").ok().flatten(),
+            };
+            if let Some(rv) = resolved {
+                if let Ok(m) = self.place_version(source, &pid, "mod", rv.clone(), false) {
+                    installed.push(m.name);
+                    self.install_deps_inner(source, &rv, visited, installed, depth + 1);
+                }
+            }
+        }
+    }
+
+    pub fn update_all(&self) -> Result<Vec<String>> {
+        self.update_filtered(None)
+    }
+
+    pub fn update_selected(&self, keys: &[String]) -> Result<Vec<String>> {
+        let set: HashSet<&str> = keys.iter().map(|s| s.as_str()).collect();
+        self.update_filtered(Some(&set))
+    }
+
+    fn update_filtered(&self, only: Option<&HashSet<&str>>) -> Result<Vec<String>> {
+        let mut updated = Vec::new();
+        for item in self.load_user().items.clone() {
+            let (source, pid, vid) = item.ids();
+            let (Some(pid), Some(vid)) = (pid, vid) else {
+                continue;
+            };
+            if let Some(set) = only {
+                if !set.contains(format!("{source}:{pid}").as_str()) {
+                    continue;
+                }
+            }
+            let project_type = project_type_for_category(&item.category);
+            if let Ok(Some(best)) = self.best_one(&source, &pid, project_type) {
+                if best.version_id != vid {
+                    if self
+                        .place_version(&source, &pid, project_type, best, false)
+                        .is_ok()
+                    {
+                        updated.push(item.name.clone());
+                    }
+                }
+            }
+        }
+        Ok(updated)
     }
 
     fn place_version(
         &self,
+        source: &str,
         project_id: &str,
         project_type: &str,
         version: ResolvedVersion,
         allow_disable_managed: bool,
     ) -> Result<InstalledMod> {
         let installer = Installer::new();
-        let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
+        let http = installer.modrinth(self.paths.modrinth_cache_dir());
         let folder = folder_for(project_type);
 
-        let bytes = modrinth.download(&version.url)?;
+        let bytes = http.download(&version.url)?;
         if let Some(expected) = &version.sha512 {
             let actual = packwiz::sha512_hex(&bytes);
             if !actual.eq_ignore_ascii_case(expected) {
@@ -496,7 +777,7 @@ impl<'a> Modpack<'a> {
         if allow_disable_managed {
             if let Ok(manifest) = self.manifest() {
                 for m in manifest.mods.iter() {
-                    if m.modrinth_id.as_deref() == Some(project_id) {
+                    if managed_matches(m, source, project_id) {
                         let active = game_dir.join(&m.path);
                         if active.exists() {
                             let _ = std::fs::rename(
@@ -516,29 +797,59 @@ impl<'a> Modpack<'a> {
         }
         std::fs::write(&dest, &bytes).map_err(|e| CoreError::io(&dest, e))?;
 
-        let project = modrinth.project(project_id);
-        let name = project
-            .as_ref()
-            .map(|p| p.title.clone())
-            .unwrap_or_else(|| version.filename.clone());
+        let (title, description, icon_url) = if source == "curseforge" {
+            match self.curseforge().ok().and_then(|cf| cf.project(project_id)) {
+                Some(p) => (Some(p.title), Some(p.description), p.icon_url),
+                None => (None, None, None),
+            }
+        } else {
+            match http.project(project_id) {
+                Some(p) => (Some(p.title), Some(p.description), p.icon_url),
+                None => (None, None, None),
+            }
+        };
+        let name = title.clone().unwrap_or_else(|| version.filename.clone());
+
+        let (modrinth_id, modrinth_version, curseforge_id, curseforge_file) = if source
+            == "curseforge"
+        {
+            (
+                None,
+                None,
+                project_id.parse::<i64>().ok(),
+                version.version_id.parse::<i64>().ok(),
+            )
+        } else {
+            (
+                Some(project_id.to_string()),
+                Some(version.version_id.clone()),
+                None,
+                None,
+            )
+        };
 
         let mut user = self.load_user();
         for old in user.items.iter().filter(|i| {
-            i.modrinth_id.as_deref() == Some(project_id) && i.path != rel
+            let (s, pid, _) = i.ids();
+            s == source && pid.as_deref() == Some(project_id) && i.path != rel
         }) {
             let _ = std::fs::remove_file(game_dir.join(&old.path));
             let _ = std::fs::remove_file(game_dir.join(format!("{}.disabled", old.path)));
         }
         user.items.retain(|i| {
-            i.path != rel && i.modrinth_id.as_deref() != Some(project_id)
+            let (s, pid, _) = i.ids();
+            i.path != rel && !(s == source && pid.as_deref() == Some(project_id))
         });
         user.items.push(UserItem {
             name: name.clone(),
             filename: version.filename.clone(),
             path: rel.clone(),
             category: folder.to_string(),
-            modrinth_id: Some(project_id.to_string()),
-            modrinth_version: Some(version.version_id.clone()),
+            modrinth_id,
+            modrinth_version,
+            source: source.to_string(),
+            curseforge_id,
+            curseforge_file,
             version: Some(version.version_number.clone()),
         });
         self.save_user(&user)?;
@@ -551,22 +862,32 @@ impl<'a> Modpack<'a> {
             category: folder.to_string(),
             enabled: true,
             managed: false,
-            modrinth_id: Some(project_id.to_string()),
-            modrinth_version: Some(version.version_id),
+            source: source.to_string(),
+            project_id: Some(project_id.to_string()),
+            version_id: Some(version.version_id),
             version: Some(version.version_number),
-            title: project.as_ref().map(|p| p.title.clone()),
-            description: project.as_ref().map(|p| p.description.clone()),
-            icon_url: project.and_then(|p| p.icon_url),
+            title,
+            description,
+            icon_url,
         })
     }
 
     pub fn relock_reconcile(&self) -> Result<()> {
         let game_dir = self.game_dir();
         let manifest = self.manifest()?;
-        let managed_ids: Vec<String> = manifest
+        let managed_keys: HashSet<(String, String)> = manifest
             .mods
             .iter()
-            .filter_map(|m| m.modrinth_id.clone())
+            .filter_map(|m| {
+                let (s, pid, _) = resolve_ids(
+                    &m.source,
+                    m.modrinth_id.clone(),
+                    m.modrinth_version.clone(),
+                    m.curseforge_id,
+                    m.curseforge_file,
+                );
+                pid.map(|p| (s, p))
+            })
             .collect();
 
         for m in manifest.mods.iter() {
@@ -576,29 +897,29 @@ impl<'a> Modpack<'a> {
             }
         }
 
+        let shadows_managed = |i: &UserItem| {
+            let (s, pid, _) = i.ids();
+            pid.map(|p| managed_keys.contains(&(s, p))).unwrap_or(false)
+        };
+
         let mut user = self.load_user();
-        let removed: Vec<_> = user
-            .items
-            .iter()
-            .filter(|i| {
-                i.modrinth_id
-                    .as_deref()
-                    .map(|id| managed_ids.iter().any(|m| m == id))
-                    .unwrap_or(false)
-            })
-            .cloned()
-            .collect();
-        for item in &removed {
+        for item in user.items.iter().filter(|i| shadows_managed(i)) {
             let _ = std::fs::remove_file(game_dir.join(&item.path));
             let _ = std::fs::remove_file(game_dir.join(format!("{}.disabled", item.path)));
         }
-        user.items.retain(|i| {
-            !i.modrinth_id
-                .as_deref()
-                .map(|id| managed_ids.iter().any(|m| m == id))
-                .unwrap_or(false)
-        });
+        user.items.retain(|i| !shadows_managed(i));
         self.save_user(&user)?;
+        Ok(())
+    }
+
+    pub fn uninstall(&self) -> Result<()> {
+        let game_dir = self.game_dir();
+        if game_dir.exists() {
+            std::fs::remove_dir_all(&game_dir).map_err(|e| CoreError::io(&game_dir, e))?;
+        }
+        let _ = std::fs::remove_file(self.paths.modpack_manifest(&self.instance_id));
+        let _ = std::fs::remove_file(self.paths.user_content(&self.instance_id));
+        let _ = self.reinstall_loader();
         Ok(())
     }
 
@@ -615,6 +936,17 @@ impl<'a> Modpack<'a> {
     }
 }
 
+fn managed_matches(m: &packwiz::ManagedMod, source: &str, project_id: &str) -> bool {
+    let (s, pid, _) = resolve_ids(
+        &m.source,
+        m.modrinth_id.clone(),
+        m.modrinth_version.clone(),
+        m.curseforge_id,
+        m.curseforge_file,
+    );
+    s == source && pid.as_deref() == Some(project_id)
+}
+
 fn loader_for(project_type: &str) -> Option<&'static str> {
     match project_type {
         "mod" => Some(LOADER),
@@ -627,5 +959,13 @@ fn folder_for(project_type: &str) -> &'static str {
         "resourcepack" => "resourcepacks",
         "shader" => "shaderpacks",
         _ => "mods",
+    }
+}
+
+fn project_type_for_category(category: &str) -> &'static str {
+    match category {
+        "resourcepacks" => "resourcepack",
+        "shaderpacks" => "shader",
+        _ => "mod",
     }
 }

@@ -26,12 +26,49 @@ export interface LauncherSettings {
   default_max_memory_mb: number;
   default_min_memory_mb: number;
   java_path: string | null;
+  java_policy: string;
   keep_open: boolean;
   theme: string;
   pack_url: string | null;
   dev_mode: boolean;
   modpack_locked: boolean;
+  curseforge_api_key: string | null;
+
+  pre_launch_command: string | null;
+  post_exit_command: string | null;
+  launch_behavior: string;
+  default_resolution: [number, number] | null;
+  start_minimized: boolean;
+
+  console_on_launch: boolean;
+  console_on_crash: boolean;
+  console_on_quit: boolean;
+
+  record_playtime: boolean;
+  show_playtime: boolean;
+  playtime_in_hours: boolean;
+
+  discord_rpc: boolean;
+  reduce_motion: boolean;
 }
+
+export interface JavaInstall {
+  path: string;
+  major: number | null;
+  version: string | null;
+  kind: "system" | "bundled" | "custom";
+  label: string;
+}
+
+export interface JavaReport {
+  system: JavaInstall | null;
+  runtimes: JavaInstall[];
+  required_major: number;
+  policy: string;
+  custom_path: string | null;
+}
+
+export type ContentSource = "modrinth" | "curseforge" | "local";
 
 export type AccountKind = "offline" | "microsoft";
 
@@ -104,8 +141,9 @@ export interface InstalledMod {
   category: string;
   enabled: boolean;
   managed: boolean;
-  modrinth_id: string | null;
-  modrinth_version: string | null;
+  source: ContentSource;
+  project_id: string | null;
+  version_id: string | null;
   version: string | null;
   title: string | null;
   description: string | null;
@@ -129,6 +167,7 @@ export interface SearchHit {
   author: string;
   project_type: string;
   versions: string[];
+  source: ContentSource;
 }
 
 export interface ProjectDetail {
@@ -137,6 +176,8 @@ export interface ProjectDetail {
   description: string;
   body: string;
   icon_url: string | null;
+  url: string | null;
+  downloads: number;
 }
 
 export interface ContentVersion {
@@ -144,6 +185,19 @@ export interface ContentVersion {
   version_number: string;
   game_versions: string[];
   loaders: string[];
+}
+
+export interface InstallResult {
+  item: InstalledMod;
+  dependencies: string[];
+}
+
+export interface Screenshot {
+  name: string;
+  path: string;
+  modified: number;
+  size: number;
+  instance: string;
 }
 
 export interface LogUpload {

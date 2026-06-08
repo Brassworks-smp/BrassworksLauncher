@@ -7,12 +7,15 @@ use std::sync::{Arc, Mutex};
 use brassworks_core::Launcher;
 use serde::Serialize;
 
+use crate::discord::Discord;
+
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) launcher: Launcher,
     pub(crate) running: Arc<Mutex<HashSet<String>>>,
     pub(crate) children: Arc<Mutex<HashMap<String, Child>>>,
     pub(crate) cancels: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    pub(crate) discord: Arc<Discord>,
 }
 
 impl AppState {

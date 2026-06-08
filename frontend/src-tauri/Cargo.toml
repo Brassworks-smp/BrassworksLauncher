@@ -17,8 +17,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 brassworks-core.workspace = true
 
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 
 serde.workspace = true
 serde_json.workspace = true
+
+discord-rich-presence = "0.2"

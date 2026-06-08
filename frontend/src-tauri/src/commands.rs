@@ -3,9 +3,9 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use brassworks_core::{
-    AccountStore, ContentVersion, InstalledMod, Instance, LaunchProgress, LauncherSettings,
-    LogUpload, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PlayerCount, ProjectDetail,
-    SearchHit,
+    AccountStore, ContentVersion, InstallResult, InstalledMod, Instance, LaunchProgress,
+    LauncherSettings, LogUpload, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PlayerCount,
+    ProjectDetail, SearchHit,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -126,9 +126,19 @@ pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String
     let children = state.children.clone();
     let cancel_flag = state.arm_cancel(&instance_id);
     let cancels = state.cancels.clone();
+    let discord = state.discord.clone();
     let id = instance_id;
 
     std::thread::spawn(move || {
+        let settings = launcher.settings().unwrap_or_default();
+        if let Some(cmd) = settings
+            .pre_launch_command
+            .as_deref()
+            .filter(|c| !c.trim().is_empty())
+        {
+            run_shell(cmd);
+        }
+
         let progress_app = app.clone();
         let mut sink = move |p: LaunchProgress| {
             let _ = progress_app.emit("launch://progress", &p);
@@ -144,6 +154,9 @@ pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String
                     map.insert(id.clone(), child);
                 }
                 let _ = app.emit("launch://started", &id);
+                if settings.discord_rpc {
+                    discord.set_playing();
+                }
                 let started_at = Instant::now();
 
                 let code = loop {
@@ -169,7 +182,7 @@ pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String
                 };
 
                 let secs = started_at.elapsed().as_secs();
-                if secs > 0 {
+                if secs > 0 && settings.record_playtime {
                     let _ = launcher.add_playtime(&id, secs);
                 }
 
@@ -202,6 +215,16 @@ pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String
         }
         if let Ok(mut map) = cancels.lock() {
             map.remove(&id);
+        }
+        if settings.discord_rpc {
+            discord.set_idle();
+        }
+        if let Some(cmd) = settings
+            .post_exit_command
+            .as_deref()
+            .filter(|c| !c.trim().is_empty())
+        {
+            run_shell(cmd);
         }
         let _ = app.emit("launch://exited", &exit);
     });
@@ -324,12 +347,13 @@ pub(crate) async fn list_mods(
 pub(crate) async fn mod_info(
     state: State<'_, AppState>,
     instance_id: String,
-    modrinth_id: String,
+    source: String,
+    project_id: String,
     version_id: Option<String>,
 ) -> CmdResult<ModInfo> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(launcher.mod_info(&instance_id, &modrinth_id, version_id.as_deref()))
+        Ok(launcher.mod_info(&instance_id, &source, &project_id, version_id.as_deref()))
     })
     .await
     .map_err(err)?
@@ -359,12 +383,13 @@ pub(crate) async fn search_content(
     instance_id: String,
     query: String,
     project_type: String,
+    source: String,
     offset: u32,
 ) -> CmdResult<Vec<SearchHit>> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .search_content(&instance_id, &query, &project_type, offset)
+            .search_content(&instance_id, &query, &project_type, &source, offset)
             .map_err(err)
     })
     .await
@@ -377,11 +402,12 @@ pub(crate) async fn install_content(
     instance_id: String,
     project_id: String,
     project_type: String,
-) -> CmdResult<InstalledMod> {
+    source: String,
+) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .install_content(&instance_id, &project_id, &project_type)
+            .install_content(&instance_id, &project_id, &project_type, &source)
             .map_err(err)
     })
     .await
@@ -393,10 +419,13 @@ pub(crate) async fn content_detail(
     state: State<'_, AppState>,
     instance_id: String,
     project_id: String,
+    source: String,
 ) -> CmdResult<ProjectDetail> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher.content_detail(&instance_id, &project_id).map_err(err)
+        launcher
+            .content_detail(&instance_id, &project_id, &source)
+            .map_err(err)
     })
     .await
     .map_err(err)?
@@ -408,11 +437,12 @@ pub(crate) async fn content_versions(
     instance_id: String,
     project_id: String,
     project_type: String,
+    source: String,
 ) -> CmdResult<Vec<ContentVersion>> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .content_versions(&instance_id, &project_id, &project_type)
+            .content_versions(&instance_id, &project_id, &project_type, &source)
             .map_err(err)
     })
     .await
@@ -426,15 +456,80 @@ pub(crate) async fn install_content_version(
     project_id: String,
     version_id: String,
     project_type: String,
-) -> CmdResult<InstalledMod> {
+    source: String,
+) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .install_content_version(&instance_id, &project_id, &version_id, &project_type)
+            .install_content_version(
+                &instance_id,
+                &project_id,
+                &version_id,
+                &project_type,
+                &source,
+            )
             .map_err(err)
     })
     .await
     .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn update_all_content(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<String>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.update_all_content(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn update_selected_content(
+    state: State<'_, AppState>,
+    instance_id: String,
+    keys: Vec<String>,
+) -> CmdResult<Vec<String>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .update_selected_content(&instance_id, &keys)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn content_changelog(
+    state: State<'_, AppState>,
+    instance_id: String,
+    project_id: String,
+    version_id: String,
+    source: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .content_changelog(&instance_id, &project_id, &version_id, &source)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn uninstall_game(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.uninstall_game(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
 }
 
 #[tauri::command]
@@ -475,6 +570,33 @@ pub(crate) fn open_dir(state: State<AppState>, instance_id: String, sub: Option<
     open_in_file_manager(&dir).map_err(err)
 }
 
+fn run_shell(command: &str) {
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", command]);
+        c
+    };
+    #[cfg(not(windows))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", command]);
+        c
+    };
+    let _ = cmd.spawn().map(|mut child| child.wait());
+}
+
+#[tauri::command]
+pub(crate) async fn java_info(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<brassworks_core::JavaReport> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.java_report(&instance_id)))
+        .await
+        .map_err(err)?
+}
+
 fn open_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     let program = "open";
@@ -486,6 +608,98 @@ fn open_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
     std::process::Command::new(program).arg(path).spawn().map(|_| ())
 }
 
+
+#[derive(Serialize)]
+pub(crate) struct Screenshot {
+    name: String,
+    path: String,
+    modified: u64,
+    size: u64,
+    instance: String,
+}
+
+fn collect_screenshots(dir: &std::path::Path, instance: &str, out: &mut Vec<Screenshot>) {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in read.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_lowercase();
+        if !(lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")) {
+            continue;
+        }
+        let meta = entry.metadata().ok();
+        let modified = meta
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+        out.push(Screenshot {
+            name,
+            path: path.to_string_lossy().to_string(),
+            modified,
+            size,
+            instance: instance.to_string(),
+        });
+    }
+}
+
+#[tauri::command]
+pub(crate) fn list_screenshots(state: State<AppState>) -> CmdResult<Vec<Screenshot>> {
+    let paths = state.launcher.paths();
+    let mut out = Vec::new();
+    if let Ok(instances) = state.launcher.instances().list() {
+        for inst in instances {
+            let dir = paths.instance_game_dir(&inst.id).join("screenshots");
+            collect_screenshots(&dir, &inst.id, &mut out);
+        }
+    }
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn delete_screenshot(
+    state: State<AppState>,
+    instance_id: String,
+    name: String,
+) -> CmdResult<()> {
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err("invalid screenshot name".to_string());
+    }
+    let path = state
+        .launcher
+        .paths()
+        .instance_game_dir(&instance_id)
+        .join("screenshots")
+        .join(&name);
+    std::fs::remove_file(&path).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn cache_size(state: State<'_, AppState>) -> CmdResult<u64> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.cache_size()))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn clear_cache(state: State<'_, AppState>) -> CmdResult<u64> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.clear_cache().map_err(err)?;
+        Ok(launcher.cache_size())
+    })
+    .await
+    .map_err(err)?
+}
 
 #[tauri::command]
 pub(crate) async fn get_news() -> CmdResult<NewsItem> {
