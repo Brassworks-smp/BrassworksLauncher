@@ -1,4 +1,4 @@
-<div align="center">
+<div style="text-align: center;">
 
 # Brassworks Launcher
 
@@ -18,15 +18,15 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 
 ## Screenshots
 
-<p align="center">
+<p style="text-align: center;">
   <img src="assets/img_2.png" alt="Main Menu" width="60%">
 </p>
 
-<p align="center">
+<p style="text-align: center;">
   <img src="assets/img.png" alt="Add Content" width="60%">
 </p>
 
-<p align="center">
+<p style="text-align: center;">
   <img src="assets/img_1.png" alt="Settings" width="60%">
 </p>
 
@@ -36,18 +36,43 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 
 ## Development
 
-To build and run the launcher locally, clone the repository and follow the setup steps below. Make sure you have Rust (1.88 or newer), Node.js 20+, pnpm, and a JDK installed before getting started.
+The project is a Cargo workspace (Rust crates in `crates/` plus the Tauri shell in `frontend/src-tauri/`) with a Next.js frontend in `frontend/`.
+
+### Prerequisites
+
+- **Rust** 1.88 or newer
+- **Node.js** 20 or newer
+- **pnpm**
+
+On Linux you also need the Tauri/WebKitGTK system libraries - `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, and `patchelf`.
+
+### To run the app
 
 ```bash
 cd frontend
 pnpm install
 pnpm tauri dev
-pnpm tauri build
 ```
 
-Useful checks:
+`pnpm tauri dev` starts the Next.js dev server and the Tauri window together; it rebuilds on changes to both the Rust and frontend code.
+
+### Build installers
+
+```bash
+cd frontend
+pnpm tauri build 
+```
+
+The output is written to `target/release/bundle/`
+
+### Quick checks
+
+Use these for fast feedback without producing a full bundle:
 
 ```bash
 cargo check --workspace
 node node_modules/next/dist/bin/next build
 ```
+
+The frontend is built via `node …/next build` rather than `pnpm build` to sidestep a pnpm script-runner quirk that re-runs `install` and fails.
+
