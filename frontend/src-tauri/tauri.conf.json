@@ -46,5 +46,13 @@
     "category": "Game",
     "shortDescription": "Launcher for the Brassworks SMP",
     "longDescription": "The Brassworks Launcher installs and launches the Brassworks SMP modpack (NeoForge 1.21.1) and keeps you up to date."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcwRDcyMjlBREZEQUYyRkEKUldUNjh0cmZtaUxYY0F6VENuWW5ibEZ2S24vTktHWmJJWmlUS0N6b21SN3lDT3pRK0dPSFVwMUYK",
+      "endpoints": [
+        "https://github.com/salem-5/BrassworksLauncher/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
