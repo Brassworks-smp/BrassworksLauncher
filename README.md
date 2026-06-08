@@ -1,4 +1,4 @@
-<div style="text-align: center;">
+<div align="center">
 
 # Brassworks Launcher
 
@@ -10,7 +10,6 @@ The official launcher for the Brassworks SMP. Built with Rust and Tauri under th
 
 To keep the launcher fast and reliable, it builds on existing open-source projects while making significant changes and improvements behind the scenes.
 
-
 - Built on top of [portablemc](https://github.com/theorzr/portablemc).
 - Includes a rewrite of the [packwiz](https://github.com/packwiz/packwiz) installer logic implemented in Rust.
 
@@ -18,15 +17,15 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 
 ## Screenshots
 
-<p style="text-align: center;">
+<p align="center">
   <img src="assets/img_2.png" alt="Main Menu" width="60%">
 </p>
 
-<p style="text-align: center;">
+<p align="center">
   <img src="assets/img.png" alt="Add Content" width="60%">
 </p>
 
-<p style="text-align: center;">
+<p align="center">
   <img src="assets/img_1.png" alt="Settings" width="60%">
 </p>
 
@@ -60,14 +59,12 @@ pnpm tauri dev
 
 ```bash
 cd frontend
-pnpm tauri build 
+pnpm tauri build
 ```
 
 The output is written to `target/release/bundle/`
 
 ### Quick checks
-
-Use these for fast feedback without producing a full bundle:
 
 ```bash
 cargo check --workspace
@@ -75,4 +72,3 @@ node node_modules/next/dist/bin/next build
 ```
 
 The frontend is built via `node …/next build` rather than `pnpm build` to sidestep a pnpm script-runner quirk that re-runs `install` and fails.
-
