@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ---- Minecraft brand font (from the Brassworks website) ---- */
+@font-face {
+  font-family: "minecraft";
+  src: url("/fonts/MinecraftRegular.woff2") format("woff2");
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "minecraft";
+  src: url("/fonts/MinecraftBold.woff2") format("woff2");
+  font-weight: bold;
+  font-display: swap;
+}
+@font-face {
+  font-family: "minecraft";
+  src: url("/fonts/MinecraftItalic.woff2") format("woff2");
+  font-style: italic;
+  font-display: swap;
+}
+
+@theme {
+  /* Dark surfaces (website: bg 5%, card 10%, popover 12%) */
+  --color-ink-950: #080808;
+  --color-ink-900: #0d0d0d;
+  --color-ink-850: #141414;
+  --color-ink-800: #1a1a1a;
+  --color-ink-700: #242424;
+  --color-ink-600: #9b9b9b; /* used only as muted text */
+
+  /* Accent — website green hsl(142 70% 45%) */
+  --color-brass-300: #5fe393;
+  --color-brass-400: #34d27a;
+  --color-brass-500: #1fbf63;
+  --color-brass-600: #18a153;
+  --color-brass-700: #14803f;
+
+  /* Secondary accent (running/online) — slightly cyan green */
+  --color-patina-400: #34e0b4;
+  --color-patina-500: #1fb88f;
+
+  /* Hairline borders (website uses gray-200/10) */
+  --color-edge: rgba(229, 231, 235, 0.1);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mc: "minecraft", ui-monospace, monospace;
+
+  --radius-xl: 0.5rem;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink-900);
+    color: #ededed;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Feel like a native app, not a web page: no text selection or image drag,
+     except inside real text inputs. */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  img {
+    -webkit-user-drag: none;
+    user-drag: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-700);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2f2f2f;
+  }
+}
+
+@layer utilities {
+  .drag {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .font-mc {
+    font-family: var(--font-mc);
+  }
+
+  /* Website "schematic" blueprint grid background */
+  .schem-bg {
+    background-image:
+      linear-gradient(rgba(237, 237, 237, 0.15) 3px, transparent 3px),
+      linear-gradient(90deg, rgba(237, 237, 237, 0.15) 3px, transparent 3px),
+      linear-gradient(rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px);
+    background-size:
+      100px 100px,
+      100px 100px,
+      20px 20px,
+      20px 20px;
+    background-position:
+      -4px -4px,
+      -4px -4px,
+      -2px -2px,
+      -2px -2px;
+    background-color: var(--color-ink-900);
+  }
+
+  .pixelated {
+    image-rendering: pixelated;
+  }
+
+  .panel {
+    background: var(--color-ink-800);
+    border: 1px solid var(--color-edge);
+  }
+
+  .brass-text {
+    color: var(--color-brass-400);
+  }
+
+  /* Chunky Minecraft-style raised button shadow */
+  .glow {
+    box-shadow: 0 0 0 1px var(--color-edge);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--color-brass-600),
+    var(--color-brass-400),
+    var(--color-brass-600)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.2s linear infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.35s ease both;
+}
+
+/* ---- Rendered Modrinth markdown ---- */
+.markdown {
+  color: var(--color-ink-600);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  color: #ededed;
+  font-family: var(--font-mc);
+  margin: 0.8em 0 0.4em;
+  line-height: 1.3;
+}
+.markdown h1 { font-size: 1.25rem; }
+.markdown h2 { font-size: 1.1rem; }
+.markdown h3 { font-size: 1rem; }
+.markdown p { margin: 0.5em 0; }
+.markdown a { color: var(--color-brass-300); text-decoration: underline; }
+.markdown ul { margin: 0.5em 0; padding-left: 1.2em; list-style: disc; }
+.markdown li { margin: 0.2em 0; }
+.markdown img { max-width: 100%; height: auto; border-radius: 6px; margin: 0.4em 0; }
+.markdown code {
+  background: var(--color-ink-950);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  color: var(--color-brass-300);
+}
+.markdown pre {
+  background: var(--color-ink-950);
+  padding: 0.8em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.markdown pre code { background: none; padding: 0; color: #ddd; }
+.markdown hr { border: none; border-top: 1px solid var(--color-edge); margin: 1em 0; }
+.markdown table { border-collapse: collapse; margin: 0.5em 0; }
+.markdown td, .markdown th { border: 1px solid var(--color-edge); padding: 0.3em 0.6em; }
+
+/* ---- Themed range slider (brass) ---- */
+.brass-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-ink-800);
+  outline: none;
+  border: 1px solid var(--color-edge);
+}
+.brass-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--color-brass-400), var(--color-brass-600));
+  border: 1px solid var(--color-brass-700);
+  box-shadow: 0 2px 0 var(--color-brass-700);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.brass-range::-webkit-slider-thumb:active {
+  transform: translateY(1px);
+}
+.brass-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--color-brass-500);
+  border: 1px solid var(--color-brass-700);
+  cursor: pointer;
+}

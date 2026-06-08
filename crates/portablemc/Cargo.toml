@@ -1,0 +1,46 @@
+[package]
+name = "portablemc"
+description = "Developer-oriented crate for launching Minecraft quickly and reliably with included support for Mojang versions and popular mod loaders. See portablemc-cli for the reference implementation."
+categories = ["games"]
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+publish = true
+
+[dependencies]
+thiserror.workspace = true
+
+serde.workspace = true
+serde_path_to_error.workspace = true
+serde_json.workspace = true
+
+uuid = { workspace = true, features = ["v5"] }
+chrono.workspace = true
+xmlparser.workspace = true
+
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "fs", "time", "net", "macros"] }
+reqwest = { workspace = true, features = ["json"] }
+
+indexmap.workspace = true
+elsa.workspace = true
+
+regex.workspace = true
+
+once_cell.workspace = true
+
+gethostname.workspace = true
+dunce.workspace = true
+os_info.workspace = true
+dirs.workspace = true
+windows-registry.workspace = true
+
+sha1.workspace = true
+md5.workspace = true
+jsonwebtoken.workspace = true
+
+zip.workspace = true

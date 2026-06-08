@@ -1,0 +1,21 @@
+[package]
+name = "brassworks-core"
+description = "Core launcher logic for the Brassworks Launcher: instances, settings, accounts and NeoForge launching. UI-agnostic."
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+portablemc.workspace = true
+packwiz.workspace = true
+
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono.workspace = true
+dirs.workspace = true
+md5.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json"] }
