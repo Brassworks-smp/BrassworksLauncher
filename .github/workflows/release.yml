@@ -1,16 +1,46 @@
 name: Release
+
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  create_tag:
+    name: Create version tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tauri.conf.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./frontend/src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        id: tag
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag $TAG
+          git push origin $TAG
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
   build:
-    name: ${{ matrix.name }}
+    name: Build (${{ matrix.name }})
+    needs: create_tag
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -44,6 +74,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_tag.outputs.tag }}
 
       - name: Install Linux build dependencies
         if: startsWith(matrix.runner, 'ubuntu')
@@ -90,16 +122,16 @@ jobs:
         working-directory: frontend
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build and bundle
+      - name: Build and bundle (Tauri + GitHub Release)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEXT_TELEMETRY_DISABLED: "1"
         with:
           projectPath: frontend
-          tagName: v__VERSION__
-          releaseName: "Brassworks Launcher v__VERSION__"
+          tagName: ${{ needs.create_tag.outputs.tag }}
+          releaseName: "Brassworks Launcher ${{ needs.create_tag.outputs.tag }}"
           releaseBody: "Self-contained installers for macOS, Windows (x64/arm64) and Linux (x64/arm64)."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
