@@ -30,25 +30,24 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
   <img src="assets/img_1.png" alt="Settings" width="60%">
 </p>
 
+</div>
+
 ---
 
 ## Development
 
 To build and run the launcher locally, clone the repository and follow the setup steps below. Make sure you have Rust (1.88 or newer), Node.js 20+, pnpm, and a JDK installed before getting started.
-</div>
 
- ```bash
+```bash
 cd frontend
 pnpm install
 pnpm tauri dev
 pnpm tauri build
 ```
 
-<div align="center">
 Useful checks:
-</div>
 
 ```bash
 cargo check --workspace
 node node_modules/next/dist/bin/next build
-``` 
+```
