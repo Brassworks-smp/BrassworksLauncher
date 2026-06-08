@@ -90,7 +90,8 @@ jobs:
             file \
             libssl-dev \
             libxdo-dev \
-            libsoup-3.0-dev
+            libsoup-3.0-dev \
+            xdg-utils
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
