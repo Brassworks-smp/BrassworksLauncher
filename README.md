@@ -38,6 +38,7 @@ To build and run the launcher locally, clone the repository and follow the setup
 </div>
 
  ```bash
+cd frontend
 pnpm install
 pnpm tauri dev
 pnpm tauri build
