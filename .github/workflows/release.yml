@@ -125,7 +125,7 @@ jobs:
         shell: bash
         run: |
           echo "body<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          cat changelog.md >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
