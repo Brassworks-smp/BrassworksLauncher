@@ -6,7 +6,7 @@ use brassworks_core::{
     AccountStore, ContentVersion, InstallResult, InstalledMod, Instance, LaunchProgress,
     LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload, McVersion,
     MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount, ProjectDetail,
-    SavedSkin, SearchHit, SkinProfile,
+    SavedSkin, SearchHit, SkinLibraryView, SkinProfile,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -1108,13 +1108,20 @@ pub(crate) async fn set_cape(
 }
 
 #[tauri::command]
-pub(crate) fn list_skins(state: State<AppState>) -> CmdResult<Vec<SavedSkin>> {
-    Ok(state.launcher.list_skins())
+pub(crate) fn list_skins(
+    state: State<AppState>,
+    account_id: String,
+) -> CmdResult<SkinLibraryView> {
+    Ok(state.launcher.list_skins(&account_id))
 }
 
 #[tauri::command]
-pub(crate) fn delete_skin(state: State<AppState>, skin_id: String) -> CmdResult<()> {
-    state.launcher.delete_skin(&skin_id).map_err(err)
+pub(crate) fn delete_skin(
+    state: State<AppState>,
+    account_id: String,
+    skin_id: String,
+) -> CmdResult<()> {
+    state.launcher.delete_skin(&account_id, &skin_id).map_err(err)
 }
 
 #[tauri::command]
@@ -1150,15 +1157,19 @@ pub(crate) async fn upload_skin(
 }
 
 #[tauri::command]
-pub(crate) async fn apply_skin_url(
+pub(crate) async fn apply_preset(
     state: State<'_, AppState>,
     account_id: String,
+    name: String,
     url: String,
     model: String,
-) -> CmdResult<()> {
+    cape_id: Option<String>,
+) -> CmdResult<SavedSkin> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher.apply_skin_url(&account_id, &url, &model).map_err(err)
+        launcher
+            .apply_preset(&account_id, &name, &url, &model, cape_id.as_deref())
+            .map_err(err)
     })
     .await
     .map_err(err)?
@@ -1167,23 +1178,28 @@ pub(crate) async fn apply_skin_url(
 #[tauri::command]
 pub(crate) fn update_skin(
     state: State<AppState>,
+    account_id: String,
     skin_id: String,
     model: String,
     cape_id: Option<String>,
 ) -> CmdResult<()> {
     state
         .launcher
-        .update_skin(&skin_id, &model, cape_id.as_deref())
+        .update_skin(&account_id, &skin_id, &model, cape_id.as_deref())
         .map_err(err)
 }
 
 #[tauri::command]
 pub(crate) fn replace_skin_texture(
     state: State<AppState>,
+    account_id: String,
     skin_id: String,
     data: Vec<u8>,
 ) -> CmdResult<()> {
-    state.launcher.replace_skin_texture(&skin_id, &data).map_err(err)
+    state
+        .launcher
+        .replace_skin_texture(&account_id, &skin_id, &data)
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -1305,9 +1321,61 @@ pub(crate) async fn check_for_update(app: AppHandle) -> CmdResult<UpdateInfo> {
     }
 }
 
+fn update_block_reason_impl() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let exe = std::env::current_exe().ok()?;
+        let path = exe.to_string_lossy();
+        if path.contains("/AppTranslocation/") {
+            return Some(
+                "macOS is running Brassworks Launcher from a temporary read-only copy \
+                 (App Translocation), so it can't update itself. Move the app to your \
+                 Applications folder, reopen it from there, then update again."
+                    .into(),
+            );
+        }
+        if path.starts_with("/Volumes/") {
+            return Some(
+                "Brassworks Launcher is running from a disk image. Drag it into your \
+                 Applications folder, eject the disk image, and open it from Applications \
+                 before updating."
+                    .into(),
+            );
+        }
+        if let Some(app_root) = exe.ancestors().find(|p| p.extension().is_some_and(|e| e == "app"))
+        {
+            if let Some(parent) = app_root.parent() {
+                let probe = parent.join(format!(".bw-update-probe-{}", std::process::id()));
+                match std::fs::File::create(&probe) {
+                    Ok(_) => {
+                        let _ = std::fs::remove_file(&probe);
+                    }
+                    Err(_) => {
+                        return Some(
+                            "Brassworks Launcher is installed in a read-only location and \
+                             can't replace itself. Move it to your Applications folder and \
+                             try again."
+                                .into(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub(crate) fn update_block_reason() -> CmdResult<Option<String>> {
+    Ok(update_block_reason_impl())
+}
+
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle) -> CmdResult<()> {
     use tauri_plugin_updater::UpdaterExt;
+    if let Some(reason) = update_block_reason_impl() {
+        return Err(reason);
+    }
     let updater = app.updater().map_err(err)?;
     let update = updater
         .check()

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { Minus, Square, X, Copy } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";

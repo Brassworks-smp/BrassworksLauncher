@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { UserRound, Check, LogOut, ChevronUp } from "lucide-react";
 import type { Account, AccountStore } from "@/lib/types";
@@ -69,7 +67,6 @@ function Avatar({
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={`${avatarUrl(account.uuid, size * 2)}?v=${version}`}
       alt={account.username}

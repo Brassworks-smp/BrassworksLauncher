@@ -33,12 +33,40 @@ pub struct SavedSkin {
     pub model: String,
     #[serde(default)]
     pub cape_id: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AccountSkins {
+    #[serde(default)]
+    pub skins: Vec<SavedSkin>,
+    #[serde(default)]
+    pub selected: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SkinLibrary {
     #[serde(default)]
+    pub accounts: std::collections::HashMap<String, AccountSkins>,
+    #[serde(default)]
     pub skins: Vec<SavedSkin>,
+}
+
+impl SkinLibrary {
+    pub fn account_mut(&mut self, account_id: &str) -> &mut AccountSkins {
+        let entry = self.accounts.entry(account_id.to_string()).or_default();
+        if !self.skins.is_empty() {
+            entry.skins.append(&mut self.skins);
+        }
+        entry
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkinLibraryView {
+    pub skins: Vec<SavedSkin>,
+    pub selected: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -185,6 +213,32 @@ mod tests {
         assert_eq!(p.model, "classic");
         assert!(p.skin_url.is_none());
         assert!(p.capes.is_empty());
+    }
+
+    fn saved(id: &str) -> SavedSkin {
+        SavedSkin {
+            id: id.to_string(),
+            name: "Old".to_string(),
+            file: format!("/skins/{id}.png"),
+            model: "classic".to_string(),
+            cape_id: None,
+            source: None,
+        }
+    }
+
+    #[test]
+    fn account_mut_migrates_legacy_global_skins_once() {
+        let mut lib = SkinLibrary {
+            accounts: std::collections::HashMap::new(),
+            skins: vec![saved("1"), saved("2")],
+        };
+        // First account to be touched inherits the legacy global skins.
+        let a = lib.account_mut("acc-a");
+        assert_eq!(a.skins.len(), 2);
+        assert!(lib.skins.is_empty(), "legacy list should be drained");
+        // A different account does not get a second copy.
+        let b = lib.account_mut("acc-b");
+        assert!(b.skins.is_empty());
     }
 
     #[test]

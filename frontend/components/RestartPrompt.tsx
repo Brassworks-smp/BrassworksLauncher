@@ -1,5 +1,3 @@
-"use client";
-
 import { RotateCw, X } from "lucide-react";
 import * as api from "@/lib/api";
 

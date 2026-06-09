@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { Users, Signal, ListOrdered, RefreshCw } from "lucide-react";
 import type { PlayerCount } from "@/lib/types";

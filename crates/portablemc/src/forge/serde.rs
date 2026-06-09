@@ -1,7 +1,3 @@
-//! JSON schemas structures for serde deserialization.
-//! 
-//! This module is internal to the module because it might be modified sooner or later
-//! to fix issues with Forge installers.
 
 use std::collections::HashMap;
 
@@ -10,24 +6,15 @@ use crate::maven::Gav;
 use crate::base;
 
 
-/// For loader >= 1.12.2-14.23.5.2851
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct ModernInstallProfile {
-    // /// The loader version.
-    // pub version: String,
-    /// The minecraft version.
     pub minecraft: String,
-    /// The installing forge GAV, for early installers, no longer used in modern ones.
     pub path: Option<Gav>,
-    /// Path to the 'version.json' file containing the full version metadata.
     pub json: String,
-    /// Libraries for the installation.
     #[serde(default)]
     pub libraries: Vec<InstallLibrary>,
-    /// Post-processors used to generate the final client.
     #[serde(default)]
     pub processors: Vec<InstallProcessor>,
-    /// Constant data used for replacement in post-processor arguments.
     #[serde(deserialize_with = "crate::serde::deserialize_or_empty_seq")]
     pub data: HashMap<String, InstallDataEntry>,
 }
@@ -73,7 +60,6 @@ impl InstallDataEntry {
 
 }
 
-/// For loader <= 1.12.2-14.23.5.2847
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyInstallProfile {
@@ -84,11 +70,7 @@ pub struct LegacyInstallProfile {
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyInstall {
-    // /// The game version.
-    // pub minecraft: String,
     pub path: Gav,
-    /// The path, within the installer archive, where the universal JAR is located and
-    /// can be extracted from.
     pub file_path: String,
 }
 

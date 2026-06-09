@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { X, Loader2, Boxes, Hammer, Upload, BookOpen } from "lucide-react";
 import * as api from "@/lib/api";

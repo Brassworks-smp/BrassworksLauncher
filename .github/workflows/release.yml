@@ -7,37 +7,25 @@ permissions:
   contents: write
 
 jobs:
-  create_tag:
-    name: Create version tag
+  version:
+    name: Resolve version tag
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Get version from tauri.conf.json
         id: version
         run: |
           VERSION=$(node -p "require('./frontend/src-tauri/tauri.conf.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        id: tag
-        run: |
-          TAG="v${{ steps.version.outputs.version }}"
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag $TAG
-          git push origin $TAG
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
 
   build:
     name: Build (${{ matrix.name }})
-    needs: create_tag
+    needs: version
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -46,7 +34,7 @@ jobs:
           - name: macOS (universal)
             runner: macos-latest
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin
+            args: --target universal-apple-darwin --bundles app
 
           - name: Linux x86_64
             runner: ubuntu-22.04
@@ -71,8 +59,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.create_tag.outputs.tag }}
 
       - name: Install Linux build dependencies
         if: startsWith(matrix.runner, 'ubuntu')
@@ -133,15 +119,78 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NEXT_TELEMETRY_DISABLED: "1"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
-          tagName: ${{ needs.create_tag.outputs.tag }}
-          releaseName: "Brassworks Launcher ${{ needs.create_tag.outputs.tag }}"
+          tagName: ${{ needs.version.outputs.tag }}
+          releaseName: "Brassworks Launcher ${{ needs.version.outputs.tag }}"
           releaseBody: ${{ steps.changelog.outputs.body }}
-          releaseDraft: false
+          # Upload to a DRAFT release: a draft does not create the git tag yet.
+          # The publish job below flips it to public once every platform built,
+          # and publishing is what creates the tag.
+          releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+      - name: Build and upload styled DMG (macOS)
+        if: startsWith(matrix.runner, 'macos')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          brew install create-dmg
+
+          APP="frontend/src-tauri/target/universal-apple-darwin/release/bundle/macos/Brassworks Launcher.app"
+
+          # create-dmg builds the image from the contents of a staging folder,
+          # so stage just the .app on its own.
+          STAGING="$RUNNER_TEMP/dmg-staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp -R "$APP" "$STAGING/"
+
+          DMG="$RUNNER_TEMP/Brassworks.dmg"
+          rm -f "$DMG"
+
+          # create-dmg occasionally returns non-zero in headless CI even when
+          # the image is produced, so retry and verify the file exists.
+          for attempt in 1 2 3; do
+            create-dmg \
+              --volname "Brassworks Launcher" \
+              --window-pos 200 120 \
+              --window-size 1000 650 \
+              --icon-size 100 \
+              --background "$GITHUB_WORKSPACE/frontend/public/dmg-scaled.png" \
+              --icon "Brassworks Launcher.app" 129 335 \
+              --app-drop-link 400 332 \
+              "$DMG" \
+              "$STAGING" && break
+            echo "create-dmg attempt $attempt failed, retrying..."
+            rm -f "$DMG"
+            sleep 5
+          done
+
+          if [ ! -f "$DMG" ]; then
+            echo "::error::Failed to build Brassworks.dmg"
+            exit 1
+          fi
+
+          gh release upload "$TAG" "$DMG" --clobber
+
+  publish:
+    name: Publish release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      # Publishing the draft is what creates the git tag and makes
+      # releases/latest/download/latest.json live for the auto updater.
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest

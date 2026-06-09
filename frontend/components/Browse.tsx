@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Users } from "lucide-react";
 import * as api from "@/lib/api";
@@ -135,7 +133,6 @@ export function ResultRow({
     >
       <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
         {hit.icon_url && !iconFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={hit.icon_url}
             alt={hit.title}

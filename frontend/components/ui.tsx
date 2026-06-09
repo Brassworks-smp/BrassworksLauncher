@@ -1,5 +1,3 @@
-"use client";
-
 import { Loader2 } from "lucide-react";
 
 /** Shared themed form/layout primitives used by the settings screens. */

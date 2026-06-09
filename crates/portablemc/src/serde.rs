@@ -1,4 +1,3 @@
-//! Common serde extensions and custom types.
 
 use std::ops::{Deref, DerefMut};
 use std::fmt::Write;
@@ -6,7 +5,6 @@ use std::fmt::Write;
 use regex::Regex;
 
 
-/// A regular expression serialized and deserialized to/from its string representation. 
 #[derive(Debug, Clone)]
 pub struct RegexString(pub Regex);
 
@@ -68,7 +66,6 @@ impl<'de> serde::Deserialize<'de> for RegexString {
 }
 
 
-/// A hexadecimal, lower case, formatted bytes string.
 #[derive(Debug, Clone)]
 pub struct HexString<const N: usize>(pub [u8; N]);
 
@@ -133,8 +130,6 @@ impl<'de, const N: usize> serde::Deserialize<'de> for HexString<N> {
 
 }
 
-/// Parse the given hex bytes string into the given destination slice, returning none if 
-/// the input string cannot be parsed, is too short or too long.
 pub fn parse_hex_bytes<const LEN: usize>(mut string: &str) -> Option<[u8; LEN]> {
     
     let mut dst = [0; LEN];
@@ -151,7 +146,6 @@ pub fn parse_hex_bytes<const LEN: usize>(mut string: &str) -> Option<[u8; LEN]> 
         }
     }
 
-    // Only successful if no string remains.
     string.is_empty().then_some(dst)
 
 }

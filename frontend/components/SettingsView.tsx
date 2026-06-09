@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import {
   Trash2,
@@ -438,6 +436,7 @@ function UpdatesCard({
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [pct, setPct] = useState<number | null>(null);
+  const [blockReason, setBlockReason] = useState<string | null>(null);
 
   const check = async () => {
     setChecking(true);
@@ -445,7 +444,8 @@ function UpdatesCard({
       const result = await api.checkForUpdate();
       setInfo(result);
       setCheckedAt(Date.now());
-      if (!result.available) toast("You're on the latest version", "success");
+      if (result.available) setBlockReason(await api.updateBlockReason().catch(() => null));
+      else toast("You're on the latest version", "success");
     } catch (e) {
       onError(String(e));
     } finally {
@@ -499,6 +499,12 @@ function UpdatesCard({
         </div>
       )}
 
+      {info?.available && blockReason && !downloading && (
+        <div className="dup-warn rounded-lg border px-3 py-2 text-xs leading-relaxed">
+          {blockReason}
+        </div>
+      )}
+
       {downloading && (
         <div className="rounded-lg border border-edge bg-ink-900/50 p-3">
           <div className="mb-1.5 flex items-center justify-between text-xs">
@@ -519,7 +525,11 @@ function UpdatesCard({
       )}
 
       {info?.available && !downloading ? (
-        <ActionButton icon={<Download size={15} />} onClickAsync={download}>
+        <ActionButton
+          icon={<Download size={15} />}
+          onClickAsync={download}
+          disabled={!!blockReason}
+        >
           Download &amp; install v{info.version}
         </ActionButton>
       ) : (

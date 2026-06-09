@@ -1,4 +1,3 @@
-//! Internal module for deserialization of the Fabric-like APIs.
 
 #![allow(unused)]
 
@@ -16,7 +15,7 @@ pub struct Loader {
     pub build: u32,
     pub maven: Gav,
     pub version: String,
-    pub stable: Option<bool>,  // Absent for some APIs (quilt)
+    pub stable: Option<bool>,  
 }
 
 #[derive(serde::Deserialize, Debug, Clone)]
@@ -30,5 +29,4 @@ pub struct Intermediary {
 pub struct GameLoader {
     pub loader: Loader,
     pub intermediary: Intermediary,
-    // missing: launcherMeta,
 }

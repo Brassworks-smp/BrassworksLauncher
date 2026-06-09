@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { Loader2, PartyPopper, ScrollText, X } from "lucide-react";
 import * as api from "@/lib/api";

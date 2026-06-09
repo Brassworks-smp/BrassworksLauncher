@@ -1,12 +1,10 @@
 /frontend/node_modules
-/frontend/next-env.d.ts
 /frontend/src-tauri/gen
-/frontend/.next
 /frontend/out
+/frontend/dist
 /target
 
 *.tsbuildinfo
 **/*.rs.bk
 .DS_Store
 .idea
-.next

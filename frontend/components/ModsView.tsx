@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FolderOpen,
@@ -746,7 +744,6 @@ function ModRow({
           className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600 disabled:cursor-default"
         >
           {mod.icon_url && !iconFailed ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={mod.icon_url}
               alt={title}

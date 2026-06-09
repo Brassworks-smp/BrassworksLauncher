@@ -1,4 +1,3 @@
-//! Microsoft Account authentication for Minecraft accounts.
 
 use std::io::{self, BufReader, BufWriter, Read, Seek};
 use std::iter::FusedIterator;
@@ -15,10 +14,6 @@ use uuid::Uuid;
 use jsonwebtoken::{DecodingKey, TokenData, Validation};
 
 
-/// Microsoft Account authenticator.
-/// 
-/// See <https://minecraft.wiki/w/Microsoft_authentication>. Shout out to wiki.vg which no 
-/// longer exists: <https://wiki.vg/Microsoft_Authentication_Scheme>
 #[derive(Debug, Clone)]
 pub struct Auth {
     app_id: Arc<str>,
@@ -27,7 +22,6 @@ pub struct Auth {
 
 impl Auth {
 
-    /// Create a new authenticator with the given application (client) id.
     pub fn new(app_id: &str) -> Self {
         Self {
             app_id: Arc::from(app_id),
@@ -45,28 +39,16 @@ impl Auth {
         self.language_code.as_deref()
     }
 
-    /// Define a specific language code to use for localized messages.
-    /// 
-    /// See <https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes>
     #[inline]
     pub fn set_language_code(&mut self, code: impl Into<String>) -> &mut Self {
         self.language_code = Some(code.into());
         self
     }
 
-    /// Request a device code and if successful, returns the device code auth flow that
-    /// contains the user code and the verification URI for that, this flow should be
-    /// waited in order to get access to a minecraft authenticator that will ultimately
-    /// produce the desired username, UUID and its auth token(s).
-    /// 
-    /// You can opt-in to also request the account's primary email via OpenID MSA scope.
     pub fn request_device_code(&self) -> Result<DeviceCodeFlow, AuthError> {
 
         crate::tokio::sync(async move {
 
-            // We request the 'XboxLive.signin' and 'offline_access' scopes that are
-            // mandatory for the Minecraft authentication.
-            // We could also request email with "openid email" scopes.
             let req = MsDeviceAuthRequest {
                 client_id: &self.app_id,
                 scope: "XboxLive.signin offline_access",
@@ -102,7 +84,6 @@ impl Auth {
 
 }
 
-/// Microsoft Account device code flow authenticator.
 #[derive(Debug, Clone)]
 pub struct DeviceCodeFlow {
     client: Client,
@@ -132,11 +113,6 @@ impl DeviceCodeFlow {
         &self.res.message
     }
 
-    /// Wait for the user to authorize via the given user code and verification URI.
-    /// If successful the authentication continues and the account is authenticated, if
-    /// possible.
-    /// 
-    /// After a successful answer, this flow object should not be used again!
     pub fn wait(&self) -> Result<Account, AuthError> {
 
         crate::tokio::sync(async move {
@@ -183,7 +159,6 @@ impl DeviceCodeFlow {
 
 }
 
-/// An authenticated and validated Minecraft account.
 #[derive(Debug, Clone)]
 pub struct Account {
     app_id: String,
@@ -196,42 +171,31 @@ pub struct Account {
 
 impl Account {
 
-    /// The ID of the application that account was authorized for.
     #[inline]
     pub fn app_id(&self) -> &str {
         &self.app_id
     }
 
-    /// The access token to give to Minecraft's AuthLib when starting the game.
     #[inline]
     pub fn access_token(&self) -> &str {
         &self.access_token
     }
 
-    /// The player's UUID.
     #[inline]
     pub fn uuid(&self) -> Uuid {
         self.uuid
     }
 
-    /// The player's username.
     #[inline]
     pub fn username(&self) -> &str {
         &self.username
     }
 
-    /// The Xbox XUID.
     #[inline]
     pub fn xuid(&self) -> &str {
         &self.xuid
     }
 
-    /// Make a request of this account's profile, this function take self by mutable 
-    /// reference because it may update the username if it has been modified since last
-    /// request. If this function returns an error, it may be necessary to refresh the
-    /// account.
-    /// 
-    /// It's not required to run that on newly authenticated or refreshed accounts.
     pub fn request_profile(&mut self) -> Result<(), AuthError> {
         
         let client = crate::http::builder().build()
@@ -243,8 +207,6 @@ impl Account {
 
     }
 
-    /// Request a token refresh of this account, this will use the internal refresh token,
-    /// this will also update the username, uuid and access token.
     pub fn request_refresh(&mut self) -> Result<(), AuthError> {
 
         crate::tokio::sync(async move {
@@ -280,7 +242,6 @@ impl Account {
 
 }
 
-/// Request a Minecraft Account token from the given request.
 async fn request_ms_token(
     client: &Client,
     req: &MsTokenRequest<'_>,
@@ -316,18 +277,14 @@ async fn request_ms_token(
     
 }
 
-/// Full procedure to gain access to a real Minecraft account from a given MSA token.
-/// The returned account has no client id, no refresh token and no email.
 async fn request_minecraft_account(
     client: &Client,
     ms_auth_token: &str,
 ) -> Result<Account, AuthError> {
 
-    // XBL authentication and authorization...
     let user_res = request_xbl_user(&client, ms_auth_token).await?;
     let xsts_res = request_xbl_xsts(&client, &user_res.token).await?;
 
-    // Now checking coherency...
     if user_res.display_claims.xui.is_empty() 
     || user_res.display_claims.xui != xsts_res.display_claims.xui {
         return Err(AuthError::Unknown(format!("Invalid or incoherent display claims.")))
@@ -336,11 +293,9 @@ async fn request_minecraft_account(
     let user_hash = xsts_res.display_claims.xui[0].uhs.as_str();
     let xsts_token = xsts_res.token.as_str();
 
-    // Minecraft with XBL...
     let mc_res = request_minecraft_with_xbl(&client, user_hash, xsts_token).await?;
     let mc_res_token = decode_jwt_without_validation::<MinecraftToken>(&mc_res.access_token)
         .map_err(AuthError::new_jwt)?;
-    // Minecraft profile...
     let profile_res = request_minecraft_profile(&client, &mc_res.access_token).await?;
 
     Ok(Account {
@@ -467,8 +422,6 @@ fn decode_jwt_without_validation<T>(token: &str) -> jsonwebtoken::errors::Result
 where 
     T: serde::de::DeserializeOwned,
 {
-    // We don't want to validate the token, just decode its data.
-    // See https://github.com/Keats/jsonwebtoken/issues/277.
     let key = DecodingKey::from_secret(&[]);
     let mut validation = Validation::default();
     validation.insecure_disable_signature_validation();
@@ -476,36 +429,21 @@ where
     jsonwebtoken::decode(token, &key, &validation)
 }
 
-/// The error type containing one error for each failed entry in a download batch.
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum AuthError {
-    /// Authorization declined by the user.
     #[error("declined")]
     Declined,
-    /// Time out of the authentication flow.
     #[error("timed out")]
     TimedOut,
-    /// When refreshing the Minecraft profile, this tells that the token is outdated, but
-    /// the caller can still try to refresh it.
     #[error("outdated token")]
     OutdatedToken,
     #[error("does not own the game")]
     DoesNotOwnGame,
-    /// An unknown HTTP status has been received.
     #[error("invalid status: {0}")]
     InvalidStatus(u16),
-    /// An unknown, unhandled error happened.
     #[error("unknown: {0}")]
     Unknown(String),
-    /// A generic error type for internal and third-party errors that may change depending
-    /// on the actual implementation.
-    /// 
-    /// The current implementation yields the following error types:
-    /// 
-    /// - [`reqwest::Error`] for any error related to HTTP requests.
-    /// 
-    /// - [`jsonwebtoken::errors::Error`] for any error related to decoding JWTs.
     #[error("internal: {0}")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -524,7 +462,6 @@ impl AuthError {
 
 }
 
-/// (URL encoded)
 #[derive(Debug, Clone, serde::Serialize)]
 struct MsDeviceAuthRequest<'a> {
     client_id: &'a str,
@@ -532,7 +469,6 @@ struct MsDeviceAuthRequest<'a> {
     mkt: Option<&'a str>,
 }
 
-/// (JSON)
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MsDeviceAuthSuccess {
     device_code: String,
@@ -544,7 +480,6 @@ struct MsDeviceAuthSuccess {
     message: String,
 }
 
-/// (URL encoded)
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "grant_type")]
 enum MsTokenRequest<'a> {
@@ -562,23 +497,18 @@ enum MsTokenRequest<'a> {
     },
 }
 
-/// (JSON)
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MsTokenSuccess {
-    /// Always "Bearer"
     token_type: String,
     scope: String,
     #[allow(unused)]
     expires_in: u32,
     access_token: String,
-    /// Issued if the original scope parameter included the openid scope
     #[allow(unused)]
     id_token: Option<String>,
-    /// Issued if the original scope parameter included offline_access.
     refresh_token: String,
 }
 
-/// (JSON) Generic authentication error returned by the API.
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MsAuthError {
     error: String,
@@ -591,7 +521,6 @@ struct MsAuthError {
     error_uri: Option<String>,
 }
 
-/// (JSON) 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct XblSuccess {
@@ -603,7 +532,6 @@ struct XblSuccess {
     token: String,
 }
 
-/// (JSON)
 #[derive(Debug, Clone, serde::Deserialize)]
 struct XblDisplayClaims {
     xui: Vec<XblXui>,
@@ -626,10 +554,8 @@ struct XblError {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MinecraftWithXblSuccess {
-    /// Some UUID, not the account's player UUID.
     #[allow(unused)]
     username: String, 
-    /// The actual Minecraft access token to use to launch the game.
     access_token: String,
     token_type: String,
     #[allow(unused)]
@@ -638,10 +564,8 @@ struct MinecraftWithXblSuccess {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MinecraftProfileSuccess {
-    /// The real UUID of the Minecraft account.
     #[serde(with = "uuid::serde::simple")]
     id: Uuid,
-    /// The username of the Minecraft account.
     name: String,
 }
 
@@ -657,9 +581,6 @@ struct MinecraftToken {
     xuid: String,
 }
 
-/// A file-backed database for storing accounts. It allows storing and retrieving 
-/// accounts atomically (using shared read and exclusive write property of the underlying
-/// filesystem).
 #[derive(Debug)]
 pub struct Database {
     file: PathBuf,
@@ -667,20 +588,16 @@ pub struct Database {
 
 impl Database {
 
-    /// Create a new database at the given location, the parent directory may not exists.
-    /// This will not actually load the database contents, but it will 
     pub fn new<P: Into<PathBuf>>(file: P) -> Self {
         Self {
             file: file.into(),
         }
     }
 
-    /// Get the file path.
     pub fn file(&self) -> &Path {
         &self.file
     }
 
-    /// Internal function to load the database data.
     fn load(&self) -> Result<Option<DatabaseData>, DatabaseError> {
         
         let reader = match File::open(&self.file) {
@@ -696,7 +613,6 @@ impl Database {
         
     }
 
-    /// Internal function to load the database data
     fn load_and_store<F, T>(&self, func: F) -> Result<T, DatabaseError>
     where
         F: for<'a> FnOnce(&'a mut DatabaseData, &'a mut bool) -> T,
@@ -714,14 +630,12 @@ impl Database {
 
         let mut data;
 
-        // If the file is empty, don't try to decode it but create a new empty database!
         if rw.read(&mut [0; 1])? == 0 {
             data = DatabaseData { 
                 accounts: Vec::new(),
             };
         } else {
 
-            // Rewind to re-read it from start!
             rw.rewind()?;
 
             data = serde_json::from_reader::<_, DatabaseData>(BufReader::new(&mut rw))
@@ -746,7 +660,6 @@ impl Database {
 
     }
 
-    /// Load every account in this database and return an iterator over all of them.
     pub fn load_iter(&self) -> Result<DatabaseIter, DatabaseError> {
         self.load().map(|data| {
             DatabaseIter {
@@ -757,7 +670,6 @@ impl Database {
         })
     }
     
-    /// Load an account from its UUID.
     pub fn load_from_uuid(&self, uuid: Uuid) -> Result<Option<Account>, DatabaseError> {
         self.load().map(|data| data.and_then(|data| {
             data.accounts.into_iter()
@@ -766,8 +678,6 @@ impl Database {
         }))
     }
     
-    /// Load an account from its username, because a username it not guaranteed to be
-    /// unique, in case of non-freshed sessions that keep old .
     pub fn load_from_username(&self, username: &str) -> Result<Option<Account>, DatabaseError> {
         self.load().map(|data| data.and_then(|data| {
             data.accounts.into_iter()
@@ -776,10 +686,6 @@ impl Database {
         }))
     }
 
-    /// Remove the given account from its UUID, if existing, and save the database without
-    /// it. 
-    /// 
-    /// If the account doesn't exist, the database is not touch, only read.
     pub fn remove_from_uuid(&self, uuid: Uuid) -> Result<Option<Account>, DatabaseError> {
         self.load_and_store(|data, save| {
             let index = data.accounts.iter().position(|acc| acc.uuid == uuid)?;
@@ -788,11 +694,6 @@ impl Database {
         })
     }
 
-    /// Remove the given account from its username, if existing, and save the database
-    /// without it. Note that a username is not guaranteed to be unique, so only the first
-    /// matching account is removed.
-    /// 
-    /// If the account doesn't exist, the database is not touch, only read.
     pub fn remove_from_username(&self, username: &str) -> Result<Option<Account>, DatabaseError> {
         self.load_and_store(|data, save| {
             let index = data.accounts.iter().position(|acc| acc.username == username)?;
@@ -801,8 +702,6 @@ impl Database {
         })
     }
 
-    /// Store the given account in this database, overwrite any previously stored account
-    /// with the same UUID.
     pub fn store(&self, account: Account) -> Result<(), DatabaseError> {
         self.load_and_store(|data, save| {
             *save = true;
@@ -816,7 +715,6 @@ impl Database {
 
 }
 
-/// An iterator over all loader accounts in the database.
 pub struct DatabaseIter {
     raw: std::vec::IntoIter<DatabaseDataAccount>,
 }
@@ -848,15 +746,11 @@ impl DoubleEndedIterator for DatabaseIter {
 
 }
 
-/// The error type containing one error for each failed entry in a download batch.
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum DatabaseError {
-    /// An underlying I/O error when opening the database file.
     #[error("io: {0}")]
     Io(#[from] io::Error),
-    /// The database is corrupted and nothing can be done about it automatically, you
-    /// can move the file to a backup location before retrying.
     #[error("corrupted")]
     Corrupted,
     #[error("write failed")]
@@ -865,8 +759,6 @@ pub enum DatabaseError {
 
 impl DatabaseError {
 
-    /// Internal function to map this error type and replace it by [`Self::Io`] whenever
-    /// the given serde error has an underlying I/O error.
     fn map_json_io(self, value: serde_json::Error) -> Self {
         if let Some(kind) = value.io_error_kind() {
             Self::Io(kind.into())

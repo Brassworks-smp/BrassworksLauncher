@@ -1,20 +1,3 @@
-//! Brassworks Launcher desktop app.
-//!
-//! This crate is basically the thing that connects the frontend to
-//! `brassworks_core`. It uses Tauri commands to talk to the core crate
-//! and sends updates back to the UI whenever stuff is happening.
-//!
-//! Most of the actual important code is in `brassworks_core`, so this
-//! crate is kinda just the middleman.
-//!
-//! Files are split up like this:
-//!
-//! - [`state`] - shared app state and some helper stuff.
-//! - [`auth_window`] - the Microsoft login window thing.
-//! - [`commands`] - all the Tauri command functions.
-//!
-//! Nothing too crazy happens in here. Most of the heavy lifting is done
-//! by the core crate.
 
 mod auth_window;
 mod commands;
@@ -130,10 +113,11 @@ pub fn run() {
             commands::delete_skin,
             commands::apply_saved_skin,
             commands::upload_skin,
-            commands::apply_skin_url,
+            commands::apply_preset,
             commands::update_skin,
             commands::replace_skin_texture,
             commands::export_skin,
+            commands::update_block_reason,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

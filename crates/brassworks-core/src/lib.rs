@@ -44,7 +44,7 @@ pub use remote::{
     PlayerGroup,
 };
 pub use versions::{loader_versions, minecraft_versions, LoaderVersionInfo, McVersion};
-pub use skins::{Cape, SavedSkin, SkinProfile};
+pub use skins::{Cape, SavedSkin, SkinLibraryView, SkinProfile};
 pub use settings::LauncherSettings;
 
 pub use java::{JavaInstall, JavaKind};
@@ -576,22 +576,45 @@ impl Launcher {
         read_json_or_default(&self.paths.skins_index(), "skins").unwrap_or_default()
     }
 
-    pub fn list_skins(&self) -> Vec<skins::SavedSkin> {
-        self.skin_library().skins
+    fn save_skin_library(&self, lib: &skins::SkinLibrary) -> Result<()> {
+        write_json(&self.paths.skins_index(), lib, "skins")
     }
 
-    pub fn save_skin(
-        &self,
-        name: &str,
-        bytes: &[u8],
-        model: &str,
-        cape_id: Option<&str>,
-    ) -> Result<skins::SavedSkin> {
+    /// `account_id`'s saved skins + selected id. Folds any legacy global skins
+    /// into this account on first access (persisted best-effort).
+    pub fn list_skins(&self, account_id: &str) -> skins::SkinLibraryView {
+        let mut lib = self.skin_library();
+        let had_legacy = !lib.skins.is_empty();
+        let acct = lib.account_mut(account_id).clone();
+        if had_legacy {
+            let _ = self.save_skin_library(&lib);
+        }
+        skins::SkinLibraryView {
+            skins: acct.skins,
+            selected: acct.selected,
+        }
+    }
+
+    /// Write a new texture file under the skins dir and return its path.
+    fn write_skin_file(&self, bytes: &[u8]) -> Result<(String, String)> {
         let dir = self.paths.skins_dir();
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
         let id = uuid::Uuid::new_v4().to_string();
         let file = dir.join(format!("{id}.png"));
         std::fs::write(&file, bytes).map_err(|e| CoreError::io(&file, e))?;
+        Ok((id, file.to_string_lossy().to_string()))
+    }
+
+    pub fn save_skin(
+        &self,
+        account_id: &str,
+        name: &str,
+        bytes: &[u8],
+        model: &str,
+        cape_id: Option<&str>,
+        source: Option<&str>,
+    ) -> Result<skins::SavedSkin> {
+        let (id, file) = self.write_skin_file(bytes)?;
         let saved = skins::SavedSkin {
             id,
             name: if name.trim().is_empty() {
@@ -599,40 +622,58 @@ impl Launcher {
             } else {
                 name.trim().to_string()
             },
-            file: file.to_string_lossy().to_string(),
+            file,
             model: if model == "slim" { "slim" } else { "classic" }.to_string(),
             cape_id: cape_id.map(|c| c.to_string()),
+            source: source.map(|s| s.to_string()),
         };
         let mut lib = self.skin_library();
-        lib.skins.insert(0, saved.clone());
-        write_json(&self.paths.skins_index(), &lib, "skins")?;
+        lib.account_mut(account_id).skins.insert(0, saved.clone());
+        self.save_skin_library(&lib)?;
         Ok(saved)
     }
 
-    pub fn delete_skin(&self, skin_id: &str) -> Result<()> {
+    pub fn delete_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
         let mut lib = self.skin_library();
-        if let Some(s) = lib.skins.iter().find(|s| s.id == skin_id) {
+        let acct = lib.account_mut(account_id);
+        if let Some(s) = acct.skins.iter().find(|s| s.id == skin_id) {
             let _ = std::fs::remove_file(&s.file);
         }
-        lib.skins.retain(|s| s.id != skin_id);
-        write_json(&self.paths.skins_index(), &lib, "skins")
+        acct.skins.retain(|s| s.id != skin_id);
+        if acct.selected.as_deref() == Some(skin_id) {
+            acct.selected = None;
+        }
+        self.save_skin_library(&lib)
     }
 
-    pub fn update_skin(&self, skin_id: &str, model: &str, cape_id: Option<&str>) -> Result<()> {
+    pub fn update_skin(
+        &self,
+        account_id: &str,
+        skin_id: &str,
+        model: &str,
+        cape_id: Option<&str>,
+    ) -> Result<()> {
         let mut lib = self.skin_library();
         let skin = lib
+            .account_mut(account_id)
             .skins
             .iter_mut()
             .find(|s| s.id == skin_id)
             .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
         skin.model = if model == "slim" { "slim" } else { "classic" }.to_string();
         skin.cape_id = cape_id.map(|c| c.to_string());
-        write_json(&self.paths.skins_index(), &lib, "skins")
+        self.save_skin_library(&lib)
     }
 
-    pub fn replace_skin_texture(&self, skin_id: &str, bytes: &[u8]) -> Result<()> {
-        let lib = self.skin_library();
+    pub fn replace_skin_texture(
+        &self,
+        account_id: &str,
+        skin_id: &str,
+        bytes: &[u8],
+    ) -> Result<()> {
+        let mut lib = self.skin_library();
         let skin = lib
+            .account_mut(account_id)
             .skins
             .iter()
             .find(|s| s.id == skin_id)
@@ -641,12 +682,19 @@ impl Launcher {
             .map_err(|e| CoreError::io(std::path::Path::new(&skin.file), e))
     }
 
+    /// Mark `skin_id` as the account's currently-applied skin.
+    fn set_selected_skin(&self, account_id: &str, skin_id: Option<&str>) -> Result<()> {
+        let mut lib = self.skin_library();
+        lib.account_mut(account_id).selected = skin_id.map(|s| s.to_string());
+        self.save_skin_library(&lib)
+    }
+
     pub fn apply_saved_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
         let lib = self.skin_library();
         let skin = lib
-            .skins
-            .iter()
-            .find(|s| s.id == skin_id)
+            .accounts
+            .get(account_id)
+            .and_then(|a| a.skins.iter().find(|s| s.id == skin_id))
             .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
         let bytes = std::fs::read(&skin.file)
             .map_err(|e| CoreError::io(std::path::Path::new(&skin.file), e))?;
@@ -655,12 +703,63 @@ impl Launcher {
         self.with_token(account_id, move |t| {
             skins::upload_skin(t, bytes.clone(), &model)?;
             skins::set_cape(t, cape.as_deref())
-        })
+        })?;
+        self.set_selected_skin(account_id, Some(skin_id))
     }
 
-    pub fn apply_skin_url(&self, account_id: &str, url: &str, model: &str) -> Result<()> {
+    /// Apply a default preset by URL: saves it into the account's library (one
+    /// entry per preset, updated in place on re-apply) so it becomes editable,
+    /// pushes the texture + cape to Mojang, and marks it selected.
+    pub fn apply_preset(
+        &self,
+        account_id: &str,
+        name: &str,
+        url: &str,
+        model: &str,
+        cape_id: Option<&str>,
+    ) -> Result<skins::SavedSkin> {
         let bytes = skins::download_texture(url)?;
-        self.with_token(account_id, move |t| skins::upload_skin(t, bytes.clone(), model))
+        let model = if model == "slim" { "slim" } else { "classic" }.to_string();
+        let source = format!("preset:{name}");
+
+        let mut lib = self.skin_library();
+        let saved = {
+            let acct = lib.account_mut(account_id);
+            let existing = acct
+                .skins
+                .iter_mut()
+                .find(|s| s.source.as_deref() == Some(source.as_str()));
+            let saved = if let Some(s) = existing {
+                std::fs::write(&s.file, &bytes)
+                    .map_err(|e| CoreError::io(std::path::Path::new(&s.file), e))?;
+                s.model = model.clone();
+                s.cape_id = cape_id.map(|c| c.to_string());
+                s.clone()
+            } else {
+                let (id, file) = self.write_skin_file(&bytes)?;
+                let s = skins::SavedSkin {
+                    id,
+                    name: name.to_string(),
+                    file,
+                    model: model.clone(),
+                    cape_id: cape_id.map(|c| c.to_string()),
+                    source: Some(source.clone()),
+                };
+                acct.skins.insert(0, s.clone());
+                s
+            };
+            acct.selected = Some(saved.id.clone());
+            saved
+        };
+        self.save_skin_library(&lib)?;
+
+        let cape = cape_id.map(|c| c.to_string());
+        let upload_model = model.clone();
+        self.with_token(account_id, move |t| {
+            skins::upload_skin(t, bytes.clone(), &upload_model)?;
+            skins::set_cape(t, cape.as_deref())
+        })?;
+        Ok(saved)
     }
 
     pub fn upload_and_apply_skin(
@@ -670,8 +769,9 @@ impl Launcher {
         bytes: Vec<u8>,
         model: &str,
     ) -> Result<skins::SavedSkin> {
-        let saved = self.save_skin(name, &bytes, model, None)?;
+        let saved = self.save_skin(account_id, name, &bytes, model, None, None)?;
         self.with_token(account_id, |t| skins::upload_skin(t, bytes.clone(), model))?;
+        self.set_selected_skin(account_id, Some(&saved.id))?;
         Ok(saved)
     }
 

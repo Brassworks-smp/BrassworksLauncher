@@ -1,20 +1,18 @@
 {
   "name": "brassworks-launcher",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2.2.6",
     "lucide-react": "^0.460.0",
-    "next": "16.2.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.1.0",
@@ -23,17 +21,14 @@
     "skinview3d": "^3.4.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2.5.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
-  },
-  "pnpm": {
-    "ignoredBuiltDependencies": [
-      "sharp"
-    ]
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
   }
 }

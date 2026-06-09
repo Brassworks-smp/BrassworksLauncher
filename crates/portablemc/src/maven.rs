@@ -1,4 +1,3 @@
-//! Maven related utilities, such as GAV and 'maven-metadata.xml' parsing.
 
 use std::cmp::Ordering;
 use std::iter::FusedIterator;
@@ -10,31 +9,18 @@ use std::ops::Range;
 use std::{fmt, hash};
 
 
-/// A maven-style library specifier, known as GAV, for Group, Artifact, Version, but it
-/// also contains an optional classifier and extension for the pointed file. The memory
-/// footprint of this structure is optimized to contain only one string, its format is the
-/// the following: `group:artifact:version[:classifier][@extension]`. This structure
-/// ensures that all the components have valid characters.
 #[derive(Clone)]
 pub struct Gav {
-    /// Internal buffer, canonicalized without @jar.
     raw: Box<str>,
-    /// Length of the group part in the specifier.
     group_len: NonZero<u16>,
-    /// Length of the artifact part in the specifier.
     artifact_len: NonZero<u16>,
-    /// Length of the version part in the specifier.
     version_len: NonZero<u16>,
-    /// Length of the classifier part in the specifier, if relevant.
     classifier_len: Option<NonZero<u16>>,
-    /// Length of the extension part in the specifier, if relevant.
     extension_len: Option<NonZero<u16>>,
 }
 
 impl Gav {
 
-    /// Create a new library specifier with the given components.
-    /// Each component, if given, should not be empty.
     pub fn new(group: &str, artifact: &str, version: &str, classifier: Option<&str>, extension: Option<&str>) -> Option<Self> {
         
         let mut raw = format!("{group}:{artifact}:{version}");
@@ -53,7 +39,6 @@ impl Gav {
             extension_len = Some(NonZero::new(extension.len() as _)?);
         }
 
-        // Read below, we ensure that every part fits in u16.
         if raw.len() > u16::MAX as usize {
             return None;
         }
@@ -71,12 +56,8 @@ impl Gav {
 
     }
 
-    /// Internal method to parse 
     fn _from_str(raw: Cow<str>) -> Option<Self> {
 
-        // Early check that raw string is not longer than u16 max because we cast using 
-        // 'as' and we don't want the cast to overflow, checking the size of the full 
-        // string is a guarantee that any of its piece will be less than u16 max long.
         if raw.len() > u16::MAX as usize {
             return None;
         }
@@ -159,7 +140,6 @@ impl Gav {
         }
     }
 
-    /// Return the group name of the library, never empty.
     #[inline]
     pub fn group(&self) -> &str {
         &self.raw[self.group_range()]
@@ -170,7 +150,6 @@ impl Gav {
         Self::new(group, self.artifact(), self.version(), self.classifier(), Some(self.extension()))
     }
 
-    /// Return the artifact name of the library, never empty.
     #[inline]
     pub fn artifact(&self) -> &str {
         &self.raw[self.artifact_range()]
@@ -181,7 +160,6 @@ impl Gav {
         Self::new(self.group(), artifact, self.version(), self.classifier(), Some(self.extension()))
     }
 
-    /// Return the version of the library, never empty.
     #[inline]
     pub fn version(&self) -> &str {
         &self.raw[self.version_range()]
@@ -192,7 +170,6 @@ impl Gav {
         Self::new(self.group(), self.artifact(), version, self.classifier(), Some(self.extension()))
     }
 
-    /// Return the classifier of the library, none if no classifier.
     #[inline]
     pub fn classifier(&self) -> Option<&str> {
         let range = self.classifier_range();
@@ -208,8 +185,6 @@ impl Gav {
         Self::new(self.group(), self.artifact(), self.version(), classifier, Some(self.extension()))
     }
 
-    /// Return the extension of the library, "jar" if the default extension should 
-    /// be used.
     #[inline]
     pub fn extension(&self) -> &str {
         let range = self.extension_range();
@@ -225,28 +200,16 @@ impl Gav {
         Self::new(self.group(), self.artifact(), self.version(), self.classifier(), extension)
     }
 
-    /// Get the representation of the GAV as a string, this form is always canonicalized
-    /// which means that the @jar extension is never explicitly written.
     #[inline]
     pub fn as_str(&self) -> &str {
         &self.raw
     }
 
-    /// Get a URL formatter for this GAV, this can be appended to any full URL.
-    /// 
-    /// For example, 
-    /// `net.minecraft:client:1.21.1` will transform into 
-    /// `net/minecraft/client/1.21.1/client-1.21.1.jar`.
     #[inline]
     pub fn url(&self) -> GavUrl<'_> {
         GavUrl(self)
     }
 
-    /// Create a file path of this GAV from a base directory. This may produce a path 
-    /// that is insecure to join due to absolute or parent relative joining.
-    /// 
-    /// If the return path contains invalid component, such as relative or root 
-    /// components, None is returned to enforce safety.
     pub fn file(&self) -> PathBuf {
 
         let len = 
@@ -269,7 +232,6 @@ impl Gav {
         buf.push(artifact);
         buf.push(version);
 
-        // Build the terminal file name.
         buf.push(artifact);
         buf.as_mut_os_string().push("-");
         buf.as_mut_os_string().push(version);
@@ -385,7 +347,6 @@ impl serde::Serialize for Gav {
     }
 }
 
-/// URL formatter for a gav.
 pub struct GavUrl<'a>(&'a Gav);
 
 impl fmt::Display for GavUrl<'_> {
@@ -418,12 +379,6 @@ impl fmt::Display for GavUrl<'_> {
     }
 }
 
-/// That function validates that the GAV characters are safe for later use by the program,
-/// such as joining and making URLs. We only accept ASCII, alphanumeric, '-_+' and '.' if
-/// no '..' pattern is found. Note that ':' is allowed to simplify the caller, but the 
-/// caller (builder or parser) should ensure that all sections are correct and that there
-/// is a correct number of ':'. We also accepts '*' in order to allow the CLI to use this
-/// as a wildcard for pattern matching libraries.
 fn check_gav_chars(s: &str) -> Option<&str> {
     let bytes = s.as_bytes();
     (0..bytes.len())
@@ -434,8 +389,6 @@ fn check_gav_chars(s: &str) -> Option<&str> {
         .then_some(s)
 }
 
-/// A streaming parser for a 'maven-metadata.xml' file, this is an iterator that return
-/// each versions.
 #[derive(Debug)]
 pub(crate) struct MetadataParser<'a> {
     tokenizer: Option<xmlparser::Tokenizer<'a>>,
@@ -470,10 +423,10 @@ impl<'a> Iterator for MetadataParser<'a> {
                         if !version {
                             version = true;
                         } else {
-                            break;  // return none
+                            break;  
                         }
                     } else if version {
-                        break;  // return none
+                        break;  
                     }
                 }
                 Token::ElementEnd { end: ElementEnd::Close(prefix, local), .. } => {
@@ -481,13 +434,13 @@ impl<'a> Iterator for MetadataParser<'a> {
                         if prefix.is_empty() && local == "version" {
                             version = false;
                         } else {
-                            break;  // return none
+                            break;  
                         }
                     }
                 }
                 Token::ElementEnd { end: ElementEnd::Empty, .. } => {
                     if version {
-                        break;  // return none
+                        break;  
                     }
                 }
                 Token::Text { text } => {
@@ -500,8 +453,6 @@ impl<'a> Iterator for MetadataParser<'a> {
 
         }
 
-        // Tokenizer doesn't implement FusedIterator yet so we nullify if none's returned.
-        // If any error we nullify tokenizer so we always return none.
         self.tokenizer = None;
         None
 
@@ -509,7 +460,6 @@ impl<'a> Iterator for MetadataParser<'a> {
     
 }
 
-/// Valid to implement because we return none forever after any error.
 impl FusedIterator for MetadataParser<'_> {  }
 
 

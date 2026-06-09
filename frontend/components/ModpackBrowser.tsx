@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
 import { Search, Loader2, Download, ChevronLeft, Package, ExternalLink } from "lucide-react";
 import * as api from "@/lib/api";
@@ -70,7 +68,6 @@ export function ModpackBrowser({
         </button>
         <div className="flex items-center gap-3">
           {selected.icon_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={selected.icon_url}
               alt=""

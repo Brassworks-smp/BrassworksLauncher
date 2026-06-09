@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { CheckCircle2, Copy, ExternalLink, X, Check } from "lucide-react";
 import * as api from "@/lib/api";

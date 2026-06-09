@@ -78,6 +78,14 @@ export interface SavedSkin {
   file: string;
   model: string;
   cape_id: string | null;
+  /** Origin marker, e.g. "preset:Steve", for default-preset dedupe. */
+  source: string | null;
+}
+
+export interface SkinLibraryView {
+  skins: SavedSkin[];
+  /** The saved-skin id currently applied for this account, if any. */
+  selected: string | null;
 }
 
 export interface LauncherSettings {

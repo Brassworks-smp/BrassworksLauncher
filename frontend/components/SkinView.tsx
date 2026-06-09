@@ -1,9 +1,6 @@
-"use client";
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Loader2,
-  Upload,
   Trash2,
   Check,
   Shirt,
@@ -41,12 +38,6 @@ const bust = (u: string) => `${u}${u.includes("?") ? "&" : "?"}v=${Date.now()}`;
 const BTN =
   "flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50";
 
-/**
- * A skinview3d canvas. By default it sits at a 3/4 isometric angle; `flipped`
- * rotates it around to reveal the cape + back. `animate` adds a subtle idle body
- * animation (main preview only), and `bust` frames the upper body (chest and up)
- * for the selector tiles. Rotation (when enabled) is horizontal-only.
- */
 function SkinCanvas({
   skin,
   cape,
@@ -56,7 +47,6 @@ function SkinCanvas({
   width,
   height,
   animate = false,
-  bust = false,
 }: {
   skin: string | null;
   cape: string | null;
@@ -66,7 +56,6 @@ function SkinCanvas({
   width: number;
   height: number;
   animate?: boolean;
-  bust?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,12 +77,10 @@ function SkinCanvas({
       const sv = await import("skinview3d");
       if (!alive || !ref.current) return;
       viewer = new sv.SkinViewer({ canvas: ref.current, width, height });
-      viewer.fov = bust ? 20 : 40;
-      viewer.zoom = bust ? 1.11 : 0.92;
+      viewer.fov = 40;
+      viewer.zoom = 0.92;
       viewer.autoRotate = false;
       viewer.playerObject.rotation.y = BASE_YAW;
-      if (bust) viewer.playerObject.position.y = -4;
-      if (bust) viewer.playerObject.position.x = -2.2;
 
       if (viewer.controls) {
         viewer.controls.enableZoom = false;
@@ -131,7 +118,7 @@ function SkinCanvas({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rotate, width, height, bust, animate]);
+  }, [rotate, width, height, animate]);
 
   useEffect(() => {
     const v = viewerRef.current;
@@ -158,6 +145,118 @@ function SkinCanvas({
       ref={ref}
       className="[filter:drop-shadow(0_8px_8px_rgba(0,0,0,0.4))]"
     />
+  );
+}
+
+
+type Baked = { front: HTMLCanvasElement; back: HTMLCanvasElement };
+const bakeCache = new Map<string, Baked>();
+const bakeKey = (url: string, model: string, cape: string | null) => `${url}|${model}|${cape ?? ""}`;
+
+let bakeChain: Promise<unknown> = Promise.resolve();
+
+
+function snapshot(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = document.createElement("canvas");
+  out.width = src.width;
+  out.height = src.height;
+  out.getContext("2d")?.drawImage(src, 0, 0);
+  return out;
+}
+
+async function bakeOne(url: string, model: string, cape: string | null): Promise<Baked> {
+  const sv = await import("skinview3d");
+  const canvas = document.createElement("canvas");
+  const viewer = new sv.SkinViewer({ canvas, width: 200, height: 250, renderPaused: true });
+  try {
+    viewer.fov = 20;
+    viewer.zoom = 1.11;
+    viewer.autoRotate = false;
+    viewer.playerObject.position.y = -4;
+    viewer.playerObject.position.x = -2.2;
+    await viewer.loadSkin(url, { model: model === "slim" ? "slim" : "default" });
+    if (cape) {
+      try {
+        await viewer.loadCape(cape);
+      } catch {
+      }
+    }
+    viewer.playerObject.rotation.y = BASE_YAW;
+    viewer.render();
+    const front = snapshot(canvas);
+    viewer.playerObject.rotation.y = BASE_YAW + Math.PI;
+    viewer.render();
+    const back = snapshot(canvas);
+    return { front, back };
+  } finally {
+    try {
+      viewer.dispose();
+    } catch {
+    }
+  }
+}
+
+function bakeSkin(url: string, model: string, cape: string | null): Promise<Baked> {
+  const key = bakeKey(url, model, cape);
+  const cached = bakeCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  const run = bakeChain.then(async () => {
+    const again = bakeCache.get(key);
+    if (again) return again;
+    const baked = await bakeOne(url, model, cape);
+    bakeCache.set(key, baked);
+    return baked;
+  });
+  bakeChain = run.catch(() => {});
+  return run;
+}
+
+function Flip3DThumb({ url, model, cape }: { url: string; model: string; cape: string | null }) {
+  const frontRef = useRef<HTMLCanvasElement>(null);
+  const backRef = useRef<HTMLCanvasElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setReady(false);
+    bakeSkin(url, model, cape)
+      .then((baked) => {
+        if (!alive) return;
+        ([[frontRef, baked.front], [backRef, baked.back]] as const).forEach(([ref, src]) => {
+          const cv = ref.current;
+          const ctx = cv?.getContext("2d");
+          if (cv && ctx) {
+            ctx.clearRect(0, 0, cv.width, cv.height);
+            ctx.drawImage(src, 0, 0, cv.width, cv.height);
+          }
+        });
+        setReady(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [url, model, cape]);
+
+  const face =
+    "absolute inset-0 h-full w-full [backface-visibility:hidden] [filter:drop-shadow(0_8px_8px_rgba(0,0,0,0.4))]";
+  return (
+    <div className="relative grid h-full w-full place-items-center [perspective:820px]">
+      <div
+        className={`relative h-[250px] w-[200px] transition-transform duration-500 ease-out [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] motion-reduce:transition-none ${
+          ready ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <canvas ref={frontRef} width={200} height={250} className={face} />
+        <canvas
+          ref={backRef}
+          width={200}
+          height={250}
+          className={`${face} [transform:rotateY(180deg)]`}
+        />
+      </div>
+      {!ready && <Loader2 size={20} className="absolute animate-spin text-ink-600" />}
+    </div>
   );
 }
 
@@ -189,12 +288,42 @@ function CapeImage({ url }: { url: string }) {
   );
 }
 
-/** Corner check badge marking the currently-applied skin card. */
-function SelectedBadge() {
+function SelectedMark() {
   return (
-    <span className="absolute left-2 top-2 z-10 grid h-6 w-7 place-items-center rounded-md bg-brass-600 text-white shadow-lg ring-1 ring-brass-400/40">
-      <Check size={14} strokeWidth={3} />
-    </span>
+    <>
+      <span className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow-lg ring-2 ring-ink-950/40">
+        <Check size={16} strokeWidth={3.5} />
+      </span>
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-brass-600/90 to-transparent pb-1.5 pt-6 text-center font-mc text-[11px] tracking-wider text-ink-950">
+        Selected
+      </span>
+    </>
+  );
+}
+
+function Tile({
+  selected,
+  onClick,
+  title,
+  children,
+}: {
+  selected?: boolean;
+  onClick?: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={`group relative grid h-[210px] place-items-center overflow-hidden rounded-xl border bg-ink-900/40 transition ${
+        selected
+          ? "border-brass-400 ring-2 ring-brass-400/50 glow"
+          : "border-edge hover:border-brass-600/40 hover:bg-ink-900/70"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -230,8 +359,14 @@ function Section({
   );
 }
 
-let cachedLibrary: SavedSkin[] | null = null;
+const cachedLibraries: Record<string, SavedSkin[]> = {};
+const cachedSelected: Record<string, string | null> = {};
 const cachedProfiles: Record<string, SkinProfile> = {};
+
+type ApplyTarget =
+  | { kind: "saved"; skin: SavedSkin }
+  | { kind: "preset"; preset: DefaultSkin }
+  | { kind: "cape" };
 
 export function SkinView({
   accountId,
@@ -240,21 +375,22 @@ export function SkinView({
 }: {
   accountId: string | null;
   username?: string;
-  /** Fired after a skin is successfully applied (so the profile avatar refreshes). */
   onSkinApplied?: () => void;
 }) {
   const [profile, setProfile] = useState<SkinProfile | null>(
     accountId ? cachedProfiles[accountId] ?? null : null,
   );
-  const [library, setLibrary] = useState<SavedSkin[]>(cachedLibrary ?? []);
+  const [library, setLibrary] = useState<SavedSkin[]>(
+    accountId ? cachedLibraries[accountId] ?? [] : [],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [selSaved, setSelSaved] = useState<string | null>(null);
+  const [selSaved, setSelSaved] = useState<string | null>(
+    accountId ? cachedSelected[accountId] ?? null : null,
+  );
   const [savedOpen, setSavedOpen] = useState(true);
   const [defaultOpen, setDefaultOpen] = useState(true);
-  const [editOpen, setEditOpen] = useState(false);
-  const [presetEdit, setPresetEdit] = useState<DefaultSkin | null>(null);
+  const [applyTarget, setApplyTarget] = useState<ApplyTarget | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const activeCape = profile?.capes.find((c) => c.active)?.url ?? null;
@@ -270,15 +406,16 @@ export function SkinView({
   }, [accountId, profile?.skin_url]);
 
   const refresh = useCallback(() => {
-    if (!api.isTauri()) return;
+    if (!api.isTauri() || !accountId) return;
     api
-      .listSkins()
-      .then((l) => {
-        cachedLibrary = l;
-        setLibrary(l);
+      .listSkins(accountId)
+      .then((view) => {
+        cachedLibraries[accountId] = view.skins;
+        cachedSelected[accountId] = view.selected;
+        setLibrary(view.skins);
+        setSelSaved(view.selected);
       })
       .catch(() => {});
-    if (!accountId) return;
     api
       .skinProfile(accountId)
       .then((p) => {
@@ -303,7 +440,7 @@ export function SkinView({
         Array.from(new Uint8Array(buf)),
         "classic",
       );
-      toast("Skin added", "success");
+      toast("Skin added & applied", "success");
       api.setFaceTexture(accountId, bust(api.fileSrc(saved.file)));
       setSelSaved(saved.id);
       onSkinApplied?.();
@@ -313,22 +450,6 @@ export function SkinView({
     } finally {
       setBusy(false);
     }
-  };
-
-  const applySaved = (s: SavedSkin) => {
-    if (!accountId) return;
-    api.setFaceTexture(accountId, bust(api.fileSrc(s.file)));
-    setSelSaved(s.id);
-    setBusy(true);
-    api
-      .applySavedSkin(accountId, s.id)
-      .then(() => {
-        toast(`Applied ${s.name}`, "success");
-        onSkinApplied?.();
-        refresh();
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false));
   };
 
   const saveToDisk = () => {
@@ -363,7 +484,6 @@ export function SkinView({
       )}
 
       <div className="flex min-h-0 flex-1 gap-6">
-        {}
         <div className="flex w-[230px] shrink-0 flex-col items-center">
           <div className="mb-3 mt-16 rounded-md bg-ink-800/70 px-4 py-1.5 font-mc text-sm tracking-widest text-gray-200">
             {displayName}
@@ -384,7 +504,12 @@ export function SkinView({
             <Move size={13} /> Drag to rotate
           </div>
           <div className="mt-3 flex flex-col gap-2 self-stretch">
-            <button onClick={() => setEditOpen(true)} className={`${BTN} justify-center`}>
+            <button
+              onClick={() =>
+                setApplyTarget(selectedSkin ? { kind: "saved", skin: selectedSkin } : { kind: "cape" })
+              }
+              className={`${BTN} justify-center`}
+            >
               <Pencil size={15} /> {selectedSkin ? "Edit skin" : "Change cape"}
             </button>
             <button onClick={saveToDisk} className={`${BTN} justify-center`}>
@@ -394,7 +519,7 @@ export function SkinView({
         </div>
 
         <div className="min-w-0 flex-1 overflow-y-auto pr-1">
-          <Section title="Saved skins" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
+          <Section title="Your skins" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
             <button
               onClick={() => fileInput.current?.click()}
               className="flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300"
@@ -403,121 +528,64 @@ export function SkinView({
               <span className="text-sm font-medium">Add skin</span>
               <span className="text-[11px]">Drag and drop</span>
             </button>
-            {profile?.skin_url && (
-              <button
-                onClick={() => setSelSaved(null)}
-                title="Your current skin"
-                className={`group relative h-[210px] overflow-hidden rounded-xl border bg-ink-900/40 transition ${
-                  selSaved === null
-                    ? "border-patina-500 glow ring-1 ring-patina-400/40"
-                    : "border-edge hover:border-brass-600/40"
-                }`}
-              >
-                {selSaved === null && <SelectedBadge />}
-                <div className="absolute inset-0 grid place-items-center">
-                  <SkinCanvas
-                    skin={profile.skin_url}
-                    cape={activeCape}
-                    model={profile.model ?? "classic"}
-                    flipped={false}
-                    rotate={false}
-                    bust
-                    width={200}
-                    height={250}
-                  />
-                </div>
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-950/90 to-transparent pb-2 pt-6 text-center font-mc text-[11px] tracking-wider text-brass-200">
-                  Current skin
-                </span>
-              </button>
-            )}
+
             {library.map((s) => (
-              <button
+              <Tile
                 key={s.id}
-                onMouseEnter={() => setHovered(s.id)}
-                onMouseLeave={() => setHovered(null)}
-                onClick={() => applySaved(s)}
-                className={`group relative h-[210px] overflow-hidden rounded-xl border bg-ink-900/40 transition ${
-                  selSaved === s.id
-                    ? "border-patina-500 glow ring-1 ring-patina-400/40"
-                    : "border-edge hover:border-brass-600/40"
-                }`}
+                selected={selSaved === s.id}
+                onClick={() => setApplyTarget({ kind: "saved", skin: s })}
+                title={s.name}
               >
-                {selSaved === s.id && <SelectedBadge />}
-                <div className="absolute inset-0 grid place-items-center">
-                  <SkinCanvas
-                    skin={api.fileSrc(s.file)}
-                    cape={activeCape}
-                    model={s.model}
-                    flipped={hovered === s.id}
-                    rotate={false}
-                    bust
-                    width={200}
-                    height={250}
-                  />
-                </div>
+                {selSaved === s.id && <SelectedMark />}
+                <Flip3DThumb url={api.fileSrc(s.file)} model={s.model} cape={activeCape} />
                 <span
                   role="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    api.deleteSkin(s.id).then(refresh).catch((er) => setError(String(er)));
+                    api
+                      .deleteSkin(accountId, s.id)
+                      .then(() => {
+                        if (selSaved === s.id) setSelSaved(null);
+                        refresh();
+                      })
+                      .catch((er) => setError(String(er)));
                   }}
                   title="Delete"
-                  className="absolute right-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
+                  className="absolute left-1.5 top-1.5 z-20 grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
                 >
                   <Trash2 size={12} />
                 </span>
-              </button>
+              </Tile>
             ))}
           </Section>
 
           <Section title="Default skins" open={defaultOpen} onToggle={() => setDefaultOpen((v) => !v)}>
             {DEFAULT_SKINS.map((d) => (
-              <button
+              <Tile
                 key={d.url}
                 title={d.name}
-                onMouseEnter={() => setHovered(d.url)}
-                onMouseLeave={() => setHovered(null)}
-                onClick={() => {
-                  setPresetEdit(d);
-                  setEditOpen(true);
-                }}
-                className="group relative h-[210px] overflow-hidden rounded-xl border border-edge bg-ink-900/40 transition hover:border-brass-600/40"
+                onClick={() => setApplyTarget({ kind: "preset", preset: d })}
               >
-                <div className="absolute inset-0 grid place-items-center">
-                  <SkinCanvas
-                    skin={d.preview}
-                    cape={null}
-                    model={d.model}
-                    flipped={hovered === d.url}
-                    rotate={false}
-                    bust
-                    width={200}
-                    height={250}
-                  />
-                </div>
-              </button>
+                <Flip3DThumb url={d.preview} model={d.model} cape={null} />
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-950/90 to-transparent pb-2 pt-6 text-center font-mc text-[11px] tracking-wider text-gray-300">
+                  {d.name}
+                </span>
+              </Tile>
             ))}
           </Section>
         </div>
       </div>
 
-      {editOpen && (
-        <EditSkinModal
+      {applyTarget && (
+        <ApplySkinModal
           accountId={accountId}
-          skin={presetEdit ? null : selectedSkin}
-          preset={presetEdit}
-          previewUrl={presetEdit ? presetEdit.preview : previewSkin}
-          previewModel={presetEdit ? presetEdit.model : previewModel}
+          target={applyTarget}
           activeCape={activeCape}
           capes={profile?.capes ?? []}
-          onClose={() => {
-            setEditOpen(false);
-            setPresetEdit(null);
-          }}
-          onSaved={() => {
-            setEditOpen(false);
-            setPresetEdit(null);
+          onClose={() => setApplyTarget(null)}
+          onApplied={(selectedId) => {
+            setApplyTarget(null);
+            if (selectedId !== undefined) setSelSaved(selectedId);
             onSkinApplied?.();
             refresh();
           }}
@@ -528,40 +596,35 @@ export function SkinView({
   );
 }
 
-function EditSkinModal({
+function ApplySkinModal({
   accountId,
-  skin,
-  preset,
-  previewUrl: initialPreview,
-  previewModel,
+  target,
   activeCape,
   capes,
   onClose,
-  onSaved,
+  onApplied,
   onError,
 }: {
   accountId: string;
-  /** The saved skin being edited, or null for cape-only / preset editing. */
-  skin: SavedSkin | null;
-  /** A default ("preset") skin being applied — confirmed (not applied) until Save. */
-  preset?: DefaultSkin | null;
-  previewUrl: string | null;
-  previewModel: string;
+  target: ApplyTarget;
   activeCape: string | null;
   capes: SkinCape[];
   onClose: () => void;
-  onSaved: () => void;
+  onApplied: (selectedId?: string | null) => void;
   onError: (e: string) => void;
 }) {
-  const capeOnly = !skin && !preset;
+  const savedSkin = target.kind === "saved" ? target.skin : null;
+  const preset = target.kind === "preset" ? target.preset : null;
+  const capeOnly = target.kind === "cape";
+
   const [model, setModel] = useState(
-    (skin?.model ?? preset?.model ?? previewModel) === "slim" ? "slim" : "classic",
+    (savedSkin?.model ?? preset?.model ?? "classic") === "slim" ? "slim" : "classic",
   );
   const [capeId, setCapeId] = useState<string | null>(
-    skin?.cape_id ?? capes.find((c) => c.active)?.id ?? null,
+    savedSkin?.cape_id ?? capes.find((c) => c.active)?.id ?? null,
   );
-  const [previewUrl, setPreviewUrl] = useState(
-    skin ? api.fileSrc(skin.file) : initialPreview,
+  const [previewUrl, setPreviewUrl] = useState<string | null>(
+    savedSkin ? api.fileSrc(savedSkin.file) : preset ? preset.preview : null,
   );
   const [newBytes, setNewBytes] = useState<number[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -584,31 +647,39 @@ function EditSkinModal({
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  const save = async () => {
+  const apply = async () => {
     setSaving(true);
     try {
-      if (skin) {
-        if (newBytes) await api.replaceSkinTexture(skin.id, newBytes);
-        await api.updateSkin(skin.id, model, capeId);
-        await api.applySavedSkin(accountId, skin.id);
-        api.setFaceTexture(accountId, bust(api.fileSrc(skin.file)));
-        toast("Skin saved", "success");
+      if (savedSkin) {
+        if (newBytes) await api.replaceSkinTexture(accountId, savedSkin.id, newBytes);
+        await api.updateSkin(accountId, savedSkin.id, model, capeId);
+        await api.applySavedSkin(accountId, savedSkin.id);
+        api.setFaceTexture(accountId, bust(api.fileSrc(savedSkin.file)));
+        toast(`Applied ${savedSkin.name}`, "success");
+        onApplied(savedSkin.id);
       } else if (preset) {
-        await api.applySkinUrl(accountId, preset.url, model);
-        await api.setCape(accountId, capeId);
-        api.setFaceTexture(accountId, bust(preset.preview));
-        toast("Skin applied", "success");
+        const saved = await api.applyPreset(accountId, preset.name, preset.url, model, capeId);
+        api.setFaceTexture(accountId, bust(api.fileSrc(saved.file)));
+        toast(`Applied ${preset.name}`, "success");
+        onApplied(saved.id);
       } else {
         await api.setCape(accountId, capeId);
         toast("Cape updated", "success");
+        onApplied(); 
       }
-      onSaved();
     } catch (e) {
       onError(String(e));
     } finally {
       setSaving(false);
     }
   };
+
+  const title = capeOnly
+    ? "Change cape"
+    : preset
+      ? `Apply ${preset.name}?`
+      : `Apply ${savedSkin?.name ?? "skin"}?`;
+  const applyLabel = capeOnly ? "Save cape" : "Apply";
 
   return (
     <div
@@ -617,9 +688,7 @@ function EditSkinModal({
     >
       <div className="rise flex max-h-[88vh] w-[760px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-          <h2 className="font-mc text-base tracking-wide text-gray-100">
-            {capeOnly ? "Choose a cape" : preset ? `Apply ${preset.name}` : "Editing skin"}
-          </h2>
+          <h2 className="font-mc text-base tracking-wide text-gray-100">{title}</h2>
           <button
             onClick={onClose}
             className="grid h-8 w-8 place-items-center rounded-full text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
@@ -633,7 +702,7 @@ function EditSkinModal({
             <div className="grid flex-1 place-items-center">
               <SkinCanvas
                 skin={previewUrl}
-                cape={capeOnly ? capeUrl ?? activeCape : capeUrl}
+                cape={capeUrl ?? (capeOnly ? activeCape : null)}
                 model={model}
                 flipped={false}
                 rotate
@@ -649,7 +718,7 @@ function EditSkinModal({
 
           <div className="flex min-w-0 flex-1 flex-col gap-5">
             <input ref={fileInput} type="file" accept=".png" onChange={replace} className="hidden" />
-            {skin && (
+            {savedSkin && (
               <div>
                 <div className="mb-2 font-mc text-sm text-gray-100">Texture</div>
                 <button onClick={() => fileInput.current?.click()} className={BTN}>
@@ -718,6 +787,9 @@ function EditSkinModal({
                   </button>
                 ))}
               </div>
+              {capes.length === 0 && (
+                <p className="mt-1 text-xs text-ink-600">No capes on this account.</p>
+              )}
             </div>
           </div>
         </div>
@@ -726,13 +798,9 @@ function EditSkinModal({
           <button onClick={onClose} className={BTN}>
             <X size={15} /> Cancel
           </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className={BTN}
-          >
+          <button onClick={apply} disabled={saving} className={BTN}>
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            {capeOnly ? "Save cape" : preset ? "Apply skin" : "Save skin"}
+            {applyLabel}
           </button>
         </div>
       </div>

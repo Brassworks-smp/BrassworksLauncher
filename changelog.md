@@ -1,19 +1,16 @@
 ### **Fixes:**
-* Fixed that weird glitch where the skin preview only showed a floating cape with literally no body
-* Swapping accounts actually reloads the skin page now instead of keeping the previous guy's skin loaded
+* The default skins are the actual different Minecraft characters now (Steve, Alex, Ari, Kai and the rest) instead of a bunch of look-alikes
+* The skin u have selected actually sticks and loads back up when u return to the page instead of snapping back to ur current one
+* Each skin tile sits properly framed in its card again instead of floating too high and getting cut off
 
 ### **Additions:**
-* MULTIPLE INSTANCES are finally here!! make as many as u want, each with its own mods, saves, and configs
-* Added an Instances tab where featured packs are up top, ur custom ones are below, and u can star ur favorites to pin them
-* U can add instances literally however u want now (vanilla, modloaders, modrinth, curseforge, packwiz, or just drop a zip file in)
-* Built a modpack browser right into the app so u can read the readmes and pick specific versions to install
-* Brand new Skins tab with a full 3D preview u can spin around, drag & drop files, and swap capes or arm sizes
-* Apply skins in one click, tweak the textures/arms, or just export any skin back to ur hard drive
-* Ur profile pic actually matches ur current skin and updates the exact second u change it
-* Added per-instance settings (hit the little gear) so u can change memory, resolution, commands, or custom icons just for that pack
-* Java auto-downloads now! if a pack needs a version u dont have, it quietly grabs Temurin for u in the background, plus a menu to manage em
+* Now ships a proper .dmg installer for macOS, just drag it into Applications and ur good to go
+* Every account gets its OWN saved skins now, so ur skins dont bleed over from another account anymore
+* Clicking a skin opens a confirm popup first where u can preview it, pick a cape, and choose wide/slim arms before anything actually gets applied
+* Default skins are fully usable now, apply one and it saves to ur list so u can come back and change its cape or texture later
+* Hover any skin tile and it flips around so u can peek at the back and ur cape
 
 ### **Improvements:**
-* Split up the settings so global launcher stuff is in main Settings and pack-specific stuff lives under the instance gear icon
-* Grabing version lists live from Mojang and the loaders now so the newest updates show up instantly
-* Downloads and installs now show a clean progress toast that u can hover over if u want to keep it open
+* The skin u have on is way more obvious now with a cleaner checkmark and a little "Selected" tag
+* Dropped the redundant "current skin" tile since the skin u picked already IS ur current skin
+* Rebuilt the app on a lighter, faster setup so it boots quicker and the download is a bit smaller

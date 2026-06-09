@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Changelog } from "@/components/Markdown";

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import {
   Play,
@@ -139,7 +137,6 @@ export function PlayView({
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
         {instance.banner && (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={instance.banner}
             alt=""
@@ -162,7 +159,6 @@ export function PlayView({
             </div>
             <div className="flex items-center gap-3">
               {instance.icon && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={instance.icon}
                   alt=""

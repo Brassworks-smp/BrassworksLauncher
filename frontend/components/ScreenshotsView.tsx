@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
 import {
   RefreshCw,
@@ -144,7 +142,6 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
               onClick={() => setActive(i)}
               className="group relative aspect-video overflow-hidden rounded-lg border border-edge bg-ink-950 transition hover:border-brass-600/50"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={api.fileSrc(s.path)}
                 alt={s.name}
@@ -274,7 +271,6 @@ function Lightbox({
         {!loaded && (
           <Loader2 size={26} className="absolute animate-spin text-ink-600" />
         )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={api.fileSrc(s.path)}
           alt={s.name}

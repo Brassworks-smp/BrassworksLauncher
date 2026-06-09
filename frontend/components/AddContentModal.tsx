@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   X,
@@ -358,7 +356,6 @@ function DetailView({
       <div className="flex items-start gap-4 border-b border-edge px-5 py-4">
         <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-ink-900 text-ink-600">
           {hit.icon_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={hit.icon_url} alt={hit.title} className="h-full w-full object-cover" />
           ) : (
             <Box size={24} />

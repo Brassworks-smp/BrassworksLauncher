@@ -32,6 +32,7 @@ import type {
   PackDone,
   SkinProfile,
   SavedSkin,
+  SkinLibraryView,
 } from "./types";
 
 export const isTauri = (): boolean =>
@@ -333,9 +334,10 @@ export const setCape = (
   accountId: string,
   capeId: string | null,
 ): Promise<void> => invoke("set_cape", { accountId, capeId });
-export const listSkins = (): Promise<SavedSkin[]> => invoke("list_skins");
-export const deleteSkin = (skinId: string): Promise<void> =>
-  invoke("delete_skin", { skinId });
+export const listSkins = (accountId: string): Promise<SkinLibraryView> =>
+  invoke("list_skins", { accountId });
+export const deleteSkin = (accountId: string, skinId: string): Promise<void> =>
+  invoke("delete_skin", { accountId, skinId });
 export const applySavedSkin = (
   accountId: string,
   skinId: string,
@@ -347,21 +349,27 @@ export const uploadSkin = (
   model: string,
 ): Promise<SavedSkin> =>
   invoke("upload_skin", { accountId, name, data, model });
-export const applySkinUrl = (
+
+export const applyPreset = (
   accountId: string,
+  name: string,
   url: string,
   model: string,
-): Promise<void> => invoke("apply_skin_url", { accountId, url, model });
+  capeId: string | null,
+): Promise<SavedSkin> =>
+  invoke("apply_preset", { accountId, name, url, model, capeId });
 export const updateSkin = (
+  accountId: string,
   skinId: string,
   model: string,
   capeId: string | null,
-): Promise<void> => invoke("update_skin", { skinId, model, capeId });
+): Promise<void> => invoke("update_skin", { accountId, skinId, model, capeId });
 export const replaceSkinTexture = (
+  accountId: string,
   skinId: string,
   data: number[],
-): Promise<void> => invoke("replace_skin_texture", { skinId, data });
-/** Save a skin texture (local file path or remote URL) to Downloads; returns the path. */
+): Promise<void> => invoke("replace_skin_texture", { accountId, skinId, data });
+
 export const exportSkin = (source: string, name: string): Promise<string> =>
   invoke("export_skin", { source, name });
 
@@ -386,6 +394,9 @@ export const checkForUpdate = (): Promise<UpdateInfo> =>
   invoke("check_for_update");
 export const installUpdate = (): Promise<void> => invoke("install_update");
 export const restartApp = (): Promise<void> => invoke("restart_app");
+
+export const updateBlockReason = (): Promise<string | null> =>
+  invoke("update_block_reason");
 
 export const onUpdaterProgress = (
   cb: (p: UpdateProgress) => void,

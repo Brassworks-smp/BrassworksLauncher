@@ -1,5 +1,3 @@
-"use client";
-
 import { Megaphone, WifiOff } from "lucide-react";
 import type { NewsItem } from "@/lib/types";
 import { CardRefresh } from "./ServerCard";

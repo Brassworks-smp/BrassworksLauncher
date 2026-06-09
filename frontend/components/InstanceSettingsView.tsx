@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -141,7 +139,6 @@ export function InstanceSettingsView({
         </button>
         <div className="flex items-center gap-3">
           {instance.icon && (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={instance.icon} alt="" className="h-9 w-9 rounded-md object-cover" />
           )}
           <div>

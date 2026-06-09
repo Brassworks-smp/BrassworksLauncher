@@ -1,5 +1,3 @@
-"use client";
-
 import { Settings, Plus, Box, Star, Circle, Loader2, X } from "lucide-react";
 import * as api from "@/lib/api";
 import type { Instance } from "@/lib/types";
@@ -162,14 +160,12 @@ function InstanceCard({
       )}
       <div className="relative flex h-24 items-center justify-center overflow-hidden">
         {instance.banner ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={instance.banner} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="schem-bg absolute inset-0" />
         )}
         <div className="absolute inset-0 bg-linear-to-b from-transparent to-ink-900/85" />
         {instance.icon ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={instance.icon}
             alt=""
