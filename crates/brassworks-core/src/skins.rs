@@ -183,7 +183,7 @@ mod tests {
         "id": "0123456789abcdef0123456789abcdef",
         "name": "Notch",
         "skins": [
-            { "id": "a", "state": "INACTIVE", "url": "https:
+            { "id": "a", "state": "INACTIVE", "url": "https://tex/inactive", "variant": "CLASSIC" },
             { "id": "b", "state": "ACTIVE", "url": "https://tex/active", "variant": "SLIM" }
         ],
         "capes": [
