@@ -134,6 +134,13 @@ jobs:
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
+      - name: Debug bundle location
+        if: startsWith(matrix.runner, 'macos')
+        run: |
+          pwd
+          find . -name "*.app" -type d
+          find . -path "*bundle*" -print
+
       - name: Build and upload styled DMG (macOS)
         if: startsWith(matrix.runner, 'macos')
         shell: bash
