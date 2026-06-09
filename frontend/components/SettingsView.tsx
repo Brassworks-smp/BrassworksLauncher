@@ -21,6 +21,9 @@ import {
   Clock,
   Palette,
   Plug,
+  Download,
+  ScrollText,
+  ArrowUpCircle,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -30,6 +33,7 @@ import type {
   LaunchProgress,
   LauncherSettings,
   ModpackStatus,
+  UpdateInfo,
 } from "@/lib/types";
 
 type Tab = "game" | "java" | "modpack" | "launcher";
@@ -257,6 +261,9 @@ export function SettingsView({
   onCheckUpdates,
   maintaining,
   progress,
+  appVersion,
+  onShowChangelog,
+  onUpdateInstalled,
 }: {
   settings: LauncherSettings | null;
   instance: Instance | null;
@@ -267,6 +274,9 @@ export function SettingsView({
   onCheckUpdates: () => Promise<void>;
   maintaining: boolean;
   progress: LaunchProgress | null;
+  appVersion: string | null;
+  onShowChangelog: () => void;
+  onUpdateInstalled: (version: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("game");
   const [packDraft, setPackDraft] = useState<string>("");
@@ -536,6 +546,15 @@ export function SettingsView({
 
         {tab === "launcher" && (
           <div className="grid grid-cols-2 gap-4">
+            <UpdatesCard
+              appVersion={appVersion}
+              autoUpdate={settings.auto_update}
+              onToggleAuto={(v) => patchSettings({ auto_update: v })}
+              onShowChangelog={onShowChangelog}
+              onUpdateInstalled={onUpdateInstalled}
+              onError={onError}
+            />
+
             <Card title="Appearance" icon={<Palette size={14} />}>
               <Field
                 label="Theme"
@@ -716,6 +735,142 @@ export function SettingsView({
         )}
       </div>
     </div>
+  );
+}
+
+function UpdatesCard({
+  appVersion,
+  autoUpdate,
+  onToggleAuto,
+  onShowChangelog,
+  onUpdateInstalled,
+  onError,
+}: {
+  appVersion: string | null;
+  autoUpdate: boolean;
+  onToggleAuto: (v: boolean) => void;
+  onShowChangelog: () => void;
+  onUpdateInstalled: (version: string) => void;
+  onError: (e: string) => void;
+}) {
+  const [checking, setChecking] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      const result = await api.checkForUpdate();
+      setInfo(result);
+      setCheckedAt(Date.now());
+      if (!result.available) toast("You're on the latest version", "success");
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const download = async () => {
+    if (!info?.available) return;
+    setDownloading(true);
+    setPct(0);
+    let total = 0;
+    let downloaded = 0;
+    const un = await api.onUpdaterProgress((p) => {
+      if (p.done) {
+        setPct(100);
+        return;
+      }
+      downloaded = p.downloaded;
+      if (p.total) total = p.total;
+      if (total > 0)
+        setPct(Math.min(100, Math.round((downloaded / total) * 100)));
+    });
+    try {
+      toast(`Downloading update v${info.version}…`, "info");
+      await api.installUpdate();
+      toast(`Update v${info.version} installed`, "success");
+      onUpdateInstalled(info.version);
+      setInfo(null);
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      un();
+      setDownloading(false);
+      setPct(null);
+    }
+  };
+
+  return (
+    <Card title="Updates" icon={<ArrowUpCircle size={14} />}>
+      <Row label="Current version" value={appVersion ? `v${appVersion}` : "—"} />
+
+      <Toggle
+        label="Automatic updates"
+        description="Check for and install launcher updates on startup."
+        checked={autoUpdate}
+        onChange={onToggleAuto}
+      />
+
+      {info?.available && !downloading && (
+        <div className="rounded-lg border border-brass-500/40 bg-brass-500/10 px-3 py-2 text-xs text-brass-200">
+          Version {info.version} is available.
+        </div>
+      )}
+
+      {downloading && (
+        <div className="rounded-lg border border-edge bg-ink-900/50 p-3">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 text-brass-300">
+              <Loader2 size={13} className="animate-spin" />
+              Downloading update
+            </span>
+            {pct !== null && (
+              <span className="tabular-nums text-ink-600">{pct}%</span>
+            )}
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-ink-800">
+            <div
+              className="progress-fill h-full rounded-full transition-[width] duration-300"
+              style={{ width: pct !== null ? `${pct}%` : "40%" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {info?.available && !downloading ? (
+        <ActionButton icon={<Download size={15} />} onClickAsync={download}>
+          Download &amp; install v{info.version}
+        </ActionButton>
+      ) : (
+        <ActionButton
+          icon={
+            checking ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <RefreshCw size={15} />
+            )
+          }
+          disabled={checking || downloading}
+          onClickAsync={check}
+        >
+          Check for updates
+          {!checking && checkedAt !== null && !info?.available && (
+            <span className="ml-auto text-[11px] text-patina-400">
+              Up to date
+            </span>
+          )}
+        </ActionButton>
+      )}
+
+      <ActionButton icon={<ScrollText size={15} />} onClick={onShowChangelog}>
+        Changelog
+        <span className="ml-auto text-[11px] text-ink-600">what&apos;s new</span>
+      </ActionButton>
+    </Card>
   );
 }
 

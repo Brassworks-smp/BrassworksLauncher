@@ -34,7 +34,10 @@ pub use modpack::{
 pub use packwiz::SearchHit;
 pub use paths::Paths;
 pub use progress::{LaunchProgress, LaunchStage, ProgressSink};
-pub use remote::{news, player_count, upload_log, LogUpload, NewsItem, PlayerCount, PlayerGroup};
+pub use remote::{
+    news, player_count, release_changelog, upload_log, LogUpload, NewsItem, PlayerCount,
+    PlayerGroup,
+};
 pub use settings::LauncherSettings;
 
 pub use java::{JavaInstall, JavaKind};

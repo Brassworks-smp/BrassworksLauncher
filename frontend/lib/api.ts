@@ -1,6 +1,7 @@
 
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   Account,
@@ -23,6 +24,8 @@ import type {
   ProjectDetail,
   Screenshot,
   SearchHit,
+  UpdateInfo,
+  UpdateProgress,
 } from "./types";
 
 export const isTauri = (): boolean =>
@@ -221,6 +224,20 @@ export const onModpackDone = (
 export const getNews = (): Promise<NewsItem> => invoke("get_news");
 export const getPlayercount = (): Promise<PlayerCount> =>
   invoke("get_playercount");
+
+
+export const appVersion = (): Promise<string> => getVersion();
+export const releaseChangelog = (version: string | null): Promise<string> =>
+  invoke("release_changelog", { version });
+export const checkForUpdate = (): Promise<UpdateInfo> =>
+  invoke("check_for_update");
+export const installUpdate = (): Promise<void> => invoke("install_update");
+export const restartApp = (): Promise<void> => invoke("restart_app");
+
+export const onUpdaterProgress = (
+  cb: (p: UpdateProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<UpdateProgress>("updater://progress", (e) => cb(e.payload));
 
 
 export const BRASSWORKS_WEBSITE = "https://brassworks.opnsoc.org";

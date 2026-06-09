@@ -32,8 +32,14 @@ use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .setup(|app| {
             let launcher = Launcher::new().map_err(|e| format!("init launcher: {e}"))?;
             launcher
@@ -97,6 +103,10 @@ pub fn run() {
             commands::clear_cache,
             commands::get_news,
             commands::get_playercount,
+            commands::release_changelog,
+            commands::check_for_update,
+            commands::install_update,
+            commands::restart_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

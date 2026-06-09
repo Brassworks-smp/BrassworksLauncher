@@ -13,6 +13,8 @@ import { SettingsView } from "@/components/SettingsView";
 import { MicrosoftModal, type MsAuthState } from "@/components/MicrosoftModal";
 import { LogUploadModal } from "@/components/LogUploadModal";
 import { LogViewer } from "@/components/LogViewer";
+import { ChangelogModal } from "@/components/ChangelogModal";
+import { RestartPrompt } from "@/components/RestartPrompt";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
 import { ToastHost, toast } from "@/lib/toast";
@@ -57,6 +59,13 @@ export default function Home() {
   const [playersError, setPlayersError] = useState(false);
   const [modStatus, setModStatus] = useState<ModpackStatus | null>(null);
 
+  const [appVer, setAppVer] = useState<string | null>(null);
+  const [changelog, setChangelog] = useState<{
+    version: string | null;
+    updated: boolean;
+  } | null>(null);
+  const [restartVersion, setRestartVersion] = useState<string | null>(null);
+
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const settingsRef = useRef(settings);
@@ -84,16 +93,38 @@ export default function Home() {
     if (!api.isTauri()) return;
     (async () => {
       try {
-        const [list, s, acc, running] = await Promise.all([
+        const [list, s, acc, running, ver] = await Promise.all([
           api.getInstances(),
           api.getSettings(),
           api.getAccounts(),
           api.getRunning(),
+          api.appVersion().catch(() => null),
         ]);
         setInstance(list.find((i) => i.id === PRIMARY_ID) ?? list[0] ?? null);
-        setSettings(s);
         setAccounts(acc);
+        setAppVer(ver);
         if (running.includes(PRIMARY_ID)) setPhase("running");
+
+        let next = s;
+        if (ver && s.last_version !== ver) {
+          if (s.last_version) setChangelog({ version: ver, updated: true });
+          next = { ...s, last_version: ver };
+          api.saveSettings(next).catch(() => {});
+        }
+        setSettings(next);
+
+        if (next.auto_update) {
+          try {
+            const info = await api.checkForUpdate();
+            if (info.available) {
+              toast(`Update v${info.version} found — downloading…`, "info");
+              await api.installUpdate();
+              toast(`Update v${info.version} installed`, "success");
+              setRestartVersion(info.version);
+            }
+          } catch {
+          }
+        }
       } catch (e) {
         setError(String(e));
       }
@@ -370,6 +401,11 @@ export default function Home() {
               modStatus={modStatus}
               maintaining={maintaining}
               progress={progress}
+              appVersion={appVer}
+              onShowChangelog={() =>
+                setChangelog({ version: appVer, updated: false })
+              }
+              onUpdateInstalled={(v) => setRestartVersion(v)}
               onCheckUpdates={checkUpdates}
               onSaveSettings={(s) => {
                 setSettings(s);
@@ -397,6 +433,19 @@ export default function Home() {
       )}
       {logUpload && (
         <LogUploadModal upload={logUpload} onClose={() => setLogUpload(null)} />
+      )}
+      {changelog && (
+        <ChangelogModal
+          version={changelog.version}
+          updated={changelog.updated}
+          onClose={() => setChangelog(null)}
+        />
+      )}
+      {restartVersion && (
+        <RestartPrompt
+          version={restartVersion}
+          onDismiss={() => setRestartVersion(null)}
+        />
       )}
       <ToastHost />
     </div>

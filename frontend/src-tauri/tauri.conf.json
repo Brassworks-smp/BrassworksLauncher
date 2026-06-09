@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Brassworks Launcher",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "com.brassworks.launcher",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -51,7 +51,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcwRDcyMjlBREZEQUYyRkEKUldUNjh0cmZtaUxYY0F6VENuWW5ibEZ2S24vTktHWmJJWmlUS0N6b21SN3lDT3pRK0dPSFVwMUYK",
       "endpoints": [
-        "https://github.com/salem-5/BrassworksLauncher/releases/latest/download/latest.json"
+        "https://github.com/Brassworks-smp/BrassworksLauncher/releases/latest/download/latest.json"
       ]
     }
   }

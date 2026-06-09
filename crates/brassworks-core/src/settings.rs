@@ -31,6 +31,9 @@ pub struct LauncherSettings {
 
     pub discord_rpc: bool,
     pub reduce_motion: bool,
+
+    pub auto_update: bool,
+    pub last_version: Option<String>,
 }
 
 impl Default for LauncherSettings {
@@ -63,6 +66,9 @@ impl Default for LauncherSettings {
 
             discord_rpc: true,
             reduce_motion: false,
+
+            auto_update: true,
+            last_version: None,
         }
     }
 }

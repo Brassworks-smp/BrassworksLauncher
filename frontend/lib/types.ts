@@ -50,6 +50,22 @@ export interface LauncherSettings {
 
   discord_rpc: boolean;
   reduce_motion: boolean;
+
+  auto_update: boolean;
+  last_version: string | null;
+}
+
+export interface UpdateInfo {
+  available: boolean;
+  version: string;
+  current_version: string;
+  notes: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+  done: boolean;
 }
 
 export interface JavaInstall {

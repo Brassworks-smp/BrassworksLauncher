@@ -120,6 +120,16 @@ jobs:
         working-directory: frontend
         run: pnpm install --no-frozen-lockfile
 
+      - name: Read changelog
+        id: changelog
+        shell: bash
+        run: |
+          {
+            echo 'body<<CHANGELOG_EOF'
+            cat changelog.md
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and bundle (Tauri + GitHub Release)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -131,7 +141,7 @@ jobs:
           projectPath: frontend
           tagName: ${{ needs.create_tag.outputs.tag }}
           releaseName: "Brassworks Launcher ${{ needs.create_tag.outputs.tag }}"
-          releaseBody: "Self-contained installers for macOS, Windows (x64/arm64) and Linux (x64/arm64)."
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

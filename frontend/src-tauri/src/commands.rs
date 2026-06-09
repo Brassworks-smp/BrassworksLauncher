@@ -715,3 +715,95 @@ pub(crate) async fn get_playercount() -> CmdResult<PlayerCount> {
         .map_err(err)?
 }
 
+#[tauri::command]
+pub(crate) async fn release_changelog(version: Option<String>) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        brassworks_core::release_changelog(version.as_deref()).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct UpdateInfo {
+    available: bool,
+    version: String,
+    current_version: String,
+    notes: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    downloaded: u64,
+    total: Option<u64>,
+    done: bool,
+}
+
+#[tauri::command]
+pub(crate) async fn check_for_update(app: AppHandle) -> CmdResult<UpdateInfo> {
+    use tauri_plugin_updater::UpdaterExt;
+    let current = app.package_info().version.to_string();
+    let updater = app.updater().map_err(err)?;
+    match updater.check().await.map_err(err)? {
+        Some(update) => Ok(UpdateInfo {
+            available: true,
+            version: update.version.clone(),
+            current_version: current,
+            notes: update.body.clone(),
+        }),
+        None => Ok(UpdateInfo {
+            available: false,
+            version: current.clone(),
+            current_version: current,
+            notes: None,
+        }),
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn install_update(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(err)?;
+    let update = updater
+        .check()
+        .await
+        .map_err(err)?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    let mut downloaded: u64 = 0;
+    let progress_app = app.clone();
+    let done_app = app.clone();
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let _ = progress_app.emit(
+                    "updater://progress",
+                    UpdateProgress {
+                        downloaded,
+                        total,
+                        done: false,
+                    },
+                );
+            },
+            move || {
+                let _ = done_app.emit(
+                    "updater://progress",
+                    UpdateProgress {
+                        downloaded: 0,
+                        total: None,
+                        done: true,
+                    },
+                );
+            },
+        )
+        .await
+        .map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn restart_app(app: AppHandle) {
+    app.restart();
+}
+

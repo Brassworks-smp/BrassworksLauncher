@@ -6,6 +6,8 @@ use crate::error::{CoreError, Result};
 const NEWS_URL: &str = "https://api.opnsoc.org/news/";
 const PLAYERCOUNT_URL: &str = "https://api.opnsoc.org/playercount";
 
+const GITHUB_REPO: &str = "Brassworks-smp/BrassworksLauncher";
+
 const BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -64,6 +66,51 @@ pub fn news() -> Result<NewsItem> {
 
 pub fn player_count() -> Result<PlayerCount> {
     get_json(PLAYERCOUNT_URL)
+}
+
+#[derive(Deserialize)]
+struct GithubRelease {
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    tag_name: String,
+}
+
+pub fn release_changelog(version: Option<&str>) -> Result<String> {
+    let url = match version {
+        Some(v) => {
+            let tag = if v.starts_with('v') { v.to_string() } else { format!("v{v}") };
+            format!("https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}")
+        }
+        None => format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest"),
+    };
+    let resp = client()?
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .map_err(|e| CoreError::Remote(e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(CoreError::Remote(format!("{url} -> {}", resp.status())));
+    }
+    let release: GithubRelease = resp
+        .json()
+        .map_err(|e| CoreError::Remote(format!("decode release: {e}")))?;
+    let title = if !release.name.is_empty() {
+        release.name
+    } else {
+        release.tag_name
+    };
+    let body = release.body.trim();
+    if body.is_empty() {
+        return Err(CoreError::Remote("release has no changelog".to_string()));
+    }
+    if title.is_empty() {
+        Ok(body.to_string())
+    } else {
+        Ok(format!("# {title}\n\n{body}"))
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
