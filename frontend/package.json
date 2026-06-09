@@ -1,6 +1,6 @@
 {
   "name": "brassworks-launcher",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,7 +19,8 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^9.1.0",
     "rehype-raw": "^7.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

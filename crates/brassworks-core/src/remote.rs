@@ -3,9 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
 
-const NEWS_URL: &str = "https://api.opnsoc.org/news/";
-const PLAYERCOUNT_URL: &str = "https://api.opnsoc.org/playercount";
-
 const GITHUB_REPO: &str = "Brassworks-smp/BrassworksLauncher";
 
 const BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
@@ -60,12 +57,12 @@ fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T> {
         .map_err(|e| CoreError::Remote(format!("decode {url}: {e}")))
 }
 
-pub fn news() -> Result<NewsItem> {
-    get_json(NEWS_URL)
+pub fn news(url: &str) -> Result<NewsItem> {
+    get_json(url)
 }
 
-pub fn player_count() -> Result<PlayerCount> {
-    get_json(PLAYERCOUNT_URL)
+pub fn player_count(url: &str) -> Result<PlayerCount> {
+    get_json(url)
 }
 
 #[derive(Deserialize)]

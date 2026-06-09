@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Child;
 
 use portablemc::base::{Event as BaseEvent, JvmPolicy};
+use portablemc::fabric::{self, Event as FabricEvent};
 use portablemc::forge::{self, Event as ForgeEvent, Loader, Version as ForgeVersion};
 use portablemc::moj::{self, Event as MojEvent};
 use portablemc::msa;
@@ -11,7 +12,7 @@ use uuid::Uuid;
 
 use crate::account::{Account, AccountKind};
 use crate::error::{CoreError, Result};
-use crate::instance::{Instance, LoaderKind, LoaderVersion};
+use crate::instance::{Instance, LoaderKind, LoaderVersion, PackSource};
 use crate::modpack::Modpack;
 use crate::paths::Paths;
 use crate::progress::{LaunchProgress, LaunchStage, ProgressSink};
@@ -126,6 +127,24 @@ impl forge::Handler for ProgressHandler<'_> {
     }
 }
 
+impl fabric::Handler for ProgressHandler<'_> {
+    fn on_event(&mut self, event: FabricEvent) {
+        match event {
+            FabricEvent::Mojang(moj) => self.handle_moj(&moj),
+            FabricEvent::FetchVersion {
+                game_version,
+                loader_version,
+            } => {
+                self.stage(
+                    LaunchStage::InstallingLoader,
+                    format!("Fetching loader {loader_version} for {game_version}"),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 fn forge_version(spec: &LoaderVersion, mc_version: &str) -> ForgeVersion {
     match spec {
         LoaderVersion::Stable => ForgeVersion::Stable(mc_version.to_string()),
@@ -134,7 +153,19 @@ fn forge_version(spec: &LoaderVersion, mc_version: &str) -> ForgeVersion {
     }
 }
 
-fn configure_mojang(req: &LaunchRequest, mojang: &mut moj::Installer) -> Result<()> {
+fn fabric_loader_version(spec: &LoaderVersion) -> fabric::LoaderVersion {
+    match spec {
+        LoaderVersion::Stable => fabric::LoaderVersion::Stable,
+        LoaderVersion::Unstable => fabric::LoaderVersion::Unstable,
+        LoaderVersion::Exact(name) => fabric::LoaderVersion::Name(name.clone()),
+    }
+}
+
+fn configure_mojang(
+    req: &LaunchRequest,
+    mojang: &mut moj::Installer,
+    java_override: Option<&PathBuf>,
+) -> Result<()> {
     let base = mojang.base_mut();
 
     base.set_main_dir(req.paths.shared_dir());
@@ -145,17 +176,31 @@ fn configure_mojang(req: &LaunchRequest, mojang: &mut moj::Installer) -> Result<
     base.set_launcher_version(env!("CARGO_PKG_VERSION"));
 
     let policy = match req.instance.java_path.as_deref() {
-        Some(path) => JvmPolicy::Static(PathBuf::from(path)),
-        None => match req.settings.java_policy.as_str() {
-            "system" => JvmPolicy::System,
-            "custom" => match req.settings.java_path.as_deref() {
-                Some(path) if !path.trim().is_empty() => {
-                    JvmPolicy::Static(PathBuf::from(path))
-                }
-                _ => JvmPolicy::Mojang,
-            },
-            _ => JvmPolicy::Mojang,
-        },
+        Some(path) if !path.trim().is_empty() => JvmPolicy::Static(PathBuf::from(path)),
+        _ => {
+            let effective = req
+                .instance
+                .java_policy
+                .as_deref()
+                .filter(|p| !p.trim().is_empty())
+                .unwrap_or(req.settings.java_policy.as_str());
+            match effective {
+                "system" => JvmPolicy::System,
+                "custom" => match req.settings.java_path.as_deref() {
+                    Some(path) if !path.trim().is_empty() => {
+                        JvmPolicy::Static(PathBuf::from(path))
+                    }
+                    _ => match java_override {
+                        Some(p) => JvmPolicy::Static(p.clone()),
+                        None => JvmPolicy::MojangThenSystem,
+                    },
+                },
+                _ => match java_override {
+                    Some(p) => JvmPolicy::Static(p.clone()),
+                    None => JvmPolicy::MojangThenSystem,
+                },
+            }
+        }
     };
     base.set_jvm_policy(policy);
 
@@ -215,12 +260,26 @@ pub fn launch_instance(
 
     let instance_id = req.instance.id.clone();
 
-    let neoforge_override = sync_modpack(&req, &instance_id, cancel, on_progress)?;
+    let neoforge_override = match &req.instance.pack {
+        PackSource::Packwiz { url } => {
+            sync_packwiz(&req, &instance_id, url, cancel, on_progress)?
+        }
+        PackSource::Modrinth { .. } | PackSource::Curseforge { .. } => {
+            if req.instance.modpack_locked {
+                sync_thirdparty(&req, &instance_id, cancel, on_progress)?;
+            }
+            None
+        }
+        PackSource::None => None,
+    };
 
     let mut handler = ProgressHandler {
         instance_id: instance_id.clone(),
         sink: on_progress,
     };
+
+    let java_override = resolve_java(&req, &mut handler);
+    let java_override = java_override.as_ref();
 
     handler.stage(LaunchStage::Resolving, "Resolving loader version");
 
@@ -236,22 +295,33 @@ pub fn launch_instance(
                 _ => forge_version(&req.instance.loader_version, &req.instance.minecraft_version),
             };
             let mut installer = forge::Installer::new(loader, version);
-            configure_mojang(&req, installer.mojang_mut())?;
+            configure_mojang(&req, installer.mojang_mut(), java_override)?;
             installer
                 .install(&mut handler)
                 .map_err(|e| CoreError::Launch(format!("{e:?}")))?
         }
         LoaderKind::Vanilla => {
             let mut installer = moj::Installer::new(req.instance.minecraft_version.clone());
-            configure_mojang(&req, &mut installer)?;
+            configure_mojang(&req, &mut installer, java_override)?;
             installer
                 .install(MojOnly(&mut handler))
                 .map_err(|e| CoreError::Launch(format!("{e:?}")))?
         }
-        LoaderKind::Fabric => {
-            return Err(CoreError::Launch(
-                "Fabric is not supported yet".to_string(),
-            ));
+        LoaderKind::Fabric | LoaderKind::Quilt => {
+            let loader = if req.instance.loader == LoaderKind::Fabric {
+                fabric::Loader::Fabric
+            } else {
+                fabric::Loader::Quilt
+            };
+            let mut installer = fabric::Installer::new(
+                loader,
+                req.instance.minecraft_version.clone(),
+                fabric_loader_version(&req.instance.loader_version),
+            );
+            configure_mojang(&req, installer.mojang_mut(), java_override)?;
+            installer
+                .install(&mut handler)
+                .map_err(|e| CoreError::Launch(format!("{e:?}")))?
         }
     };
 
@@ -269,16 +339,82 @@ pub fn launch_instance(
     Ok(child)
 }
 
-fn sync_modpack(
+fn resolve_java(req: &LaunchRequest, handler: &mut ProgressHandler) -> Option<PathBuf> {
+    if req
+        .instance
+        .java_path
+        .as_deref()
+        .map(|p| !p.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let effective = req
+        .instance
+        .java_policy
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or(req.settings.java_policy.as_str());
+    if effective != "auto" {
+        return None;
+    }
+    let major = java::major_for_minecraft(&req.instance.minecraft_version);
+    handler.stage(LaunchStage::PreparingJvm, format!("Preparing Java {major}"));
+    java::ensure_runtime(&req.paths.jvm_dir(), major).ok()
+}
+
+fn sync_thirdparty(
     req: &LaunchRequest,
     instance_id: &str,
     cancel: &dyn Fn() -> bool,
     on_progress: &mut ProgressSink,
-) -> Result<Option<String>> {
-    let pack_url = crate::modpack::resolve_pack_url(req.settings);
-    let modpack = Modpack::with_url(req.paths, instance_id, pack_url);
+) -> Result<()> {
+    use packwiz::Installer;
 
-    if !req.settings.modpack_locked {
+    let installer = Installer::new();
+    let modrinth = installer.modrinth(req.paths.modrinth_cache_dir());
+    let cf_key = req
+        .settings
+        .curseforge_api_key
+        .clone()
+        .filter(|k| !k.trim().is_empty())
+        .unwrap_or_else(|| crate::modpack::DEFAULT_CURSEFORGE_API_KEY.to_string());
+    let cf = installer.curseforge(req.paths.curseforge_cache_dir(), cf_key);
+
+    let mut sink = |sp: packwiz::SyncProgress| {
+        let stage = match sp.stage {
+            packwiz::SyncStage::Fetching => LaunchStage::CheckingUpdates,
+            _ => LaunchStage::SyncingModpack,
+        };
+        let mut p = LaunchProgress::new(instance_id, stage, sp.message);
+        if sp.total > 0 {
+            p = p.with_progress(sp.current, sp.total);
+        }
+        (on_progress)(p);
+    };
+
+    crate::packs::sync_pack(
+        req.paths,
+        instance_id,
+        &req.instance.pack,
+        &modrinth,
+        Some(&cf),
+        cancel,
+        &mut sink,
+    )?;
+    Ok(())
+}
+
+fn sync_packwiz(
+    req: &LaunchRequest,
+    instance_id: &str,
+    pack_url: &str,
+    cancel: &dyn Fn() -> bool,
+    on_progress: &mut ProgressSink,
+) -> Result<Option<String>> {
+    let modpack = Modpack::with_url(req.paths, instance_id, pack_url.to_string());
+
+    if !req.instance.modpack_locked {
         if let Some(neoforge) = modpack.installed_neoforge() {
             (on_progress)(LaunchProgress::new(
                 instance_id,

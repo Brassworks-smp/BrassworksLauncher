@@ -12,8 +12,8 @@ pub struct LauncherSettings {
     pub theme: String,
     pub pack_url: Option<String>,
     pub dev_mode: bool,
-    pub modpack_locked: bool,
     pub curseforge_api_key: Option<String>,
+    pub selected_instance: Option<String>,
 
     pub pre_launch_command: Option<String>,
     pub post_exit_command: Option<String>,
@@ -47,8 +47,8 @@ impl Default for LauncherSettings {
             theme: "system".to_string(),
             pack_url: None,
             dev_mode: false,
-            modpack_locked: true,
             curseforge_api_key: None,
+            selected_instance: None,
 
             pre_launch_command: None,
             post_exit_command: None,

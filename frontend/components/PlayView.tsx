@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Play,
   Loader2,
@@ -11,6 +12,7 @@ import {
   X,
   AlertTriangle,
 } from "lucide-react";
+import * as api from "@/lib/api";
 import type {
   Instance,
   LaunchProgress,
@@ -38,9 +40,24 @@ function loaderLabel(i: Instance): string {
     neo_forge: "NeoForge",
     forge: "Forge",
     fabric: "Fabric",
+    quilt: "Quilt",
     vanilla: "Vanilla",
   };
   return map[i.loader] ?? i.loader;
+}
+
+function kindLabel(i: Instance): string {
+  if (i.featured) return "Featured pack";
+  switch (i.pack.kind) {
+    case "modrinth":
+      return "Modrinth modpack";
+    case "curseforge":
+      return "CurseForge modpack";
+    case "packwiz":
+      return "packwiz modpack";
+    default:
+      return "Custom instance";
+  }
 }
 
 function formatPlaytime(seconds: number, alwaysHours = false): string {
@@ -114,10 +131,21 @@ export function PlayView({
   const hasUpdate = !!modStatus?.update_available && !running && !busy;
   const updateAvailable = hasUpdate && locked;
 
+  const showPlayers = instance.show_playercount && !!instance.playercount_url;
+  const showNews = instance.show_news && !!instance.news_url;
+
   return (
     <div className="flex flex-1 gap-4">
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
+        {instance.banner && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={instance.banner}
+            alt=""
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
+          />
+        )}
         <div
           className="play-hero-overlay pointer-events-none absolute inset-0"
           style={{
@@ -130,11 +158,21 @@ export function PlayView({
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-edge bg-ink-900/50 px-3 py-1 text-[11px] text-brass-300">
               <span className="h-1.5 w-1.5 rounded-full bg-patina-400" />
-              Featured pack
+              {kindLabel(instance)}
             </div>
-            <h1 className="font-mc text-4xl tracking-wide text-gray-100">
-              {instance.name}
-            </h1>
+            <div className="flex items-center gap-3">
+              {instance.icon && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={instance.icon}
+                  alt=""
+                  className="h-12 w-12 rounded-lg object-cover shadow-lg"
+                />
+              )}
+              <h1 className="font-mc text-4xl tracking-wide text-gray-100">
+                {instance.name}
+              </h1>
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
               <Chip icon={<Box size={13} />}>
                 {loaderLabel(instance)} {instance.minecraft_version}
@@ -248,16 +286,116 @@ export function PlayView({
         </div>
       </div>
 
-      {}
       <div className="flex w-[240px] shrink-0 flex-col gap-4 overflow-y-auto">
-        <ServerCard
-          address="brassworks.opnsoc.org"
-          data={players}
-          error={playersError}
-          onRefresh={onRefreshPlayers}
-        />
-        <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
+        {showPlayers && (
+          <ServerCard
+            address="brassworks.opnsoc.org"
+            data={players}
+            error={playersError}
+            onRefresh={onRefreshPlayers}
+          />
+        )}
+        {showNews && (
+          <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
+        )}
+        {!showPlayers && !showNews && (
+          <InstanceInfoCard instance={instance} modStatus={modStatus} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function InstanceInfoCard({
+  instance,
+  modStatus,
+}: {
+  instance: Instance;
+  modStatus: ModpackStatus | null;
+}) {
+  const [modCount, setModCount] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setModCount(null);
+    if (api.isTauri()) {
+      api
+        .listMods(instance.id)
+        .then((m) => alive && setModCount(m.length))
+        .catch(() => alive && setModCount(null));
+    }
+    return () => {
+      alive = false;
+    };
+  }, [instance.id]);
+
+  const pack = instance.pack;
+  const sourceId =
+    pack.kind === "modrinth"
+      ? pack.project_id
+      : pack.kind === "curseforge"
+        ? pack.project_id
+        : null;
+  const sourceUrl =
+    pack.kind === "modrinth" && pack.project_id
+      ? `https://modrinth.com/modpack/${pack.project_id}`
+      : pack.kind === "curseforge"
+        ? `https://www.curseforge.com/projects/${pack.project_id}`
+        : null;
+
+  return (
+    <div className="rounded-lg border border-edge bg-ink-900/40 p-4">
+      <h3 className="mb-3 font-mc text-sm tracking-wide text-brass-300">
+        Instance
+      </h3>
+      <dl className="flex flex-col gap-2 text-xs">
+        <InfoRow label="Type" value={kindLabel(instance)} />
+        <InfoRow label="Loader" value={loaderLabel(instance)} />
+        <InfoRow label="Minecraft" value={instance.minecraft_version} />
+        {instance.pack.kind !== "none" && (
+          <InfoRow
+            label="Mods"
+            value={modCount === null ? "…" : `${modCount}`}
+          />
+        )}
+        {sourceId && (
+          <InfoRow
+            label={pack.kind === "curseforge" ? "CurseForge ID" : "Modrinth ID"}
+            value={sourceId}
+          />
+        )}
+        {modStatus?.installed_version && instance.pack.kind !== "none" && (
+          <InfoRow label="Pack version" value={modStatus.installed_version} />
+        )}
+        <InfoRow
+          label="Playtime"
+          value={formatPlaytime(instance.playtime_seconds)}
+        />
+        <InfoRow
+          label="Last played"
+          value={
+            instance.last_played
+              ? new Date(instance.last_played).toLocaleDateString()
+              : "Never"
+          }
+        />
+      </dl>
+      {sourceUrl && (
+        <button
+          onClick={() => api.openExternal(sourceUrl).catch(() => {})}
+          className="mt-3 w-full rounded-md border border-edge px-3 py-1.5 text-xs text-brass-300 transition hover:border-brass-600/40 hover:bg-brass-500/5"
+        >
+          View modpack page →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <dt className="text-ink-600">{label}</dt>
+      <dd className="truncate font-mc text-[11px] text-gray-200">{value}</dd>
     </div>
   );
 }

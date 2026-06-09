@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   X,
   Search,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { ResultRow, useInfiniteSearch, SEARCH_PAGE } from "./Browse";
 import { Markdown, Changelog } from "./Markdown";
 import type {
   ContentSource,
@@ -87,11 +88,6 @@ export function AddContentModal({
     (initial?.source as Source) === "curseforge" ? "curseforge" : "modrinth",
   );
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SearchHit | null>(initial ?? null);
   const lockedSet = new Set(lockedIds ?? []);
   const detailOnly = !!initial;
@@ -100,58 +96,16 @@ export function AddContentModal({
     document.documentElement.classList.contains("theme-light")
       ? CURSEFORGE_ACCENT_LIGHT
       : CURSEFORGE_ACCENT_DARK;
-  const reqId = useRef(0);
-  const hitsRef = useRef<SearchHit[]>([]);
-  hitsRef.current = hits;
-  const moreRef = useRef({ hasMore, loadingMore, loading });
-  moreRef.current = { hasMore, loadingMore, loading };
 
-  const PAGE = 20;
-
-  const search = useCallback(
-    (q: string, t: ProjectType, s: Source) => {
-      if (!api.isTauri()) return;
-      const id = ++reqId.current;
-      setLoading(true);
-      setError(null);
-      api
-        .searchContent(instanceId, q, t, s, 0)
-        .then((res) => {
-          if (id !== reqId.current) return;
-          setHits(res);
-          setHasMore(res.length >= PAGE);
-        })
-        .catch((e) => id === reqId.current && setError(String(e)))
-        .finally(() => id === reqId.current && setLoading(false));
-    },
-    [instanceId],
+  const fetchPage = useCallback(
+    (q: string, offset: number) =>
+      api.searchContent(instanceId, q, type, source, offset),
+    [instanceId, type, source],
   );
-
-  const loadMore = useCallback(() => {
-    if (!api.isTauri()) return;
-    const id = reqId.current;
-    setLoadingMore(true);
-    api
-      .searchContent(instanceId, query, type, source, hitsRef.current.length)
-      .then((res) => {
-        if (id !== reqId.current) return;
-        setHits((prev) => {
-          const seen = new Set(prev.map((h) => h.project_id));
-          return [...prev, ...res.filter((h) => !seen.has(h.project_id))];
-        });
-        setHasMore(res.length >= PAGE);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingMore(false));
-  }, [instanceId, query, type, source]);
-
-  useEffect(() => {
-    setHits([]);
-    setHasMore(true);
-    setLoading(true);
-    const h = setTimeout(() => search(query, type, source), 250);
-    return () => clearTimeout(h);
-  }, [query, type, source, search]);
+  const { hits, loading, loadingMore, hasMore, error, handleScroll } =
+    useInfiniteSearch(fetchPage, query, `${type}:${source}`, {
+      enabled: !detailOnly,
+    });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
@@ -284,13 +238,7 @@ export function AddContentModal({
 
             <div
               className="flex-1 overflow-y-auto px-5 pb-5"
-              onScroll={(e) => {
-                const el = e.currentTarget;
-                const near =
-                  el.scrollHeight - el.scrollTop - el.clientHeight < 240;
-                const s = moreRef.current;
-                if (near && s.hasMore && !s.loadingMore && !s.loading) loadMore();
-              }}
+              onScroll={handleScroll}
             >
               {loading ? (
                 <div className="grid h-full place-items-center text-ink-600">
@@ -306,7 +254,7 @@ export function AddContentModal({
                 <div className="flex flex-col gap-2">
                   {hits.map((hit) => (
                     <ResultRow
-                      key={hit.project_id}
+                      key={`${hit.source}:${hit.project_id}`}
                       hit={hit}
                       installed={keyOf(hit) in installed}
                       onOpen={() => setSelected(hit)}
@@ -317,7 +265,7 @@ export function AddContentModal({
                       <Loader2 size={18} className="animate-spin" />
                     </div>
                   )}
-                  {!hasMore && hits.length >= PAGE && (
+                  {!hasMore && hits.length >= SEARCH_PAGE && (
                     <div className="py-3 text-center text-[11px] text-ink-600">
                       End of results
                     </div>
@@ -334,64 +282,6 @@ export function AddContentModal({
         )}
       </div>
     </div>
-  );
-}
-
-function ResultRow({
-  hit,
-  installed,
-  onOpen,
-}: {
-  hit: SearchHit;
-  installed: boolean;
-  onOpen: () => void;
-}) {
-  const [iconFailed, setIconFailed] = useState(false);
-  return (
-    <button
-      onClick={onOpen}
-      className="group flex items-center gap-3 rounded-lg border border-edge bg-ink-850/40 p-3 text-left transition hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
-    >
-      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
-        {hit.icon_url && !iconFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={hit.icon_url}
-            alt={hit.title}
-            className="h-full w-full object-cover"
-            onError={() => setIconFailed(true)}
-          />
-        ) : (
-          <Box size={18} />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-gray-100 group-hover:text-brass-300">
-            {hit.title}
-          </span>
-          {hit.author && (
-            <span className="shrink-0 text-[11px] text-ink-600">
-              by {hit.author}
-            </span>
-          )}
-          {installed && (
-            <span className="shrink-0 rounded bg-patina-500/15 px-1.5 text-[9px] font-medium text-patina-400">
-              Installed
-            </span>
-          )}
-        </div>
-        <div className="truncate text-[12px] text-ink-600">
-          {hit.description}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-600">
-          <Users size={11} /> {fmtDownloads(hit.downloads)} downloads
-        </div>
-      </div>
-      <span className="shrink-0 text-[11px] text-ink-600 opacity-0 transition group-hover:opacity-100">
-        Details →
-      </span>
-    </button>
   );
 }
 

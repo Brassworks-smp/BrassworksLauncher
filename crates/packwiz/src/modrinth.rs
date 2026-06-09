@@ -77,6 +77,14 @@ struct SearchResponse {
     hits: Vec<SearchHit>,
 }
 
+#[derive(Deserialize, Default)]
+struct HashVersion {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    project_id: String,
+}
+
 #[derive(Deserialize)]
 struct ApiVersion {
     id: String,
@@ -260,6 +268,71 @@ impl Modrinth {
         }
         let body: SearchResponse = resp.json().map_err(PackwizError::http)?;
         Ok(body.hits)
+    }
+
+    pub fn search_modpacks(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<SearchHit>> {
+        let facets = "[[\"project_type:modpack\"]]";
+        let resp = self
+            .client
+            .get("https://api.modrinth.com/v2/search")
+            .query(&[
+                ("query", query),
+                ("limit", &limit.to_string()),
+                ("offset", &offset.to_string()),
+                ("index", "relevance"),
+                ("facets", facets),
+            ])
+            .send()
+            .map_err(PackwizError::http)?;
+        if !resp.status().is_success() {
+            return Err(PackwizError::Http(format!("search -> {}", resp.status())));
+        }
+        let body: SearchResponse = resp.json().map_err(PackwizError::http)?;
+        Ok(body.hits)
+    }
+
+    pub fn version_files(
+        &self,
+        hashes: &[String],
+    ) -> std::collections::HashMap<String, (String, String)> {
+        if hashes.is_empty() {
+            return Default::default();
+        }
+        let body = serde_json::json!({ "hashes": hashes, "algorithm": "sha512" });
+        let resp = match self
+            .client
+            .post("https://api.modrinth.com/v2/version_files")
+            .json(&body)
+            .send()
+        {
+            Ok(r) if r.status().is_success() => r,
+            _ => return Default::default(),
+        };
+        let map: std::collections::HashMap<String, HashVersion> =
+            resp.json().unwrap_or_default();
+        map.into_iter()
+            .map(|(hash, v)| (hash, (v.project_id, v.id)))
+            .collect()
+    }
+
+    pub fn project_versions(&self, project_id: &str) -> Result<Vec<ResolvedVersion>> {
+        let resp = self
+            .client
+            .get(format!(
+                "https://api.modrinth.com/v2/project/{project_id}/version"
+            ))
+            .send()
+            .map_err(PackwizError::http)?;
+        if !resp.status().is_success() {
+            return Err(PackwizError::Http(format!("versions -> {}", resp.status())));
+        }
+        let versions: Vec<ApiVersion> = resp.json().map_err(PackwizError::http)?;
+        Ok(versions.into_iter().filter_map(ApiVersion::resolve).collect())
     }
 
     pub fn list_versions(

@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use discord_rich_presence::{
-    activity::{Activity, Assets, Timestamps},
+    activity::{Activity, Assets, Button, Timestamps},
     DiscordIpc, DiscordIpcClient,
 };
 
@@ -60,23 +60,34 @@ impl Discord {
         });
     }
 
-    pub(crate) fn set_playing(&self) {
+    pub(crate) fn set_playing(&self, pack: &str, image: Option<&str>, link: Option<&str>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        self.with_client(|client| {
-            client.set_activity(
-                Activity::new()
-                    .details("Playing on the Brassworks SMP")
-                    .state("In game")
-                    .timestamps(Timestamps::new().start(now))
-                    .assets(
-                        Assets::new()
-                            .large_image("logo")
-                            .large_text("Brassworks SMP"),
-                    ),
-            )
+        let details = format!("Playing {pack}");
+        let large_image = match image {
+            Some(url) if url.starts_with("http") => url.to_string(),
+            _ => "logo".to_string(),
+        };
+        let pack = pack.to_string();
+        let link = link.map(|s| s.to_string());
+        self.with_client(move |client| {
+            let mut assets = Assets::new()
+                .large_image(&large_image)
+                .large_text(&pack);
+            if large_image != "logo" {
+                assets = assets.small_image("logo").small_text("Brassworks Launcher");
+            }
+            let mut activity = Activity::new()
+                .details(&details)
+                .state("In game")
+                .timestamps(Timestamps::new().start(now))
+                .assets(assets);
+            if let Some(url) = link.as_deref() {
+                activity = activity.buttons(vec![Button::new("View modpack", url)]);
+            }
+            client.set_activity(activity)
         });
     }
 }

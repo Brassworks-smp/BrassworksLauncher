@@ -29,6 +29,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
   const [shots, setShots] = useState<Screenshot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState<number | null>(null);
+  const [scope, setScope] = useState<"this" | "all">("this");
 
   const load = useCallback(() => {
     if (!api.isTauri()) {
@@ -71,7 +72,9 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
     }
   };
 
-  const list = shots ?? [];
+  const list = (shots ?? []).filter(
+    (s) => scope === "all" || s.instance === instanceId,
+  );
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -84,7 +87,29 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
             {shots ? `${list.length} captured` : "Loading…"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-edge bg-ink-900/50 p-0.5 text-xs">
+            <button
+              onClick={() => setScope("this")}
+              className={`rounded-md px-2.5 py-1 transition ${
+                scope === "this"
+                  ? "bg-brass-500/15 text-brass-300"
+                  : "text-ink-600 hover:text-brass-300/80"
+              }`}
+            >
+              This instance
+            </button>
+            <button
+              onClick={() => setScope("all")}
+              className={`rounded-md px-2.5 py-1 transition ${
+                scope === "all"
+                  ? "bg-brass-500/15 text-brass-300"
+                  : "text-ink-600 hover:text-brass-300/80"
+              }`}
+            >
+              All
+            </button>
+          </div>
           <button
             onClick={() =>
               api.openDir(instanceId, "screenshots").catch(() => {})

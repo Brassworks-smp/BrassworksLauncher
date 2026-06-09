@@ -20,6 +20,7 @@ import {
   ArrowUpCircle,
   Check,
   ChevronDown,
+  X,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -84,6 +85,7 @@ export function ModsView({
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmUpdateAll, setConfirmUpdateAll] = useState(false);
   const [updatingAll, setUpdatingAll] = useState(false);
+  const [dupDismissed, setDupDismissed] = useState<string | null>(null);
 
   const applyInfo = useCallback((path: string, info: ModInfo) => {
     setMods((prev) =>
@@ -250,6 +252,12 @@ export function ModsView({
       .filter((s) => s.size > 1)
       .map((s) => [...s]);
   }, [mods]);
+
+  const conflictKey = useMemo(
+    () => conflicts.map((g) => g.join("|")).join(";"),
+    [conflicts],
+  );
+  const showDup = conflicts.length > 0 && dupDismissed !== conflictKey;
 
   const userMods = useMemo(
     () => (mods ?? []).filter((m) => !m.managed && m.project_id),
@@ -450,12 +458,19 @@ export function ModsView({
         />
       </div>
 
-      {conflicts.length > 0 && (
-        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+      {showDup && (
+        <div className="dup-warn mb-3 rounded-lg border px-3 py-2 text-xs">
           <div className="flex items-center gap-1.5 font-medium">
             <AlertTriangle size={13} /> Possible duplicate mods detected
+            <button
+              onClick={() => setDupDismissed(conflictKey)}
+              title="Dismiss"
+              className="ml-auto -mr-1 grid h-5 w-5 place-items-center rounded transition hover:bg-amber-500/20"
+            >
+              <X size={13} />
+            </button>
           </div>
-          <ul className="mt-1 list-disc pl-5 text-amber-200/80">
+          <ul className="dup-warn-list mt-1 list-disc pl-5">
             {conflicts.map((g, i) => (
               <li key={i}>{g.join("  ·  ")}</li>
             ))}

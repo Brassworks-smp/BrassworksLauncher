@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lets macOS prompt for mic access so mods like Simple Voice Chat work.
+	     The launched game inherits the launcher's microphone permission. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Brassworks Launcher needs microphone access so voice mods (like Simple Voice Chat) can use your mic in-game.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Some mods may request camera access.</string>
+</dict>
+</plist>

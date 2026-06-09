@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{PackwizError, Result};
 use crate::modrinth::{ResolvedVersion, SearchHit, VersionDep};
 
-const API_BASE: &str = "https://api.curseforge.com";
+const CURSEFORGE_API_BASE: &str = "https://api.curseforge.com/v1";
+const PRISM_API_BASE: &str = "https://api.prismlauncher.org/v1/flame";
 const MINECRAFT_GAME_ID: u32 = 432;
 
 const MIN_REQUEST_GAP: Duration = Duration::from_millis(220);
@@ -40,7 +41,8 @@ fn class_id(project_type: &str) -> u32 {
     match project_type {
         "resourcepack" => 12,
         "shader" => 6552,
-        _ => 6, 
+        "modpack" => 4471,
+        _ => 6,
     }
 }
 
@@ -98,6 +100,13 @@ pub struct Curseforge {
 }
 
 impl Curseforge {
+    fn api_base(&self) -> &str {
+        if self.api_key.trim().is_empty() {
+            PRISM_API_BASE
+        } else {
+            CURSEFORGE_API_BASE
+        }
+    }
     pub fn new(
         client: reqwest::blocking::Client,
         cache_dir: impl Into<PathBuf>,
@@ -114,14 +123,19 @@ impl Curseforge {
         const ATTEMPTS: usize = 5;
         for attempt in 0..ATTEMPTS {
             throttle();
-            let resp = self
+
+            let mut req = self
                 .client
                 .get(url)
-                .header("x-api-key", &self.api_key)
                 .header("Accept", "application/json")
-                .query(query)
-                .send()
-                .map_err(PackwizError::http)?;
+                .query(query);
+
+            if !self.api_key.trim().is_empty() {
+                req = req.header("x-api-key", &self.api_key);
+            }
+
+            let resp = req.send().map_err(PackwizError::http)?;
+
             let status = resp.status();
             if status.as_u16() == 429 {
                 let wait = retry_after(&resp).unwrap_or(Duration::from_millis(
@@ -177,7 +191,7 @@ impl Curseforge {
         if let Some(id) = loader.and_then(loader_type) {
             q.push(("modLoaderType", id.to_string()));
         }
-        let body: SearchResponse = self.get(&format!("{API_BASE}/v1/mods/search"), &q)?;
+        let body: SearchResponse = self.get(&format!("{}/mods/search", self.api_base()), &q)?;
         Ok(body
             .data
             .into_iter()
@@ -185,14 +199,47 @@ impl Curseforge {
             .collect())
     }
 
+    pub fn search_modpacks(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<SearchHit>> {
+        let q: Vec<(&str, String)> = vec![
+            ("gameId", MINECRAFT_GAME_ID.to_string()),
+            ("classId", class_id("modpack").to_string()),
+            ("searchFilter", query.to_string()),
+            ("sortField", "2".to_string()),
+            ("sortOrder", "desc".to_string()),
+            ("index", offset.to_string()),
+            ("pageSize", limit.to_string()),
+        ];
+        let body: SearchResponse = self.get(&format!("{}/mods/search", self.api_base()), &q)?;
+        Ok(body
+            .data
+            .into_iter()
+            .map(|m| m.into_hit("modpack"))
+            .collect())
+    }
+
+    pub fn project_files(&self, project_id: &str) -> Result<Vec<ResolvedVersion>> {
+        let body: ApiFiles = self.get(
+            &format!("{}/mods/{project_id}/files", self.api_base()),
+            &[("pageSize", "50".to_string())],
+        )?;
+        let mut out: Vec<ResolvedVersion> = body.data.into_iter().map(ApiFile::resolve).collect();
+        out.sort_by(|a, b| b.version_id.cmp(&a.version_id));
+        Ok(out)
+    }
+
     pub fn project(&self, id: &str) -> Option<CurseforgeProject> {
         let cache_key = format!("p-{id}");
         if let Some(p) = self.read_cache::<CurseforgeProject>(&cache_key) {
             return Some(p);
         }
-        let mod_resp: DataWrap<ApiMod> = self.get(&format!("{API_BASE}/v1/mods/{id}"), &[]).ok()?;
+        let mod_resp: DataWrap<ApiMod> = self.get(&format!("{}/mods/{id}", self.api_base()), &[]).ok()?;
         let body = self
-            .get::<DataWrap<String>>(&format!("{API_BASE}/v1/mods/{id}/description"), &[])
+            .get::<DataWrap<String>>(&format!("{}/mods/{id}/description", self.api_base()), &[])
             .map(|d| d.data)
             .unwrap_or_default();
         let m = mod_resp.data;
@@ -226,7 +273,7 @@ impl Curseforge {
         if let Some(id) = loader.and_then(loader_type) {
             q.push(("modLoaderType", id.to_string()));
         }
-        let body: ApiFiles = self.get(&format!("{API_BASE}/v1/mods/{project_id}/files"), &q)?;
+        let body: ApiFiles = self.get(&format!("{}/mods/{project_id}/files", self.api_base()), &q)?;
         let mut out: Vec<ResolvedVersion> = body.data.into_iter().map(ApiFile::resolve).collect();
         out.sort_by(|a, b| b.version_id.cmp(&a.version_id));
         Ok(out)
@@ -250,14 +297,14 @@ impl Curseforge {
         file_id: &str,
     ) -> Result<Option<ResolvedVersion>> {
         let body: DataWrap<ApiFile> =
-            self.get(&format!("{API_BASE}/v1/mods/{project_id}/files/{file_id}"), &[])?;
+            self.get(&format!("{}/mods/{project_id}/files/{file_id}", self.api_base()), &[])?;
         Ok(Some(body.data.resolve()))
     }
 
     pub fn file_changelog(&self, project_id: &str, file_id: &str) -> Option<String> {
         let body: DataWrap<String> = self
             .get(
-                &format!("{API_BASE}/v1/mods/{project_id}/files/{file_id}/changelog"),
+                &format!("{}/mods/{project_id}/files/{file_id}/changelog", self.api_base()),
                 &[],
             )
             .ok()?;

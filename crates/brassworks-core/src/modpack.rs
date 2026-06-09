@@ -9,6 +9,7 @@ use packwiz::{
 };
 
 use crate::error::{CoreError, Result};
+use crate::instance::{Instance, PackSource};
 use crate::paths::Paths;
 use crate::settings::LauncherSettings;
 
@@ -162,6 +163,8 @@ pub struct Modpack<'a> {
     instance_id: String,
     pack_url: String,
     cf_api_key: Option<String>,
+    mod_loader: Option<String>,
+    mc_override: Option<String>,
 }
 
 impl<'a> Modpack<'a> {
@@ -179,6 +182,34 @@ impl<'a> Modpack<'a> {
             instance_id: instance_id.into(),
             pack_url,
             cf_api_key: None,
+            mod_loader: Some(LOADER.to_string()),
+            mc_override: None,
+        }
+    }
+
+    pub fn for_instance(paths: &'a Paths, instance: &Instance, cf_key: Option<String>) -> Self {
+        let pack_url = match &instance.pack {
+            PackSource::Packwiz { url } => url.clone(),
+            _ => String::new(),
+        };
+        Self {
+            paths,
+            instance_id: instance.id.clone(),
+            pack_url,
+            cf_api_key: cf_key.filter(|k| !k.trim().is_empty()),
+            mod_loader: instance.loader.content_loader().map(|s| s.to_string()),
+            mc_override: Some(instance.minecraft_version.clone()),
+        }
+    }
+
+    fn has_packwiz(&self) -> bool {
+        !self.pack_url.trim().is_empty()
+    }
+
+    fn loader_for(&self, project_type: &str) -> Option<&str> {
+        match project_type {
+            "mod" => self.mod_loader.as_deref(),
+            _ => None,
         }
     }
 
@@ -232,6 +263,9 @@ impl<'a> Modpack<'a> {
     }
 
     fn game_version(&self) -> String {
+        if let Some(mc) = &self.mc_override {
+            return mc.clone();
+        }
         self.manifest()
             .ok()
             .and_then(|m| m.minecraft_version)
@@ -240,9 +274,31 @@ impl<'a> Modpack<'a> {
 
 
     pub fn status(&self) -> Result<ModpackStatus> {
+        let manifest = self.manifest()?;
+
+        if !self.has_packwiz() {
+            let installed = if manifest.pack_version.is_empty() {
+                None
+            } else {
+                Some(manifest.pack_version.clone())
+            };
+            return Ok(ModpackStatus {
+                installed_version: installed.clone(),
+                latest_version: installed.unwrap_or_default(),
+                name: String::new(),
+                update_available: !manifest.complete && !manifest.files.is_empty(),
+                complete: manifest.complete,
+                failed: manifest.failed.clone(),
+                neoforge_version: manifest.neoforge_version.clone(),
+                minecraft_version: manifest
+                    .minecraft_version
+                    .clone()
+                    .or_else(|| self.mc_override.clone()),
+            });
+        }
+
         let installer = Installer::new();
         let pack = installer.fetch_pack(&self.pack_url)?;
-        let manifest = self.manifest()?;
 
         let installed_version = if manifest.pack_version.is_empty() {
             None
@@ -487,7 +543,7 @@ impl<'a> Modpack<'a> {
         source: &str,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
-        let loader = loader_for(project_type);
+        let loader = self.loader_for(project_type);
         let game_version = self.game_version();
         if source == "curseforge" {
             return Ok(self
@@ -538,7 +594,7 @@ impl<'a> Modpack<'a> {
         project_type: &str,
         source: &str,
     ) -> Result<Vec<ContentVersion>> {
-        let loader = loader_for(project_type);
+        let loader = self.loader_for(project_type);
         let game_version = self.game_version();
         let versions = if source == "curseforge" {
             self.curseforge()?
@@ -567,7 +623,7 @@ impl<'a> Modpack<'a> {
         project_type: &str,
     ) -> Result<Option<ResolvedVersion>> {
         let game_version = self.game_version();
-        let loader = loader_for(project_type);
+        let loader = self.loader_for(project_type);
         if source == "curseforge" {
             Ok(self
                 .curseforge()?
@@ -622,7 +678,7 @@ impl<'a> Modpack<'a> {
         source: &str,
     ) -> Result<InstallResult> {
         let version = self.best_one(source, project_id, project_type)?.ok_or_else(|| {
-            let loader = loader_for(project_type);
+            let loader = self.loader_for(project_type);
             CoreError::Modpack(format!(
                 "No {project_type} version for Minecraft {}{}",
                 self.game_version(),
@@ -945,13 +1001,6 @@ fn managed_matches(m: &packwiz::ManagedMod, source: &str, project_id: &str) -> b
         m.curseforge_file,
     );
     s == source && pid.as_deref() == Some(project_id)
-}
-
-fn loader_for(project_type: &str) -> Option<&'static str> {
-    match project_type {
-        "mod" => Some(LOADER),
-        _ => None,
-    }
 }
 
 fn folder_for(project_type: &str) -> &'static str {

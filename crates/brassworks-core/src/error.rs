@@ -38,6 +38,9 @@ pub enum CoreError {
     #[error("authentication failed: {0}")]
     Auth(String),
 
+    #[error("session expired")]
+    Unauthorized,
+
     #[error("modpack error: {0}")]
     Modpack(String),
 

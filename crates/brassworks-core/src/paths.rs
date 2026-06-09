@@ -42,6 +42,10 @@ impl Paths {
         self.instance_dir(id).join("instance.json")
     }
 
+    pub fn instance_assets_dir(&self, id: &str) -> PathBuf {
+        self.instance_dir(id).join("assets")
+    }
+
     pub fn modpack_manifest(&self, id: &str) -> PathBuf {
         self.instance_dir(id).join("packwiz.json")
     }
@@ -64,6 +68,14 @@ impl Paths {
 
     pub fn jvm_dir(&self) -> PathBuf {
         self.shared_dir().join("jvm")
+    }
+
+    pub fn skins_dir(&self) -> PathBuf {
+        self.shared_dir().join("skins")
+    }
+
+    pub fn skins_index(&self) -> PathBuf {
+        self.skins_dir().join("skins.json")
     }
 
     pub fn settings_file(&self) -> PathBuf {

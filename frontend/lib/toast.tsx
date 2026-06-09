@@ -1,23 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, AlertTriangle, Info, X, Download } from "lucide-react";
 
-export type ToastKind = "success" | "error" | "info";
+export type ToastKind = "success" | "error" | "info" | "progress";
 
 interface Toast {
   id: number;
+  key?: string;
   kind: ToastKind;
   message: string;
+  /** 0–100 for a determinate progress bar, null for indeterminate. */
+  progress?: number | null;
+  sticky?: boolean;
 }
 
-let counter = 0;
-const listeners = new Set<(t: Toast) => void>();
+type Action =
+  | { type: "add"; toast: Toast }
+  | { type: "upsert"; toast: Toast }
+  | { type: "remove"; key: string };
 
-/** Fire a toast from anywhere in the app (no provider/context needed). */
+let counter = 0;
+const listeners = new Set<(a: Action) => void>();
+const emit = (a: Action) => listeners.forEach((l) => l(a));
+
+/** Fire a transient toast from anywhere (no provider/context needed). */
 export function toast(message: string, kind: ToastKind = "info") {
-  const t: Toast = { id: ++counter, kind, message };
-  listeners.forEach((l) => l(t));
+  emit({ type: "add", toast: { id: ++counter, kind, message } });
+}
+
+/**
+ * Show or update a sticky progress toast identified by `key` — the download
+ * overlay and toasts are the same thing. `progress` is 0–100, or null for an
+ * indeterminate bar. Call {@link dismissToast} when finished.
+ */
+export function toastProgress(
+  key: string,
+  message: string,
+  progress: number | null,
+) {
+  emit({
+    type: "upsert",
+    toast: { id: ++counter, key, kind: "progress", message, progress, sticky: true },
+  });
+}
+
+export function dismissToast(key: string) {
+  emit({ type: "remove", key });
 }
 
 const STYLE: Record<
@@ -39,47 +68,117 @@ const STYLE: Record<
     cls: "border-edge bg-ink-850",
     iconCls: "text-patina-400",
   },
+  progress: {
+    icon: Download,
+    cls: "border-brass-600/40 bg-ink-850",
+    iconCls: "text-brass-400",
+  },
 };
 
 export function ToastHost() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    const add = (t: Toast) => {
-      setToasts((prev) => [...prev.slice(-3), t]);
-      setTimeout(
-        () => setToasts((prev) => prev.filter((x) => x.id !== t.id)),
-        4500,
-      );
+    const arm = (t: Toast) => {
+      if (t.sticky) return;
+      const h = setTimeout(() => {
+        setToasts((prev) => prev.filter((x) => x.id !== t.id));
+        timers.current.delete(t.id);
+      }, 4500);
+      timers.current.set(t.id, h);
     };
-    listeners.add(add);
+
+    const handle = (a: Action) => {
+      if (a.type === "add") {
+        setToasts((prev) => [...prev.slice(-4), a.toast]);
+        arm(a.toast);
+      } else if (a.type === "upsert") {
+        setToasts((prev) => {
+          const idx = prev.findIndex((x) => x.key && x.key === a.toast.key);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...a.toast, id: prev[idx].id };
+            return next;
+          }
+          return [...prev.slice(-4), a.toast];
+        });
+      } else {
+        setToasts((prev) => prev.filter((x) => x.key !== a.key));
+      }
+    };
+
+    listeners.add(handle);
     return () => {
-      listeners.delete(add);
+      listeners.delete(handle);
     };
   }, []);
 
-  const dismiss = (id: number) =>
-    setToasts((prev) => prev.filter((x) => x.id !== id));
+  const dismiss = (t: Toast) => {
+    const h = timers.current.get(t.id);
+    if (h) {
+      clearTimeout(h);
+      timers.current.delete(t.id);
+    }
+    setToasts((prev) => prev.filter((x) => x.id !== t.id));
+  };
+
+  const pause = (t: Toast) => {
+    const h = timers.current.get(t.id);
+    if (h) {
+      clearTimeout(h);
+      timers.current.delete(t.id);
+    }
+  };
+  const resume = (t: Toast) => {
+    if (t.sticky || timers.current.has(t.id)) return;
+    const h = setTimeout(() => {
+      setToasts((prev) => prev.filter((x) => x.id !== t.id));
+      timers.current.delete(t.id);
+    }, 2500);
+    timers.current.set(t.id, h);
+  };
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 max-w-[90vw] flex-col gap-2">
       {toasts.map((t) => {
         const { icon: Icon, cls, iconCls } = STYLE[t.kind];
+        const isProgress = t.kind === "progress";
         return (
           <div
             key={t.id}
-            className={`rise pointer-events-auto flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm shadow-xl ${cls}`}
+            onMouseEnter={() => pause(t)}
+            onMouseLeave={() => resume(t)}
+            className={`rise group pointer-events-auto flex flex-col gap-2 rounded-lg border px-3.5 py-2.5 text-sm shadow-xl transition-transform hover:-translate-y-0.5 hover:border-brass-500/60 ${cls}`}
           >
-            <Icon size={16} className={`mt-0.5 shrink-0 ${iconCls}`} />
-            <span className="flex-1 leading-snug text-gray-200">
-              {t.message}
-            </span>
-            <button
-              onClick={() => dismiss(t.id)}
-              className="shrink-0 text-ink-600 transition hover:text-gray-200"
-            >
-              <X size={14} />
-            </button>
+            <div className="flex items-start gap-2.5">
+              <Icon
+                size={16}
+                className={`mt-0.5 shrink-0 ${iconCls} ${
+                  isProgress && t.progress === null ? "animate-pulse" : ""
+                }`}
+              />
+              <span className="flex-1 leading-snug text-gray-200">{t.message}</span>
+              {isProgress && t.progress !== null && (
+                <span className="shrink-0 text-xs tabular-nums text-ink-600">
+                  {t.progress}%
+                </span>
+              )}
+              <button
+                onClick={() => dismiss(t)}
+                className="shrink-0 text-ink-600 opacity-0 transition hover:text-gray-200 group-hover:opacity-100"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            {isProgress && (
+              <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
+                <div
+                  className="progress-fill h-full rounded-full transition-[width] duration-300"
+                  style={{ width: t.progress !== null ? `${t.progress}%` : "40%" }}
+                />
+              </div>
+            )}
           </div>
         );
       })}

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
+use crate::featured::FeaturedPack;
 use crate::paths::Paths;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -12,6 +13,49 @@ pub enum LoaderKind {
     NeoForge,
     Forge,
     Fabric,
+    Quilt,
+}
+
+impl LoaderKind {
+    pub fn content_loader(self) -> Option<&'static str> {
+        match self {
+            LoaderKind::Vanilla => None,
+            LoaderKind::NeoForge => Some("neoforge"),
+            LoaderKind::Forge => Some("forge"),
+            LoaderKind::Fabric => Some("fabric"),
+            LoaderKind::Quilt => Some("quilt"),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LoaderKind::Vanilla => "vanilla",
+            LoaderKind::NeoForge => "neoforge",
+            LoaderKind::Forge => "forge",
+            LoaderKind::Fabric => "fabric",
+            LoaderKind::Quilt => "quilt",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LoaderKind::Vanilla => "Vanilla",
+            LoaderKind::NeoForge => "NeoForge",
+            LoaderKind::Forge => "Forge",
+            LoaderKind::Fabric => "Fabric",
+            LoaderKind::Quilt => "Quilt",
+        }
+    }
+
+    pub fn parse(s: &str) -> LoaderKind {
+        match s.to_ascii_lowercase().as_str() {
+            "neoforge" | "neo_forge" => LoaderKind::NeoForge,
+            "forge" => LoaderKind::Forge,
+            "fabric" => LoaderKind::Fabric,
+            "quilt" => LoaderKind::Quilt,
+            _ => LoaderKind::Vanilla,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,6 +70,50 @@ impl Default for LoaderVersion {
     fn default() -> Self {
         LoaderVersion::Stable
     }
+}
+
+impl LoaderVersion {
+    pub fn parse(s: &str) -> LoaderVersion {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "stable" | "latest" | "recommended" => LoaderVersion::Stable,
+            "unstable" | "snapshot" | "latest-unstable" => LoaderVersion::Unstable,
+            other => LoaderVersion::Exact(other.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PackSource {
+    None,
+    Packwiz {
+        url: String,
+    },
+    Modrinth {
+        #[serde(default)]
+        project_id: Option<String>,
+        version_id: String,
+    },
+    Curseforge {
+        project_id: String,
+        file_id: String,
+    },
+}
+
+impl Default for PackSource {
+    fn default() -> Self {
+        PackSource::None
+    }
+}
+
+impl PackSource {
+    pub fn is_managed(&self) -> bool {
+        !matches!(self, PackSource::None)
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,9 +132,37 @@ pub struct Instance {
     #[serde(default)]
     pub java_path: Option<String>,
     #[serde(default)]
+    pub java_policy: Option<String>,
+    #[serde(default)]
     pub extra_jvm_args: Vec<String>,
     #[serde(default)]
     pub resolution: Option<(u16, u16)>,
+    #[serde(default)]
+    pub pre_launch_command: Option<String>,
+    #[serde(default)]
+    pub post_exit_command: Option<String>,
+
+    #[serde(default)]
+    pub pack: PackSource,
+    #[serde(default)]
+    pub featured: bool,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub banner: Option<String>,
+    #[serde(default = "default_true")]
+    pub modpack_locked: bool,
+
+    #[serde(default)]
+    pub news_url: Option<String>,
+    #[serde(default)]
+    pub playercount_url: Option<String>,
+    #[serde(default = "default_true")]
+    pub show_news: bool,
+    #[serde(default = "default_true")]
+    pub show_playercount: bool,
 
     pub created_at: DateTime<Utc>,
     #[serde(default)]
@@ -56,18 +172,72 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn brassworks_default() -> Self {
+    pub fn from_featured(fp: &FeaturedPack) -> Self {
         Self {
-            id: "brassworks".to_string(),
-            name: "Brassworks SMP".to_string(),
-            minecraft_version: "1.21.1".to_string(),
-            loader: LoaderKind::NeoForge,
-            loader_version: LoaderVersion::Stable,
+            id: fp.id.clone(),
+            name: fp.name.clone(),
+            minecraft_version: fp.mc_version.clone(),
+            loader: LoaderKind::parse(&fp.loader),
+            loader_version: LoaderVersion::parse(&fp.loader_version),
             max_memory_mb: None,
             min_memory_mb: None,
             java_path: None,
+            java_policy: None,
             extra_jvm_args: Vec::new(),
             resolution: None,
+            pre_launch_command: None,
+            post_exit_command: None,
+            pack: PackSource::Packwiz {
+                url: fp.pack_url.clone(),
+            },
+            featured: true,
+            pinned: false,
+            icon: fp.icon.clone(),
+            banner: fp.banner.clone(),
+            modpack_locked: fp.locked_default,
+            news_url: fp.news_url.clone(),
+            playercount_url: fp.playercount_url.clone(),
+            show_news: fp.news_url.is_some(),
+            show_playercount: fp.playercount_url.is_some(),
+            created_at: Utc::now(),
+            last_played: None,
+            playtime_seconds: 0,
+        }
+    }
+
+    pub fn new_custom(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        minecraft_version: impl Into<String>,
+        loader: LoaderKind,
+        loader_version: LoaderVersion,
+        pack: PackSource,
+    ) -> Self {
+        let modpack_locked = !matches!(pack, PackSource::None);
+        Self {
+            id: id.into(),
+            name: name.into(),
+            minecraft_version: minecraft_version.into(),
+            loader,
+            loader_version,
+            max_memory_mb: None,
+            min_memory_mb: None,
+            java_path: None,
+            java_policy: None,
+            extra_jvm_args: Vec::new(),
+            resolution: None,
+            pre_launch_command: None,
+            post_exit_command: None,
+            pack,
+            featured: false,
+            pinned: false,
+            icon: None,
+            banner: None,
+            modpack_locked,
+            news_url: None,
+            playercount_url: None,
+            show_news: false,
+            show_playercount: false,
             created_at: Utc::now(),
             last_played: None,
             playtime_seconds: 0,
@@ -121,7 +291,12 @@ impl InstanceManager {
                 out.push(Instance::load_from(&self.paths, &id)?);
             }
         }
-        out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        out.sort_by(|a, b| {
+            b.featured
+                .cmp(&a.featured)
+                .then_with(|| b.pinned.cmp(&a.pinned))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         Ok(out)
     }
 
@@ -147,12 +322,165 @@ impl InstanceManager {
         instance.save(&self.paths)
     }
 
-    pub fn ensure_default(&self) -> Result<Instance> {
-        let default = Instance::brassworks_default();
-        match self.get(&default.id) {
-            Ok(existing) => Ok(existing),
-            Err(CoreError::InstanceNotFound(_)) => self.create(default),
-            Err(e) => Err(e),
+    pub fn delete(&self, id: &str) -> Result<()> {
+        let instance = self.get(id)?;
+        if instance.featured {
+            return Err(CoreError::Modpack(
+                "Featured packs can't be deleted".to_string(),
+            ));
         }
+        let dir = self.paths.instance_dir(id);
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        }
+        Ok(())
+    }
+
+    pub fn ensure_featured(&self) -> Result<()> {
+        for fp in crate::featured::featured_packs() {
+            match self.get(&fp.id) {
+                Ok(mut inst) => {
+                    inst.featured = true;
+                    if !matches!(inst.pack, PackSource::Packwiz { .. }) {
+                        inst.pack = PackSource::Packwiz {
+                            url: fp.pack_url.clone(),
+                        };
+                    }
+                    if inst.icon.is_none() {
+                        inst.icon = fp.icon.clone();
+                    }
+                    if inst.banner.is_none() {
+                        inst.banner = fp.banner.clone();
+                    }
+                    if inst.news_url.is_none() {
+                        inst.news_url = fp.news_url.clone();
+                    }
+                    if inst.playercount_url.is_none() {
+                        inst.playercount_url = fp.playercount_url.clone();
+                    }
+                    self.update(&inst)?;
+                }
+                Err(CoreError::InstanceNotFound(_)) => {
+                    self.create(Instance::from_featured(&fp))?;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
+    pub fn unique_id(&self, name: &str) -> String {
+        let mut base: String = name
+            .trim()
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        while base.contains("--") {
+            base = base.replace("--", "-");
+        }
+        let base = base.trim_matches('-').to_string();
+        let base = if base.is_empty() { "instance".to_string() } else { base };
+        if !self.paths.instance_config(&base).exists() {
+            return base;
+        }
+        for n in 2.. {
+            let candidate = format!("{base}-{n}");
+            if !self.paths.instance_config(&candidate).exists() {
+                return candidate;
+            }
+        }
+        unreachable!()
+    }
+
+    pub fn unique_name(&self, base: &str) -> String {
+        let existing: Vec<String> = self
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|i| i.name)
+            .collect();
+        if !existing.iter().any(|n| n == base) {
+            return base.to_string();
+        }
+        for n in 2.. {
+            let candidate = format!("{base} ({n})");
+            if !existing.iter().any(|n| n == &candidate) {
+                return candidate;
+            }
+        }
+        unreachable!()
+    }
+
+    pub fn default_id(&self) -> Option<String> {
+        self.list().ok().and_then(|list| {
+            list.iter()
+                .find(|i| i.featured)
+                .or_else(|| list.first())
+                .map(|i| i.id.clone())
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loader_parse_and_label() {
+        assert_eq!(LoaderKind::parse("neo_forge"), LoaderKind::NeoForge);
+        assert_eq!(LoaderKind::parse("QUILT"), LoaderKind::Quilt);
+        assert_eq!(LoaderKind::parse("fabric"), LoaderKind::Fabric);
+        assert_eq!(LoaderKind::parse("nonsense"), LoaderKind::Vanilla);
+        assert_eq!(LoaderKind::NeoForge.label(), "NeoForge");
+        assert_eq!(LoaderKind::Quilt.content_loader(), Some("quilt"));
+        assert_eq!(LoaderKind::Vanilla.content_loader(), None);
+    }
+
+    #[test]
+    fn loader_version_parse() {
+        assert_eq!(LoaderVersion::parse(""), LoaderVersion::Stable);
+        assert_eq!(LoaderVersion::parse("latest"), LoaderVersion::Stable);
+        assert_eq!(
+            LoaderVersion::parse("0.16.0"),
+            LoaderVersion::Exact("0.16.0".to_string())
+        );
+    }
+
+    #[test]
+    fn custom_lock_defaults_by_pack() {
+        let custom = Instance::new_custom(
+            "a",
+            "A",
+            "1.21.1",
+            LoaderKind::Fabric,
+            LoaderVersion::Stable,
+            PackSource::None,
+        );
+        assert!(!custom.modpack_locked, "custom instances start unlocked");
+
+        let pack = Instance::new_custom(
+            "b",
+            "B",
+            "1.21.1",
+            LoaderKind::Fabric,
+            LoaderVersion::Stable,
+            PackSource::Modrinth {
+                project_id: None,
+                version_id: "v".to_string(),
+            },
+        );
+        assert!(pack.modpack_locked, "modpack-backed instances start locked");
+    }
+
+    #[test]
+    fn pack_source_serde_tagged() {
+        let p = PackSource::Packwiz {
+            url: "u".to_string(),
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"kind\":\"packwiz\""));
+        let none: PackSource = serde_json::from_str(r#"{"kind":"none"}"#).unwrap();
+        assert_eq!(none, PackSource::None);
     }
 }

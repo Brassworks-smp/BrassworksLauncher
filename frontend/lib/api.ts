@@ -12,6 +12,7 @@ import type {
   InstallResult,
   InstalledMod,
   Instance,
+  JavaInstall,
   JavaReport,
   LaunchProgress,
   LauncherSettings,
@@ -26,6 +27,11 @@ import type {
   SearchHit,
   UpdateInfo,
   UpdateProgress,
+  McVersion,
+  LoaderVersionInfo,
+  PackDone,
+  SkinProfile,
+  SavedSkin,
 } from "./types";
 
 export const isTauri = (): boolean =>
@@ -59,6 +65,30 @@ export const onMicrosoftAuth = (
 
 export const avatarUrl = (uuid: string, size = 64): string =>
   `https://mc-heads.net/avatar/${uuid.replace(/-/g, "")}/${size}`;
+
+const faceTextures: Record<string, string> = {};
+const faceSubs = new Set<() => void>();
+
+export const setFaceTexture = (accountId: string, url: string | null): void => {
+  if (url) {
+    if (faceTextures[accountId] === url) return;
+    faceTextures[accountId] = url;
+  } else {
+    if (!(accountId in faceTextures)) return;
+    delete faceTextures[accountId];
+  }
+  faceSubs.forEach((f) => f());
+};
+
+export const getFaceTexture = (accountId: string): string | undefined =>
+  faceTextures[accountId];
+
+export const subscribeFaceTextures = (cb: () => void): (() => void) => {
+  faceSubs.add(cb);
+  return () => {
+    faceSubs.delete(cb);
+  };
+};
 
 
 export const launch = (instanceId: string): Promise<void> =>
@@ -221,9 +251,132 @@ export const onModpackDone = (
   listen<ModpackDone>("modpack://done", (e) => cb(e.payload));
 
 
-export const getNews = (): Promise<NewsItem> => invoke("get_news");
-export const getPlayercount = (): Promise<PlayerCount> =>
-  invoke("get_playercount");
+export const getNews = (instanceId: string): Promise<NewsItem> =>
+  invoke("get_news", { instanceId });
+export const getPlayercount = (instanceId: string): Promise<PlayerCount> =>
+  invoke("get_playercount", { instanceId });
+
+
+export const deleteInstance = (instanceId: string): Promise<void> =>
+  invoke("delete_instance", { instanceId });
+export const setActiveInstance = (instanceId: string): Promise<void> =>
+  invoke("set_active_instance", { instanceId });
+export const createCustomInstance = (
+  name: string,
+  minecraftVersion: string,
+  loader: string,
+  loaderVersion: string,
+): Promise<Instance> =>
+  invoke("create_custom_instance", {
+    name,
+    minecraftVersion,
+    loader,
+    loaderVersion,
+  });
+export const createPackwizInstance = (
+  name: string,
+  url: string,
+): Promise<Instance> => invoke("create_packwiz_instance", { name, url });
+
+export const minecraftVersions = (
+  includeSnapshots: boolean,
+): Promise<McVersion[]> =>
+  invoke("minecraft_versions", { includeSnapshots });
+export const loaderVersions = (
+  loader: string,
+  minecraftVersion: string,
+): Promise<LoaderVersionInfo[]> =>
+  invoke("loader_versions", { loader, minecraftVersion });
+
+export const searchModpacks = (
+  source: string,
+  query: string,
+  offset: number,
+): Promise<SearchHit[]> =>
+  invoke("search_modpacks", { source, query, offset });
+export const modpackVersions = (
+  source: string,
+  projectId: string,
+): Promise<ContentVersion[]> =>
+  invoke("modpack_versions", { source, projectId });
+export const installModpack = (
+  source: string,
+  projectId: string,
+  versionId: string,
+  name: string,
+): Promise<void> =>
+  invoke("install_modpack", { source, projectId, versionId, name });
+export const updateModpack = (
+  instanceId: string,
+  versionId: string | null,
+): Promise<void> => invoke("update_modpack", { instanceId, versionId });
+export const installModpackBytes = (
+  data: number[],
+  source: string,
+  name: string,
+): Promise<void> => invoke("install_modpack_bytes", { data, source, name });
+
+export const openInstanceDir = (instanceId: string): Promise<void> =>
+  invoke("open_instance_dir", { instanceId });
+export const revealPath = (path: string): Promise<void> =>
+  invoke("reveal_path", { path });
+export const deleteJavaRuntime = (path: string): Promise<void> =>
+  invoke("delete_java_runtime", { path });
+export const listJavaRuntimes = (): Promise<JavaInstall[]> =>
+  invoke("list_java_runtimes");
+export const downloadJava = (major: number): Promise<void> =>
+  invoke("download_java", { major });
+
+export const skinProfile = (accountId: string): Promise<SkinProfile> =>
+  invoke("skin_profile", { accountId });
+export const setCape = (
+  accountId: string,
+  capeId: string | null,
+): Promise<void> => invoke("set_cape", { accountId, capeId });
+export const listSkins = (): Promise<SavedSkin[]> => invoke("list_skins");
+export const deleteSkin = (skinId: string): Promise<void> =>
+  invoke("delete_skin", { skinId });
+export const applySavedSkin = (
+  accountId: string,
+  skinId: string,
+): Promise<void> => invoke("apply_saved_skin", { accountId, skinId });
+export const uploadSkin = (
+  accountId: string,
+  name: string,
+  data: number[],
+  model: string,
+): Promise<SavedSkin> =>
+  invoke("upload_skin", { accountId, name, data, model });
+export const applySkinUrl = (
+  accountId: string,
+  url: string,
+  model: string,
+): Promise<void> => invoke("apply_skin_url", { accountId, url, model });
+export const updateSkin = (
+  skinId: string,
+  model: string,
+  capeId: string | null,
+): Promise<void> => invoke("update_skin", { skinId, model, capeId });
+export const replaceSkinTexture = (
+  skinId: string,
+  data: number[],
+): Promise<void> => invoke("replace_skin_texture", { skinId, data });
+/** Save a skin texture (local file path or remote URL) to Downloads; returns the path. */
+export const exportSkin = (source: string, name: string): Promise<string> =>
+  invoke("export_skin", { source, name });
+
+export const onPackProgress = (
+  cb: (p: LaunchProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<LaunchProgress>("pack://progress", (e) => cb(e.payload));
+export const onPackStarted = (
+  cb: (instance: Instance) => void,
+): Promise<UnlistenFn> =>
+  listen<Instance>("pack://started", (e) => cb(e.payload));
+export const cancelInstall = (): Promise<void> => cancelOp("__install__");
+export const onPackDone = (
+  cb: (d: PackDone) => void,
+): Promise<UnlistenFn> => listen<PackDone>("pack://done", (e) => cb(e.payload));
 
 
 export const appVersion = (): Promise<string> => getVersion();

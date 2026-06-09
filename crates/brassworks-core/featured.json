@@ -1,0 +1,15 @@
+[
+  {
+    "id": "brassworks",
+    "name": "Brassworks SMP",
+    "pack_url": "https://raw.githubusercontent.com/salem-5/Brassworks-SMP-Season-2/master/pack.toml",
+    "icon": "/brassworks-logo.png",
+    "banner": "/brassworks-banner.png",
+    "news_url": "https://api.opnsoc.org/news/",
+    "playercount_url": "https://api.opnsoc.org/playercount",
+    "locked_default": true,
+    "mc_version": "1.21.1",
+    "loader": "neoforge",
+    "loader_version": "stable"
+  }
+]

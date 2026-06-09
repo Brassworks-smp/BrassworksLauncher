@@ -1,10 +1,16 @@
 
-export type LoaderKind = "vanilla" | "neo_forge" | "forge" | "fabric";
+export type LoaderKind = "vanilla" | "neo_forge" | "forge" | "fabric" | "quilt";
 
 export type LoaderVersion =
   | { channel: "stable" }
   | { channel: "unstable" }
   | { channel: "exact"; value: string };
+
+export type PackSource =
+  | { kind: "none" }
+  | { kind: "packwiz"; url: string }
+  | { kind: "modrinth"; project_id: string | null; version_id: string }
+  | { kind: "curseforge"; project_id: string; file_id: string };
 
 export interface Instance {
   id: string;
@@ -15,11 +21,63 @@ export interface Instance {
   max_memory_mb: number | null;
   min_memory_mb: number | null;
   java_path: string | null;
+  java_policy: string | null;
   extra_jvm_args: string[];
   resolution: [number, number] | null;
+  pre_launch_command: string | null;
+  post_exit_command: string | null;
+  pack: PackSource;
+  featured: boolean;
+  pinned: boolean;
+  icon: string | null;
+  banner: string | null;
+  modpack_locked: boolean;
+  news_url: string | null;
+  playercount_url: string | null;
+  show_news: boolean;
+  show_playercount: boolean;
   created_at: string;
   last_played: string | null;
   playtime_seconds: number;
+}
+
+export interface McVersion {
+  id: string;
+  kind: string;
+}
+
+export interface LoaderVersionInfo {
+  version: string;
+  stable: boolean;
+}
+
+export interface PackDone {
+  instance: Instance | null;
+  error: string | null;
+  cancelled: boolean;
+}
+
+export interface SkinCape {
+  id: string;
+  name: string;
+  url: string;
+  active: boolean;
+}
+
+export interface SkinProfile {
+  id: string;
+  name: string;
+  skin_url: string | null;
+  model: string;
+  capes: SkinCape[];
+}
+
+export interface SavedSkin {
+  id: string;
+  name: string;
+  file: string;
+  model: string;
+  cape_id: string | null;
 }
 
 export interface LauncherSettings {
@@ -31,8 +89,8 @@ export interface LauncherSettings {
   theme: string;
   pack_url: string | null;
   dev_mode: boolean;
-  modpack_locked: boolean;
   curseforge_api_key: string | null;
+  selected_instance: string | null;
 
   pre_launch_command: string | null;
   post_exit_command: string | null;

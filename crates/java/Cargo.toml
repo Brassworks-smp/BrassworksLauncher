@@ -9,3 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
+reqwest = { workspace = true, features = ["blocking"] }
+zip.workspace = true
+flate2.workspace = true
+tar.workspace = true

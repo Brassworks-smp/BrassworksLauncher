@@ -13,20 +13,25 @@
 pub mod account;
 pub mod auth;
 pub mod error;
+pub mod featured;
 pub mod instance;
 pub mod launch;
 pub mod modpack;
+pub mod packs;
 pub mod paths;
 pub mod progress;
 pub mod remote;
 pub mod settings;
+pub mod skins;
+pub mod versions;
 
 use std::process::Child;
 
 pub use account::{Account, AccountKind, AccountStore};
 pub use auth::MicrosoftCode;
 pub use error::{CoreError, Result};
-pub use instance::{Instance, InstanceManager, LoaderKind, LoaderVersion};
+pub use featured::{featured_packs, FeaturedPack};
+pub use instance::{Instance, InstanceManager, LoaderKind, LoaderVersion, PackSource};
 pub use launch::{launch_instance, LaunchRequest};
 pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
@@ -38,6 +43,8 @@ pub use remote::{
     news, player_count, release_changelog, upload_log, LogUpload, NewsItem, PlayerCount,
     PlayerGroup,
 };
+pub use versions::{loader_versions, minecraft_versions, LoaderVersionInfo, McVersion};
+pub use skins::{Cape, SavedSkin, SkinProfile};
 pub use settings::LauncherSettings;
 
 pub use java::{JavaInstall, JavaKind};
@@ -81,8 +88,8 @@ impl Launcher {
         InstanceManager::new(self.paths.clone())
     }
 
-    pub fn bootstrap(&self) -> Result<Instance> {
-        self.instances().ensure_default()
+    pub fn bootstrap(&self) -> Result<()> {
+        self.instances().ensure_featured()
     }
 
 
@@ -205,16 +212,16 @@ impl Launcher {
 
 
     fn modpack_for(&self, instance_id: &str) -> Modpack<'_> {
-        let settings = self.settings().ok();
-        let url = settings
-            .as_ref()
-            .map(modpack::resolve_pack_url)
-            .unwrap_or_else(|| modpack::PACK_URL.to_string());
-        let cf_key = settings
-            .and_then(|s| s.curseforge_api_key)
-            .filter(|k| !k.trim().is_empty())
-            .unwrap_or_else(|| modpack::DEFAULT_CURSEFORGE_API_KEY.to_string());
-        Modpack::with_url(&self.paths, instance_id, url).with_curseforge_key(Some(cf_key))
+        let cf_key = self.cf_key();
+        match self.instances().get(instance_id) {
+            Ok(instance) => Modpack::for_instance(&self.paths, &instance, Some(cf_key)),
+            Err(_) => Modpack::with_url(
+                &self.paths,
+                instance_id,
+                modpack::PACK_URL.to_string(),
+            )
+            .with_curseforge_key(Some(cf_key)),
+        }
     }
 
     pub fn modpack_status(&self, instance_id: &str) -> Result<ModpackStatus> {
@@ -248,6 +255,469 @@ impl Launcher {
         self.modpack_for(instance_id).reinstall_loader()
     }
 
+
+    pub fn delete_instance(&self, instance_id: &str) -> Result<()> {
+        self.instances().delete(instance_id)
+    }
+
+    pub fn set_selected_instance(&self, instance_id: &str) -> Result<()> {
+        let mut settings = self.settings()?;
+        settings.selected_instance = Some(instance_id.to_string());
+        self.save_settings(&settings)
+    }
+
+    pub fn create_custom_instance(
+        &self,
+        name: &str,
+        minecraft_version: &str,
+        loader: LoaderKind,
+        loader_version: LoaderVersion,
+    ) -> Result<Instance> {
+        let mgr = self.instances();
+        let base = if name.trim().is_empty() {
+            format!("{} {minecraft_version}", loader.label())
+        } else {
+            name.trim().to_string()
+        };
+        let display = mgr.unique_name(&base);
+        let id = mgr.unique_id(&display);
+        let inst = Instance::new_custom(
+            &id,
+            display,
+            minecraft_version,
+            loader,
+            loader_version,
+            PackSource::None,
+        );
+        mgr.create(inst)
+    }
+
+    pub fn create_packwiz_instance(&self, name: &str, url: &str) -> Result<Instance> {
+        let pack = packwiz::Installer::new().fetch_pack(url)?;
+        let mc = pack
+            .versions
+            .minecraft
+            .clone()
+            .unwrap_or_else(|| "1.21.1".to_string());
+        let (loader, loader_version) = if let Some(v) = &pack.versions.neoforge {
+            (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.forge {
+            (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.fabric {
+            (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.quilt {
+            (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
+        } else {
+            (LoaderKind::Vanilla, LoaderVersion::Stable)
+        };
+        let mgr = self.instances();
+        let display = if name.trim().is_empty() {
+            pack.name.clone()
+        } else {
+            name.to_string()
+        };
+        let id = mgr.unique_id(if display.is_empty() { "modpack" } else { &display });
+        let inst = Instance::new_custom(
+            &id,
+            display,
+            mc,
+            loader,
+            loader_version,
+            PackSource::Packwiz {
+                url: url.to_string(),
+            },
+        );
+        mgr.create(inst)
+    }
+
+
+    fn cf_key(&self) -> String {
+        self.settings()
+            .ok()
+            .and_then(|s| s.curseforge_api_key)
+            .filter(|k| !k.trim().is_empty())
+            .unwrap_or_else(|| modpack::DEFAULT_CURSEFORGE_API_KEY.to_string())
+    }
+
+    fn modrinth_client(&self) -> packwiz::Modrinth {
+        packwiz::Installer::new().modrinth(self.paths.modrinth_cache_dir())
+    }
+
+    fn cf_client(&self) -> packwiz::Curseforge {
+        packwiz::Installer::new().curseforge(self.paths.curseforge_cache_dir(), self.cf_key())
+    }
+
+    pub fn search_modpacks(
+        &self,
+        source: &str,
+        query: &str,
+        offset: u32,
+    ) -> Result<Vec<SearchHit>> {
+        if source == "curseforge" {
+            Ok(self.cf_client().search_modpacks(query, 20, offset)?)
+        } else {
+            Ok(self.modrinth_client().search_modpacks(query, 20, offset)?)
+        }
+    }
+
+    pub fn modpack_versions(
+        &self,
+        source: &str,
+        project_id: &str,
+    ) -> Result<Vec<ContentVersion>> {
+        let versions = if source == "curseforge" {
+            self.cf_client().project_files(project_id)?
+        } else {
+            self.modrinth_client().project_versions(project_id)?
+        };
+        Ok(versions
+            .into_iter()
+            .map(|v| ContentVersion {
+                version_id: v.version_id,
+                version_number: v.version_number,
+                game_versions: v.game_versions,
+                loaders: v.loaders,
+            })
+            .collect())
+    }
+
+    pub fn install_modpack(
+        &self,
+        source: &str,
+        project_id: &str,
+        version_id: &str,
+        name: &str,
+        cancel: &dyn Fn() -> bool,
+        on_created: &mut dyn FnMut(&Instance),
+        progress: &mut dyn FnMut(SyncProgress),
+    ) -> Result<Instance> {
+        let mgr = self.instances();
+        let id = mgr.unique_id(if name.trim().is_empty() { project_id } else { name });
+        let pack = if source == "curseforge" {
+            PackSource::Curseforge {
+                project_id: project_id.to_string(),
+                file_id: version_id.to_string(),
+            }
+        } else {
+            PackSource::Modrinth {
+                project_id: Some(project_id.to_string()),
+                version_id: version_id.to_string(),
+            }
+        };
+        let mut instance = Instance::new_custom(
+            &id,
+            name,
+            "1.21.1",
+            LoaderKind::Vanilla,
+            LoaderVersion::Stable,
+            pack.clone(),
+        );
+        mgr.create(instance.clone())?;
+        on_created(&instance);
+
+        let modrinth = self.modrinth_client();
+        let cf = self.cf_client();
+        match packs::sync_pack(&self.paths, &id, &pack, &modrinth, Some(&cf), cancel, progress) {
+            Ok(res) => {
+                instance.minecraft_version = res.minecraft_version;
+                instance.loader = res.loader;
+                instance.loader_version = res
+                    .loader_version
+                    .map(LoaderVersion::Exact)
+                    .unwrap_or(LoaderVersion::Stable);
+                if instance.name.trim().is_empty() {
+                    instance.name = if res.name.is_empty() { id.clone() } else { res.name };
+                }
+                instance.icon = if source == "curseforge" {
+                    cf.project(project_id).and_then(|p| p.icon_url)
+                } else {
+                    modrinth.project(project_id).and_then(|p| p.icon_url)
+                };
+                mgr.update(&instance)?;
+                Ok(instance)
+            }
+            Err(e) => {
+                let _ = mgr.delete(&id);
+                Err(e)
+            }
+        }
+    }
+
+    pub fn install_modpack_file(
+        &self,
+        file_path: &str,
+        source: &str,
+        name: &str,
+        cancel: &dyn Fn() -> bool,
+        on_created: &mut dyn FnMut(&Instance),
+        progress: &mut dyn FnMut(SyncProgress),
+    ) -> Result<Instance> {
+        let path = std::path::Path::new(file_path);
+        let bytes = std::fs::read(path).map_err(|e| CoreError::io(path, e))?;
+        let fallback = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("modpack");
+        let name = if name.trim().is_empty() { fallback } else { name };
+        self.install_modpack_data(bytes, source, name, cancel, on_created, progress)
+    }
+
+    pub fn install_modpack_data(
+        &self,
+        bytes: Vec<u8>,
+        source: &str,
+        name: &str,
+        cancel: &dyn Fn() -> bool,
+        on_created: &mut dyn FnMut(&Instance),
+        progress: &mut dyn FnMut(SyncProgress),
+    ) -> Result<Instance> {
+        let mgr = self.instances();
+        let base = if name.trim().is_empty() {
+            "modpack".to_string()
+        } else {
+            name.trim().to_string()
+        };
+        let display = mgr.unique_name(&base);
+        let id = mgr.unique_id(&display);
+        let mut instance = Instance::new_custom(
+            &id,
+            &display,
+            "1.21.1",
+            LoaderKind::Vanilla,
+            LoaderVersion::Stable,
+            PackSource::None,
+        );
+        instance.modpack_locked = true;
+        mgr.create(instance.clone())?;
+        on_created(&instance);
+
+        let modrinth = self.modrinth_client();
+        let cf = self.cf_client();
+        match packs::install_file(&self.paths, &id, source, bytes, &modrinth, Some(&cf), cancel, progress)
+        {
+            Ok(res) => {
+                instance.minecraft_version = res.minecraft_version;
+                instance.loader = res.loader;
+                instance.loader_version = res
+                    .loader_version
+                    .map(LoaderVersion::Exact)
+                    .unwrap_or(LoaderVersion::Stable);
+                mgr.update(&instance)?;
+                Ok(instance)
+            }
+            Err(e) => {
+                let _ = mgr.delete(&id);
+                Err(e)
+            }
+        }
+    }
+
+    pub fn delete_java_runtime(&self, exe_path: &str) -> Result<()> {
+        java::delete_runtime(&self.paths.jvm_dir(), std::path::Path::new(exe_path))
+            .map_err(CoreError::Modpack)
+    }
+
+    pub fn java_runtimes(&self) -> Vec<java::JavaInstall> {
+        java::list_runtimes(&self.paths.jvm_dir())
+    }
+
+    pub fn download_java(&self, major: u32) -> Result<()> {
+        java::ensure_runtime(&self.paths.jvm_dir(), major)
+            .map(|_| ())
+            .map_err(CoreError::Modpack)
+    }
+
+
+    fn with_token<T>(
+        &self,
+        account_id: &str,
+        mut f: impl FnMut(&str) -> Result<T>,
+    ) -> Result<T> {
+        let store = self.accounts()?;
+        let account = store
+            .accounts
+            .iter()
+            .find(|a| a.id == account_id)
+            .ok_or_else(|| CoreError::Auth("account not found".to_string()))?;
+        if !account.is_microsoft() {
+            return Err(CoreError::Auth(
+                "Skins require a Microsoft account".to_string(),
+            ));
+        }
+        let db = msa::Database::new(self.paths.msa_db_file());
+        let uuid =
+            uuid::Uuid::parse_str(&account.uuid).map_err(|e| CoreError::Auth(e.to_string()))?;
+        let mut acc = db
+            .load_from_uuid(uuid)
+            .map_err(|e| CoreError::Auth(format!("{e:?}")))?
+            .ok_or_else(|| CoreError::Auth("Sign in again".to_string()))?;
+
+        match f(acc.access_token()) {
+            Err(CoreError::Unauthorized) => {
+                acc.request_refresh().map_err(|e| {
+                    CoreError::Auth(format!("session expired, sign in again ({e:?})"))
+                })?;
+                let _ = db.store(acc.clone());
+                f(acc.access_token())
+            }
+            other => other,
+        }
+    }
+
+    pub fn skin_profile(&self, account_id: &str) -> Result<skins::SkinProfile> {
+        self.with_token(account_id, |t| skins::get_profile(t))
+    }
+
+    pub fn set_cape(&self, account_id: &str, cape_id: Option<&str>) -> Result<()> {
+        self.with_token(account_id, |t| skins::set_cape(t, cape_id))
+    }
+
+    fn skin_library(&self) -> skins::SkinLibrary {
+        read_json_or_default(&self.paths.skins_index(), "skins").unwrap_or_default()
+    }
+
+    pub fn list_skins(&self) -> Vec<skins::SavedSkin> {
+        self.skin_library().skins
+    }
+
+    pub fn save_skin(
+        &self,
+        name: &str,
+        bytes: &[u8],
+        model: &str,
+        cape_id: Option<&str>,
+    ) -> Result<skins::SavedSkin> {
+        let dir = self.paths.skins_dir();
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let file = dir.join(format!("{id}.png"));
+        std::fs::write(&file, bytes).map_err(|e| CoreError::io(&file, e))?;
+        let saved = skins::SavedSkin {
+            id,
+            name: if name.trim().is_empty() {
+                "Skin".to_string()
+            } else {
+                name.trim().to_string()
+            },
+            file: file.to_string_lossy().to_string(),
+            model: if model == "slim" { "slim" } else { "classic" }.to_string(),
+            cape_id: cape_id.map(|c| c.to_string()),
+        };
+        let mut lib = self.skin_library();
+        lib.skins.insert(0, saved.clone());
+        write_json(&self.paths.skins_index(), &lib, "skins")?;
+        Ok(saved)
+    }
+
+    pub fn delete_skin(&self, skin_id: &str) -> Result<()> {
+        let mut lib = self.skin_library();
+        if let Some(s) = lib.skins.iter().find(|s| s.id == skin_id) {
+            let _ = std::fs::remove_file(&s.file);
+        }
+        lib.skins.retain(|s| s.id != skin_id);
+        write_json(&self.paths.skins_index(), &lib, "skins")
+    }
+
+    pub fn update_skin(&self, skin_id: &str, model: &str, cape_id: Option<&str>) -> Result<()> {
+        let mut lib = self.skin_library();
+        let skin = lib
+            .skins
+            .iter_mut()
+            .find(|s| s.id == skin_id)
+            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+        skin.model = if model == "slim" { "slim" } else { "classic" }.to_string();
+        skin.cape_id = cape_id.map(|c| c.to_string());
+        write_json(&self.paths.skins_index(), &lib, "skins")
+    }
+
+    pub fn replace_skin_texture(&self, skin_id: &str, bytes: &[u8]) -> Result<()> {
+        let lib = self.skin_library();
+        let skin = lib
+            .skins
+            .iter()
+            .find(|s| s.id == skin_id)
+            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+        std::fs::write(&skin.file, bytes)
+            .map_err(|e| CoreError::io(std::path::Path::new(&skin.file), e))
+    }
+
+    pub fn apply_saved_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
+        let lib = self.skin_library();
+        let skin = lib
+            .skins
+            .iter()
+            .find(|s| s.id == skin_id)
+            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+        let bytes = std::fs::read(&skin.file)
+            .map_err(|e| CoreError::io(std::path::Path::new(&skin.file), e))?;
+        let model = skin.model.clone();
+        let cape = skin.cape_id.clone();
+        self.with_token(account_id, move |t| {
+            skins::upload_skin(t, bytes.clone(), &model)?;
+            skins::set_cape(t, cape.as_deref())
+        })
+    }
+
+    pub fn apply_skin_url(&self, account_id: &str, url: &str, model: &str) -> Result<()> {
+        let bytes = skins::download_texture(url)?;
+        self.with_token(account_id, move |t| skins::upload_skin(t, bytes.clone(), model))
+    }
+
+    pub fn upload_and_apply_skin(
+        &self,
+        account_id: &str,
+        name: &str,
+        bytes: Vec<u8>,
+        model: &str,
+    ) -> Result<skins::SavedSkin> {
+        let saved = self.save_skin(name, &bytes, model, None)?;
+        self.with_token(account_id, |t| skins::upload_skin(t, bytes.clone(), model))?;
+        Ok(saved)
+    }
+
+    pub fn update_modpack(
+        &self,
+        instance_id: &str,
+        version_id: Option<&str>,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(SyncProgress),
+    ) -> Result<Instance> {
+        let mgr = self.instances();
+        let mut instance = mgr.get(instance_id)?;
+        if let Some(vid) = version_id {
+            instance.pack = match &instance.pack {
+                PackSource::Modrinth { project_id, .. } => PackSource::Modrinth {
+                    project_id: project_id.clone(),
+                    version_id: vid.to_string(),
+                },
+                PackSource::Curseforge { project_id, .. } => PackSource::Curseforge {
+                    project_id: project_id.clone(),
+                    file_id: vid.to_string(),
+                },
+                other => other.clone(),
+            };
+        }
+        let modrinth = self.modrinth_client();
+        let cf = self.cf_client();
+        let res = packs::sync_pack(
+            &self.paths,
+            instance_id,
+            &instance.pack,
+            &modrinth,
+            Some(&cf),
+            cancel,
+            progress,
+        )?;
+        instance.minecraft_version = res.minecraft_version;
+        instance.loader = res.loader;
+        instance.loader_version = res
+            .loader_version
+            .map(LoaderVersion::Exact)
+            .unwrap_or(LoaderVersion::Stable);
+        mgr.update(&instance)?;
+        Ok(instance)
+    }
+
     pub fn list_mods(&self, instance_id: &str) -> Result<Vec<InstalledMod>> {
         self.modpack_for(instance_id).list_mods()
     }
@@ -269,7 +739,7 @@ impl Launcher {
         path: &str,
         enabled: bool,
     ) -> Result<()> {
-        let unlocked = !self.modpack_locked();
+        let unlocked = !self.modpack_locked(instance_id);
         self.modpack_for(instance_id)
             .set_enabled(path, enabled, unlocked)
     }
@@ -330,7 +800,7 @@ impl Launcher {
         project_type: &str,
         source: &str,
     ) -> Result<InstallResult> {
-        let unlocked = !self.modpack_locked();
+        let unlocked = !self.modpack_locked(instance_id);
         self.modpack_for(instance_id)
             .install_version(project_id, version_id, project_type, source, unlocked)
     }
@@ -362,14 +832,17 @@ impl Launcher {
         self.modpack_for(instance_id).update_selected(keys)
     }
 
-    pub fn modpack_locked(&self) -> bool {
-        self.settings().map(|s| s.modpack_locked).unwrap_or(true)
+    pub fn modpack_locked(&self, instance_id: &str) -> bool {
+        self.instances()
+            .get(instance_id)
+            .map(|i| i.modpack_locked)
+            .unwrap_or(true)
     }
 
     pub fn set_modpack_locked(&self, instance_id: &str, locked: bool) -> Result<()> {
-        let mut settings = self.settings()?;
-        settings.modpack_locked = locked;
-        self.save_settings(&settings)?;
+        let mut instance = self.instances().get(instance_id)?;
+        instance.modpack_locked = locked;
+        self.instances().update(&instance)?;
         if locked {
             let _ = self.modpack_for(instance_id).relock_reconcile();
         }

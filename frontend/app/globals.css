@@ -424,6 +424,25 @@
 /* (Brass accent text is handled by the remapped --color-brass-* vars so that an
    inline accent override — e.g. CurseForge orange — still wins.) */
 
+/* Duplicate-mods warning banner — theme-aware so it stays legible in light mode
+   (the previous amber-200-on-amber-10 combo washed out on a light background). */
+.dup-warn {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+}
+.dup-warn .dup-warn-list {
+  color: rgba(252, 211, 77, 0.8);
+}
+:root.theme-light .dup-warn {
+  border-color: rgba(180, 83, 9, 0.45);
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+:root.theme-light .dup-warn .dup-warn-list {
+  color: #b45309;
+}
+
 /* Featured-pack hero: light grid + light fade so the dark title text reads. */
 :root.theme-light .schem-bg {
   background-image:

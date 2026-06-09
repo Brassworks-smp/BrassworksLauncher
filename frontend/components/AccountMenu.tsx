@@ -1,12 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { UserRound, Check, LogOut, ChevronUp } from "lucide-react";
 import type { Account, AccountStore } from "@/lib/types";
-import { avatarUrl } from "@/lib/api";
+import { avatarUrl, getFaceTexture, subscribeFaceTextures } from "@/lib/api";
 
-function Avatar({ account, size }: { account: Account; size: number }) {
+/** Draws the face (8,8 8×8) + hat overlay (40,8 8×8) from a skin texture. */
+function FaceImage({ url, size }: { url: string; size: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const cv = ref.current;
+      const ctx = cv?.getContext("2d");
+      if (!cv || !ctx) return;
+      const s = img.naturalWidth / 64;
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 8 * s, 8 * s, 8 * s, 8 * s, 0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 40 * s, 8 * s, 8 * s, 8 * s, 0, 0, cv.width, cv.height);
+    };
+    img.src = url;
+  }, [url]);
+  return (
+    <canvas
+      ref={ref}
+      width={size * 2}
+      height={size * 2}
+      className="rounded-md"
+      style={{ width: size, height: size, imageRendering: "pixelated" }}
+    />
+  );
+}
+
+function Avatar({
+  account,
+  size,
+  version = 0,
+}: {
+  account: Account;
+  size: number;
+  version?: number;
+}) {
   const [failed, setFailed] = useState(false);
+  const faceTex = useSyncExternalStore(
+    subscribeFaceTextures,
+    () => getFaceTexture(account.id),
+    () => undefined,
+  );
+  useEffect(() => setFailed(false), [version]);
+  if (faceTex) return <FaceImage url={faceTex} size={size} />;
   if (failed || !account.uuid) {
     let h = 0;
     for (const ch of account.username) h = (h * 31 + ch.charCodeAt(0)) % 360;
@@ -27,7 +71,7 @@ function Avatar({ account, size }: { account: Account; size: number }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={avatarUrl(account.uuid, size * 2)}
+      src={`${avatarUrl(account.uuid, size * 2)}?v=${version}`}
       alt={account.username}
       width={size}
       height={size}
@@ -40,11 +84,13 @@ function Avatar({ account, size }: { account: Account; size: number }) {
 
 export function AccountMenu({
   store,
+  avatarVersion = 0,
   onSelect,
   onRemove,
   onMicrosoftLogin,
 }: {
   store: AccountStore;
+  avatarVersion?: number;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onMicrosoftLogin: () => void;
@@ -88,7 +134,7 @@ export function AccountMenu({
                       : "border-transparent hover:bg-ink-800/70"
                   }`}
                 >
-                  <Avatar account={a} size={26} />
+                  <Avatar account={a} size={26} version={avatarVersion} />
                   <button
                     className="flex-1 truncate text-left text-sm"
                     onClick={() => onSelect(a.id)}
@@ -141,7 +187,7 @@ export function AccountMenu({
         }`}
       >
         {active ? (
-          <Avatar account={active} size={32} />
+          <Avatar account={active} size={32} version={avatarVersion} />
         ) : (
           <span className="grid h-8 w-8 place-items-center rounded-md bg-ink-800 text-ink-600">
             <UserRound size={16} />
