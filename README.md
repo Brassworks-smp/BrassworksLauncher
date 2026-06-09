@@ -2,7 +2,7 @@
 
 # Brassworks Launcher
 
-The official launcher for the Brassworks SMP. Built with Rust and Tauri under the hood, plus a Next.js frontend, it makes installing, managing, and launching our custom modpack as simple as possible.
+The official launcher for the Brassworks SMP. Built with Rust and Tauri under the hood, plus a React (Vite) frontend, it makes installing, managing, and launching our custom modpack as simple as possible.
 
 ---
 
@@ -18,15 +18,33 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 ## Screenshots
 
 <p align="center">
-  <img src="assets/img_2.png" alt="Main Menu" width="60%">
+  <img src="assets/img_3.png" alt="Play menu" width="60%">
+  <br><sub><b>Play menu</b></sub>
 </p>
 
 <p align="center">
-  <img src="assets/img.png" alt="Add Content" width="60%">
+  <img src="assets/img_4.png" alt="Instances" width="60%">
+  <br><sub><b>Instances</b></sub>
 </p>
 
 <p align="center">
-  <img src="assets/img_1.png" alt="Settings" width="60%">
+  <img src="assets/img_5.png" alt="Content" width="60%">
+  <br><sub><b>Content</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/img_6.png" alt="Skins" width="60%">
+  <br><sub><b>Skins</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/img_7.png" alt="CurseForge modpacks" width="60%">
+  <br><sub><b>CurseForge modpacks</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/img_8.png" alt="Light mode" width="60%">
+  <br><sub><b>Light mode</b></sub>
 </p>
 
 </div>
@@ -35,7 +53,7 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 
 ## Development
 
-The project is a Cargo workspace (Rust crates in `crates/` plus the Tauri shell in `frontend/src-tauri/`) with a Next.js frontend in `frontend/`.
+The project is a Cargo workspace (Rust crates in `crates/` plus the Tauri shell in `frontend/src-tauri/`) with a React (Vite) frontend in `frontend/`.
 
 ### Prerequisites
 
@@ -53,7 +71,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-`pnpm tauri dev` starts the Next.js dev server and the Tauri window together; it rebuilds on changes to both the Rust and frontend code.
+`pnpm tauri dev` starts the react and vite dev server and the Tauri window together; it rebuilds on changes to both the Rust and frontend code.
 
 ### Build installers
 
@@ -68,7 +86,4 @@ The output is written to `target/release/bundle/`
 
 ```bash
 cargo check --workspace
-node node_modules/next/dist/bin/next build
 ```
-
-The frontend is built via `node …/next build` rather than `pnpm build` to sidestep a pnpm script-runner quirk that re-runs `install` and fails.
