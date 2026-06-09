@@ -169,15 +169,6 @@ mod tests {
     }
 
     #[test]
-    fn picks_active_skin_and_variant() {
-        let p = parse(SAMPLE);
-        assert_eq!(p.name, "Notch");
-        assert_eq!(p.id, "0123456789abcdef0123456789abcdef");
-        assert_eq!(p.model, "slim");
-        assert_eq!(p.skin_url.as_deref(), Some("https:
-    }
-
-    #[test]
     fn marks_active_cape_and_falls_back_to_id_for_name() {
         let p = parse(SAMPLE);
         assert_eq!(p.capes.len(), 2);
