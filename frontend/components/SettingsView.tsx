@@ -19,15 +19,17 @@ import {
   ScrollText,
   ArrowUpCircle,
   FolderOpen,
+  Check,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { ACCENT_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import type { JavaReport, JavaInstall, LauncherSettings, UpdateInfo } from "@/lib/types";
 import {
   Card,
   Field,
   Select,
-  Slider,
+  MemorySettings,
   Toggle,
   Row,
   ActionButton,
@@ -110,37 +112,22 @@ export function SettingsView({
         {tab === "defaults" && (
           <div className="reveal-down grid grid-cols-2 gap-4">
             <Card title="Default memory" icon={<SlidersHorizontal size={14} />}>
-              <Slider
-                label="Maximum memory (-Xmx)"
-                value={settings.default_max_memory_mb}
-                onChange={(v) =>
-                  patch({
-                    default_max_memory_mb: v,
-                    default_min_memory_mb: Math.min(
-                      settings.default_min_memory_mb,
-                      v,
-                    ),
-                  })
-                }
-              />
-              <Slider
-                label="Minimum memory (-Xms)"
-                value={settings.default_min_memory_mb}
-                min={512}
+              <MemorySettings
                 max={settings.default_max_memory_mb}
-                onChange={(v) =>
+                min={settings.default_min_memory_mb}
+                onChange={(mx, mn) =>
                   patch({
-                    default_min_memory_mb: Math.min(
-                      v,
-                      settings.default_max_memory_mb,
-                    ),
+                    default_max_memory_mb: mx,
+                    default_min_memory_mb: mn,
                   })
                 }
+                note={
+                  <p className="text-xs text-ink-600">
+                    New instances inherit these. Override memory per instance on
+                    its gear.
+                  </p>
+                }
               />
-              <p className="text-xs text-ink-600">
-                New instances inherit these. Override memory per instance on its
-                gear.
-              </p>
             </Card>
 
             <Card title="When the game starts" icon={<Monitor size={14} />}>
@@ -264,12 +251,13 @@ export function SettingsView({
             <Card title="Appearance" icon={<Palette size={14} />}>
               <Field
                 label="Theme"
-                hint="“Match system” follows your OS light/dark setting."
+                hint="“Match system” follows your OS light/dark setting. “Grey” is a softer dark theme."
               >
                 <Select
                   value={
-                    settings.theme === "brass-light" ||
-                    settings.theme === "brass-dark"
+                    ["brass-light", "brass-dark", "brass-grey"].includes(
+                      settings.theme,
+                    )
                       ? settings.theme
                       : "system"
                   }
@@ -278,7 +266,17 @@ export function SettingsView({
                     { value: "system", label: "Match system" },
                     { value: "brass-light", label: "Light" },
                     { value: "brass-dark", label: "Dark" },
+                    { value: "brass-grey", label: "Grey (soft dark)" },
                   ]}
+                />
+              </Field>
+              <Field
+                label="Accent colour"
+                hint="Recolours buttons, sliders and highlights across the app and every theme."
+              >
+                <AccentPicker
+                  value={settings.accent_color}
+                  onChange={(c) => patch({ accent_color: c })}
                 />
               </Field>
               <Toggle
@@ -556,6 +554,41 @@ function UpdatesCard({
         <span className="ml-auto text-[11px] text-ink-600">what&apos;s new</span>
       </ActionButton>
     </Card>
+  );
+}
+
+function AccentPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (c: string | null) => void;
+}) {
+  const swatches: { color: string; key: string; isDefault?: boolean }[] = [
+    { color: DEFAULT_ACCENT, key: "default", isDefault: true },
+    ...ACCENT_COLORS.map((c) => ({ color: c, key: c })),
+  ];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {swatches.map((s) => {
+        const active = s.isDefault ? value === null : value === s.color;
+        return (
+          <button
+            key={s.key}
+            onClick={() => onChange(s.isDefault ? null : s.color)}
+            title={s.isDefault ? "Default (green)" : s.color}
+            style={{ background: s.color }}
+            className={`grid h-6 w-6 place-items-center rounded-md transition hover:scale-110 ${
+              active
+                ? "ring-2 ring-white/80 ring-offset-1 ring-offset-ink-850"
+                : ""
+            }`}
+          >
+            {active && <Check size={12} className="text-ink-950" />}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

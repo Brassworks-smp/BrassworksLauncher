@@ -38,7 +38,7 @@ import {
   Card,
   Field,
   Select,
-  Slider,
+  MemorySettings,
   Toggle,
   Row,
   ActionButton,
@@ -152,9 +152,25 @@ export function InstanceSettingsView({
             <img src={instance.icon} alt="" className="h-9 w-9 rounded-md object-cover" />
           )}
           <div>
-            <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-              {instance.name}
-            </h1>
+            <input
+              defaultValue={instance.name}
+              key={instance.id}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v && v !== instance.name) patch({ name: v });
+                else e.target.value = instance.name;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") {
+                  e.currentTarget.value = instance.name;
+                  e.currentTarget.blur();
+                }
+              }}
+              title="Rename instance"
+              spellCheck={false}
+              className="-mx-1.5 w-full max-w-md rounded-md bg-transparent px-1.5 font-mc text-2xl tracking-wide text-gray-100 outline-none transition hover:bg-ink-800/60 focus:bg-ink-800 focus:ring-1 focus:ring-brass-500/50"
+            />
             <div className="text-xs text-ink-600">
               Instance settings - overrides apply only to this instance.
             </div>
@@ -227,22 +243,13 @@ export function InstanceSettingsView({
               }
             />
             {memOverride && (
-              <>
-                <Slider
-                  label="Maximum memory (-Xmx)"
-                  value={effMax}
-                  onChange={(v) =>
-                    patch({ max_memory_mb: v, min_memory_mb: Math.min(effMin, v) })
-                  }
-                />
-                <Slider
-                  label="Minimum memory (-Xms)"
-                  value={effMin}
-                  min={512}
-                  max={effMax}
-                  onChange={(v) => patch({ min_memory_mb: Math.min(v, effMax) })}
-                />
-              </>
+              <MemorySettings
+                max={effMax}
+                min={effMin}
+                onChange={(mx, mn) =>
+                  patch({ max_memory_mb: mx, min_memory_mb: mn })
+                }
+              />
             )}
           </Card>
 

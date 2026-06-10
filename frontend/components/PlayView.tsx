@@ -143,13 +143,7 @@ export function PlayView({
             className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
           />
         )}
-        <div
-          className="play-hero-overlay pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(80% 70% at 50% 0%, rgba(31,191,99,0.16), transparent 60%), linear-gradient(180deg, transparent, rgba(8,8,8,0.85))",
-          }}
-        />
+        <div className="play-hero-overlay pointer-events-none absolute inset-0" />
 
         <div className="relative z-10 flex h-full w-full flex-col p-7">
           <div>

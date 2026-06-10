@@ -43,6 +43,21 @@ const CURSEFORGE_ACCENT_LIGHT: CSSProperties = {
   ["--color-brass-700" as string]: "#9a3412",
 };
 
+const MODRINTH_ACCENT_DARK: CSSProperties = {
+  ["--color-brass-300" as string]: "#5fe393",
+  ["--color-brass-400" as string]: "#34d27a",
+  ["--color-brass-500" as string]: "#1fbf63",
+  ["--color-brass-600" as string]: "#18a153",
+  ["--color-brass-700" as string]: "#14803f",
+};
+const MODRINTH_ACCENT_LIGHT: CSSProperties = {
+  ["--color-brass-300" as string]: "#15803d",
+  ["--color-brass-400" as string]: "#15803d",
+  ["--color-brass-500" as string]: "#1bbf5f",
+  ["--color-brass-600" as string]: "#15a34a",
+  ["--color-brass-700" as string]: "#0e7a37",
+};
+
 const dpKey = (source?: string | null, projectId?: string | null) =>
   `${source}:${projectId}`;
 
@@ -135,7 +150,10 @@ export function DatapacksModal({
     setSelected(null);
   };
 
-  const accentSource = selected ? selected.source : source;
+  // Only the Browse flow gets a source-branded accent (Modrinth green /
+  // CurseForge orange). The Installed tab keeps the global accent.
+  const accentSource =
+    tab === "browse" ? (selected ? selected.source : source) : null;
   const isLight =
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("theme-light");
@@ -144,7 +162,11 @@ export function DatapacksModal({
       ? isLight
         ? CURSEFORGE_ACCENT_LIGHT
         : CURSEFORGE_ACCENT_DARK
-      : undefined;
+      : accentSource === "modrinth"
+        ? isLight
+          ? MODRINTH_ACCENT_LIGHT
+          : MODRINTH_ACCENT_DARK
+        : undefined;
 
   const selectedInstalled = selected
     ? installedByKey.get(dpKey(selected.source, selected.project_id))

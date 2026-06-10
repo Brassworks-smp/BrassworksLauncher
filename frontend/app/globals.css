@@ -118,6 +118,23 @@
     color: var(--color-fg);
   }
 
+  :root.theme-grey {
+    --color-fg: #e7e9ec;
+    --color-ink-950: #181a1d;
+    --color-ink-900: #202327; /* body background */
+    --color-ink-850: #272a2f;
+    --color-ink-800: #2e3237;
+    --color-ink-700: #3a3f45;
+    --color-ink-600: #9ba1a8; /* muted text */
+    --color-edge: rgba(255, 255, 255, 0.09);
+  }
+  :root.theme-grey body {
+    color: var(--color-fg);
+  }
+  :root.theme-grey ::-webkit-scrollbar-thumb:hover {
+    background: #4a4f56;
+  }
+
   /* ---- Reduced motion: drop decorative animations/transitions, keep spinners. */
   :root.reduce-motion *:not(.animate-spin),
   :root.reduce-motion *:not(.animate-spin)::before,
@@ -196,6 +213,29 @@
   .panel {
     background: var(--color-ink-800);
     border: 1px solid var(--color-edge);
+  }
+
+  /* Play hero overlay: an accent-tinted glow up top fading into the surface
+     colour at the bottom. Both stops are theme/accent-driven (the green tint
+     follows the global accent; the fade follows the surface), so light, dark and
+     grey themes all read correctly with no per-theme override. */
+  .play-hero-overlay {
+    /* Fallback for webviews without color-mix() (kept as the first declaration
+       so they ignore the accent-aware one below and use this). */
+    background:
+      radial-gradient(80% 70% at 50% 0%, rgba(31, 191, 99, 0.16), transparent 60%),
+      linear-gradient(180deg, transparent, rgba(8, 8, 8, 0.85));
+    background:
+      radial-gradient(
+        80% 70% at 50% 0%,
+        color-mix(in srgb, var(--color-brass-500) 16%, transparent),
+        transparent 60%
+      ),
+      linear-gradient(
+        180deg,
+        transparent,
+        color-mix(in srgb, var(--color-ink-900) 85%, transparent)
+      );
   }
 
   /* Re-enable text selection (the global `*` rule disables it app-wide) so
@@ -607,6 +647,19 @@ a:focus-visible,
 .markdown th { border: 1px solid var(--color-edge); padding: 0.4em 0.7em; }
 .markdown tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
 
+/* Hide the native number-input spinner (its arrows are an unstyleable
+   dark-on-dark in our themes). Inputs marked `.no-spin` supply their own themed
+   stepper buttons instead. */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* ---- Themed range slider (brass) ---- */
 .brass-range {
   -webkit-appearance: none;
@@ -688,11 +741,6 @@ a:focus-visible,
     linear-gradient(90deg, rgba(20, 20, 20, 0.05) 3px, transparent 3px),
     linear-gradient(rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px),
     linear-gradient(90deg, rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px);
-}
-:root.theme-light .play-hero-overlay {
-  background:
-    radial-gradient(80% 70% at 50% 0%, rgba(31, 191, 99, 0.18), transparent 60%),
-    linear-gradient(180deg, transparent, rgba(250, 249, 247, 0.85)) !important;
 }
 
 /* Rendered markdown uses fixed near-white colours; darken for light mode. */

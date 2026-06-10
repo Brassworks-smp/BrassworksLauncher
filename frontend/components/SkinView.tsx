@@ -38,6 +38,8 @@ const bust = (u: string) => `${u}${u.includes("?") ? "&" : "?"}v=${Date.now()}`;
 
 const BTN =
   "flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PRIMARY =
+  "brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50";
 
 function SkinCanvas({
   skin,
@@ -69,6 +71,7 @@ function SkinCanvas({
   capeRef.current = cape;
   modelRef.current = model;
   const [loaded, setLoaded] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +100,7 @@ function SkinCanvas({
         }
       }
       viewerRef.current = viewer;
+      if (alive) setReady(true);
       const sk = skinRef.current;
       if (sk)
         viewer
@@ -126,19 +130,26 @@ function SkinCanvas({
 
   useEffect(() => {
     const v = viewerRef.current;
-    if (v && skin) v.loadSkin(skin, { model: model === "slim" ? "slim" : "default" }).catch(() => {});
-  }, [skin, model]);
+    if (!v) return;
+    if (skin)
+      v.loadSkin(skin, { model: model === "slim" ? "slim" : "default" })
+        .then(() => setLoaded(true))
+        .catch(() => {});
+  }, [skin, model, ready]);
 
   useEffect(() => {
     const v = viewerRef.current;
     if (!v) return;
-    if (cape) v.loadCape(cape).catch(() => {});
-    else
+    if (cape) {
+      v.loadCape(cape).catch(() => {});
+    } else {
       try {
-        v.loadCape(null);
+        if (typeof v.resetCape === "function") v.resetCape();
+        else v.loadCape(null);
       } catch {
       }
-  }, [cape]);
+    }
+  }, [cape, ready]);
 
   useEffect(() => {
     targetRef.current = flipped ? BASE_YAW + Math.PI : BASE_YAW;
@@ -357,7 +368,7 @@ function Section({
         {title}
       </button>
       {open && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,162px)] justify-start gap-3">
           {children}
         </div>
       )}
@@ -397,6 +408,7 @@ export function SkinView({
   const [savedOpen, setSavedOpen] = useState(true);
   const [defaultOpen, setDefaultOpen] = useState(true);
   const [applyTarget, setApplyTarget] = useState<ApplyTarget | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const activeCape = profile?.capes.find((c) => c.active)?.url ?? null;
@@ -433,22 +445,49 @@ export function SkinView({
 
   useEffect(refresh, [refresh]);
 
-  const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !accountId) return;
+  const importFiles = async (files: File[]) => {
+    if (!accountId) return;
+    const imgs = files.filter(
+      (f) => /\.png$/i.test(f.name) || f.type === "image/png",
+    );
+    if (imgs.length === 0) return;
     setBusy(true);
     try {
-      const buf = await file.arrayBuffer();
-      const saved = await api.uploadSkin(
-        accountId,
-        file.name.replace(/\.[^.]+$/, ""),
-        Array.from(new Uint8Array(buf)),
-        "classic",
+      for (const f of imgs) {
+        const buf = await f.arrayBuffer();
+        await api.importSkin(
+          accountId,
+          f.name.replace(/\.[^.]+$/, ""),
+          Array.from(new Uint8Array(buf)),
+          "classic",
+        );
+      }
+      toast(
+        imgs.length === 1 ? "Skin added" : `${imgs.length} skins added`,
+        "success",
       );
-      toast("Skin added & applied", "success");
-      api.setFaceTexture(accountId, bust(api.fileSrc(saved.file)));
-      setSelSaved(saved.id);
+      refresh();
+    } catch (e2) {
+      setError(String(e2));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    await importFiles(files);
+  };
+
+  const applySaved = async (s: SavedSkin) => {
+    if (!accountId) return;
+    setBusy(true);
+    try {
+      await api.applySavedSkin(accountId, s.id);
+      api.setFaceTexture(accountId, bust(api.fileSrc(s.file)));
+      setSelSaved(s.id);
+      toast("Applied skin", "success");
       onSkinApplied?.();
       refresh();
     } catch (e2) {
@@ -480,7 +519,14 @@ export function SkinView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <input ref={fileInput} type="file" accept=".png" onChange={onPickFile} className="hidden" />
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".png"
+        multiple
+        onChange={onPickFile}
+        className="hidden"
+      />
       <h1 className="pb-4 font-mc text-2xl tracking-wide text-gray-100">Skin selector</h1>
 
       {error && (
@@ -524,15 +570,34 @@ export function SkinView({
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 overflow-y-auto pr-1">
+        <div
+          className={`min-w-0 flex-1 overflow-y-auto rounded-xl pr-1 transition ${
+            dragOver ? "ring-2 ring-brass-500/50" : ""
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!dragOver) setDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node))
+              setDragOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            void importFiles(Array.from(e.dataTransfer.files));
+          }}
+        >
           <Section title="Your skins" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
             <button
               onClick={() => fileInput.current?.click()}
-              className="flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300"
+              className={`flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
+                dragOver ? "border-brass-500/60 text-brass-300" : "border-edge"
+              }`}
             >
               {busy ? <Loader2 size={22} className="animate-spin" /> : <Plus size={22} />}
-              <span className="text-sm font-medium">Add skin</span>
-              <span className="text-[11px]">Drag and drop</span>
+              <span className="text-sm font-medium">Add skins</span>
+              <span className="text-[11px]">Click or drag &amp; drop PNGs</span>
             </button>
 
             {library.map((s) => (
@@ -560,6 +625,29 @@ export function SkinView({
                   className="absolute left-1.5 top-1.5 z-20 grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
                 >
                   <Trash2 size={12} />
+                </span>
+                {}
+                <span className="absolute inset-x-0 bottom-0 z-20 flex justify-center gap-1.5 bg-gradient-to-t from-ink-950/95 to-transparent pb-2 pt-7 opacity-0 transition group-hover:opacity-100">
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setApplyTarget({ kind: "saved", skin: s });
+                    }}
+                    className="flex items-center gap-1 rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
+                  >
+                    <Pencil size={11} /> Edit
+                  </span>
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void applySaved(s);
+                    }}
+                    className="flex items-center gap-1 rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
+                  >
+                    <Check size={11} /> Apply
+                  </span>
                 </span>
               </Tile>
             ))}
@@ -595,6 +683,10 @@ export function SkinView({
             onSkinApplied?.();
             refresh();
           }}
+          onSaved={() => {
+            setApplyTarget(null);
+            refresh();
+          }}
           onError={setError}
         />
       )}
@@ -609,6 +701,7 @@ function ApplySkinModal({
   capes,
   onClose,
   onApplied,
+  onSaved,
   onError,
 }: {
   accountId: string;
@@ -617,12 +710,14 @@ function ApplySkinModal({
   capes: SkinCape[];
   onClose: () => void;
   onApplied: (selectedId?: string | null) => void;
+  onSaved: () => void;
   onError: (e: string) => void;
 }) {
   const savedSkin = target.kind === "saved" ? target.skin : null;
   const preset = target.kind === "preset" ? target.preset : null;
   const capeOnly = target.kind === "cape";
 
+  const [name, setName] = useState(savedSkin?.name ?? "");
   const [model, setModel] = useState(
     (savedSkin?.model ?? preset?.model ?? "classic") === "slim" ? "slim" : "classic",
   );
@@ -654,14 +749,37 @@ function ApplySkinModal({
     setPreviewUrl(URL.createObjectURL(file));
   };
 
+  const persistSavedEdits = async (id: string) => {
+    if (newBytes) await api.replaceSkinTexture(accountId, id, newBytes);
+    await api.updateSkin(accountId, id, model, capeId);
+    if (savedSkin && name.trim() && name.trim() !== savedSkin.name)
+      await api.renameSkin(accountId, id, name.trim());
+  };
+
+  const saveOnly = async () => {
+    if (!savedSkin) return;
+    setSaving(true);
+    try {
+      await persistSavedEdits(savedSkin.id);
+      toast("Saved changes", "success");
+      onSaved();
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const apply = async () => {
     setSaving(true);
     try {
       if (savedSkin) {
-        if (newBytes) await api.replaceSkinTexture(accountId, savedSkin.id, newBytes);
-        await api.updateSkin(accountId, savedSkin.id, model, capeId);
+        await persistSavedEdits(savedSkin.id);
         await api.applySavedSkin(accountId, savedSkin.id);
-        api.setFaceTexture(accountId, bust(api.fileSrc(savedSkin.file)));
+        api.setFaceTexture(
+          accountId,
+          newBytes && previewUrl ? previewUrl : bust(api.fileSrc(savedSkin.file)),
+        );
         toast("Applied skin and cape", "success");
         onApplied(savedSkin.id);
       } else if (preset) {
@@ -685,7 +803,7 @@ function ApplySkinModal({
     ? "Change cape"
     : preset
       ? `Apply ${preset.name}?`
-      : `Apply ${savedSkin?.name ?? "skin"}?`;
+      : "Edit skin";
   const applyLabel = capeOnly ? "Save cape" : "Apply";
 
   return (
@@ -709,7 +827,9 @@ function ApplySkinModal({
         <div className="flex min-h-0 flex-1 gap-5 overflow-y-auto p-5">
           <div className="flex w-[230px] shrink-0 flex-col items-center">
             <div className="grid flex-1 place-items-center">
+              {}
               <SkinCanvas
+                key={`${previewUrl ?? ""}|${capeUrl ?? (capeOnly ? activeCape : null) ?? ""}|${model}`}
                 skin={previewUrl}
                 cape={capeUrl ?? (capeOnly ? activeCape : null)}
                 model={model}
@@ -727,6 +847,18 @@ function ApplySkinModal({
 
           <div className="flex min-w-0 flex-1 flex-col gap-5">
             <input ref={fileInput} type="file" accept=".png" onChange={replace} className="hidden" />
+            {savedSkin && (
+              <div>
+                <div className="mb-2 font-mc text-sm text-gray-100">Name</div>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Skin name"
+                  spellCheck={false}
+                  className="w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-edge transition focus:ring-brass-500/60"
+                />
+              </div>
+            )}
             {savedSkin && (
               <div>
                 <div className="mb-2 font-mc text-sm text-gray-100">Texture</div>
@@ -824,8 +956,18 @@ function ApplySkinModal({
           <button onClick={close} className={BTN}>
             <X size={15} /> Cancel
           </button>
-          <button onClick={apply} disabled={saving} className={BTN}>
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {savedSkin && (
+            <button onClick={saveOnly} disabled={saving} className={BTN}>
+              {saving ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Save size={15} />
+              )}
+              Save
+            </button>
+          )}
+          <button onClick={apply} disabled={saving} className={BTN_PRIMARY}>
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
             {applyLabel}
           </button>
         </div>

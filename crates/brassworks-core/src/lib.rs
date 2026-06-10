@@ -301,7 +301,8 @@ impl Launcher {
     }
 
     pub fn create_packwiz_instance(&self, name: &str, url: &str) -> Result<Instance> {
-        let pack = packwiz::Installer::new().fetch_pack(url)?;
+        let installer = packwiz::Installer::new();
+        let pack = installer.fetch_pack(url)?;
         let mc = pack
             .versions
             .minecraft
@@ -325,7 +326,7 @@ impl Launcher {
             name.to_string()
         };
         let id = mgr.unique_id(if display.is_empty() { "modpack" } else { &display });
-        let inst = Instance::new_custom(
+        let mut inst = Instance::new_custom(
             &id,
             display,
             mc,
@@ -335,6 +336,9 @@ impl Launcher {
                 url: url.to_string(),
             },
         );
+        // Adopt the pack's root icon.png (next to pack.toml) as the instance icon,
+        // if it ships one. Best-effort — falls back to the default icon otherwise.
+        inst.icon = installer.find_pack_icon(url);
         mgr.create(inst)
     }
 
@@ -673,24 +677,45 @@ impl Launcher {
         self.save_skin_library(&lib)
     }
 
+    pub fn rename_skin(&self, account_id: &str, skin_id: &str, name: &str) -> Result<()> {
+        let mut lib = self.skin_library();
+        let skin = lib
+            .account_mut(account_id)
+            .skins
+            .iter_mut()
+            .find(|s| s.id == skin_id)
+            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            skin.name = trimmed.to_string();
+        }
+        self.save_skin_library(&lib)
+    }
+
     pub fn replace_skin_texture(
         &self,
         account_id: &str,
         skin_id: &str,
         bytes: &[u8],
     ) -> Result<()> {
+        let (_, new_path) = self.write_skin_file(bytes)?;
         let mut lib = self.skin_library();
-        let skin = lib
-            .account_mut(account_id)
-            .skins
-            .iter()
-            .find(|s| s.id == skin_id)
-            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
-        std::fs::write(&skin.file, bytes)
-            .map_err(|e| CoreError::io(std::path::Path::new(&skin.file), e))
+        let old_path = {
+            let skin = lib
+                .account_mut(account_id)
+                .skins
+                .iter_mut()
+                .find(|s| s.id == skin_id)
+                .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+            std::mem::replace(&mut skin.file, new_path.clone())
+        };
+        self.save_skin_library(&lib)?;
+        if old_path != new_path {
+            let _ = std::fs::remove_file(&old_path);
+        }
+        Ok(())
     }
 
-    /// Mark `skin_id` as the account's currently-applied skin.
     fn set_selected_skin(&self, account_id: &str, skin_id: Option<&str>) -> Result<()> {
         let mut lib = self.skin_library();
         lib.account_mut(account_id).selected = skin_id.map(|s| s.to_string());

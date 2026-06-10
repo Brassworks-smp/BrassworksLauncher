@@ -6,9 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Star } from "lucide-react";
+import { Loader2, Star, ChevronUp, ChevronDown } from "lucide-react";
 
-/** Shared themed form/layout primitives used by the settings screens. */
 export function useClosable(onClose: () => void, duration = 190) {
   const [closing, setClosing] = useState(false);
   const closedRef = useRef(false);
@@ -24,31 +23,78 @@ export function useClosable(onClose: () => void, duration = 190) {
 export const inputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
 
-export function Slider({
+const clampNum = (n: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, n));
+
+function MemSlider({
   label,
   value,
   onChange,
-  min = 1024,
-  max = 16384,
+  min,
+  max,
   step = 512,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
-  min?: number;
-  max?: number;
+  min: number;
+  max: number;
   step?: number;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Math.round(Number(draft));
+    if (Number.isFinite(n) && n > 0) onChange(clampNum(n, min, max));
+    else setDraft(String(value));
+  };
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   const fill = `calc(${pct / 100} * (100% - 18px) + 9px)`;
   const knob = `calc(${pct / 100} * (100% - 18px))`;
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between text-sm">
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
         <span className="text-ink-600">{label}</span>
-        <span className="rounded-md bg-brass-500/10 px-2 py-0.5 font-mc text-xs tabular-nums text-brass-300">
-          {(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)} GB
-        </span>
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex items-center">
+            <input
+              type="number"
+              min={min}
+              max={max}
+              step={step}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              className="no-spin w-24 rounded-md bg-ink-950/70 py-1 pl-2.5 pr-6 text-left font-mc text-xs tabular-nums text-brass-300 outline-none ring-1 ring-edge transition focus:ring-brass-500/60"
+            />
+            <div className="absolute right-1 flex flex-col">
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Increase"
+                onClick={() => onChange(clampNum(value + step, min, max))}
+                className="-my-px text-ink-600 transition hover:text-brass-300"
+              >
+                <ChevronUp size={11} />
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Decrease"
+                onClick={() => onChange(clampNum(value - step, min, max))}
+                className="-my-px text-ink-600 transition hover:text-brass-300"
+              >
+                <ChevronDown size={11} />
+              </button>
+            </div>
+          </div>
+          <span className="font-mc text-[11px] text-ink-600">
+            MB · {(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)} GB
+          </span>
+        </div>
       </div>
       <div className="group relative flex h-[18px] items-center">
         <div className="absolute inset-x-0 h-2 overflow-hidden rounded-full border border-edge bg-ink-800">
@@ -75,12 +121,54 @@ export function Slider({
   );
 }
 
-/**
- * Segmented tab/filter control with a highlight pill that slides from the old
- * selection to the new one. The pill is an absolutely-positioned element whose
- * left/width track the active button (measured via layout effect + a resize
- * observer); the slide is suppressed on first paint so it doesn't fly in.
- */
+export function MemorySettings({
+  max,
+  min,
+  onChange,
+  note,
+}: {
+  max: number;
+  min: number;
+  onChange: (max: number, min: number) => void;
+  note?: React.ReactNode;
+}) {
+  const HARD_CAP = 65536;
+  const SOFT_CAP = 16384;
+  const [allowHigh, setAllowHigh] = useState(max > SOFT_CAP || min > SOFT_CAP);
+  const high = allowHigh || max > SOFT_CAP || min > SOFT_CAP;
+  const cap = high ? HARD_CAP : SOFT_CAP;
+  return (
+    <>
+      <Toggle
+        label="Allow more than 16 GB"
+        description="Raise the cap to 64 GB for high-RAM machines."
+        checked={high}
+        onChange={(on) => {
+          setAllowHigh(on);
+          if (!on)
+            onChange(Math.min(max, SOFT_CAP), Math.min(min, SOFT_CAP));
+        }}
+      />
+      <MemSlider
+        label="Maximum memory (-Xmx)"
+        value={max}
+        min={1024}
+        max={cap}
+        onChange={(v) => onChange(v, Math.min(min, v))}
+      />
+      <MemSlider
+        label="Minimum memory (-Xms)"
+        value={min}
+        min={512}
+        max={Math.min(max, cap)}
+        onChange={(v) => onChange(max, Math.min(v, max))}
+      />
+      {note}
+    </>
+  );
+}
+
+
 export function SegmentedTabs({
   value,
   onChange,
@@ -167,11 +255,7 @@ export function SegmentedTabs({
   );
 }
 
-/**
- * Smoothly animates its children's height open/closed using the
- * grid-template-rows 0fr⇄1fr technique (no fixed height needed). Keep the body
- * mounted across toggles so both directions animate.
- */
+
 export function Collapse({
   open,
   children,
@@ -370,11 +454,7 @@ export function Spinner() {
   return <Loader2 size={15} className="animate-spin" />;
 }
 
-/**
- * Renders a large list/grid in batches (one per frame) so opening a tab with
- * hundreds of items never freezes the UI. `resetKey` re-starts the ramp when the
- * filter/scope changes. Returns the visible slice and whether more are pending.
- */
+
 export function useProgressive<T>(
   items: T[],
   batch = 48,
@@ -393,16 +473,11 @@ export function useProgressive<T>(
   return { shown, hasMore: limit < items.length };
 }
 
-/** A shimmering placeholder block. */
 export function Skeleton({ className }: { className?: string }) {
   return <div className={`skeleton rounded-md ${className ?? ""}`} />;
 }
 
-/**
- * Returns false on first paint, then true a couple of frames later. Lets a heavy
- * view render a cheap skeleton instantly (so the tab opens with zero lag) and
- * defer the expensive content until after the click/transition has painted.
- */
+
 export function useDeferredReady(): boolean {
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -418,7 +493,6 @@ export function useDeferredReady(): boolean {
   return ready;
 }
 
-/** Star/favourite toggle shared by worlds, servers and screenshots. */
 export function StarButton({
   starred,
   onClick,

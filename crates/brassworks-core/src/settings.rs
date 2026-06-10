@@ -10,6 +10,8 @@ pub struct LauncherSettings {
     pub java_policy: String,
     pub keep_open: bool,
     pub theme: String,
+    #[serde(default)]
+    pub accent_color: Option<String>,
     pub pack_url: Option<String>,
     pub dev_mode: bool,
     pub curseforge_api_key: Option<String>,
@@ -61,6 +63,7 @@ impl Default for LauncherSettings {
             java_policy: "auto".to_string(),
             keep_open: true,
             theme: "system".to_string(),
+            accent_color: None,
             pack_url: None,
             dev_mode: false,
             curseforge_api_key: None,

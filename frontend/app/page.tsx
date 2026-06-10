@@ -37,6 +37,7 @@ import { ChangelogModal } from "@/components/ChangelogModal";
 import { RestartPrompt } from "@/components/RestartPrompt";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
+import { applyAccent } from "@/lib/colors";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
   AccountStore,
@@ -52,7 +53,17 @@ import type {
 const PLAYERCOUNT_INTERVAL = 30_000;
 const NEWS_INTERVAL = 300_000;
 
-type Phase = "idle" | "working" | "running" | "updating";
+const withId = (set: Set<string>, id: string) => {
+  const next = new Set(set);
+  next.add(id);
+  return next;
+};
+const withoutId = (set: Set<string>, id: string) => {
+  if (!set.has(id)) return set;
+  const next = new Set(set);
+  next.delete(id);
+  return next;
+};
 
 export default function Home() {
   const [view, setView] = useState<View>("play");
@@ -65,13 +76,15 @@ export default function Home() {
     selected: null,
   });
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [progress, setProgress] = useState<LaunchProgress | null>(null);
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
+  const [workingIds, setWorkingIds] = useState<Set<string>>(new Set());
+  const [maintainingIds, setMaintainingIds] = useState<Set<string>>(new Set());
+  const [progressById, setProgressById] = useState<
+    Record<string, LaunchProgress>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [msAuth, setMsAuth] = useState<MsAuthState | null>(null);
 
-  const [maintaining, setMaintaining] = useState(false);
   const [logUpload, setLogUpload] = useState<LogUpload | null>(null);
   const [uploadingLog, setUploadingLog] = useState(false);
   const [logView, setLogView] = useState<boolean | null>(null);
@@ -127,6 +140,7 @@ export default function Home() {
     const apply = () => {
       const light = theme === "brass-light" || (theme === "system" && mq.matches);
       root.classList.toggle("theme-light", light);
+      root.classList.toggle("theme-grey", !light && theme === "brass-grey");
     };
     apply();
     if (theme === "system") {
@@ -134,6 +148,10 @@ export default function Home() {
       return () => mq.removeEventListener("change", apply);
     }
   }, [theme, settings?.reduce_motion]);
+
+  useEffect(() => {
+    applyAccent(settings?.accent_color ?? null);
+  }, [settings?.accent_color]);
 
   const refreshInstances = useCallback(async (): Promise<Instance[]> => {
     const list = await api.getInstances();
@@ -145,8 +163,6 @@ export default function Home() {
     async (id: string) => {
       setSelectedId(id);
       setModStatus(null);
-      setProgress(null);
-      setPhase((prev) => (prev === "running" ? prev : "idle"));
       api.setActiveInstance(id).catch(() => {});
       api.modpackStatus(id).then(setModStatus).catch(() => {});
       setSettings((s) => (s ? { ...s, selected_instance: id } : s));
@@ -176,8 +192,7 @@ export default function Home() {
           list[0]?.id ||
           null;
         setSelectedId(sel);
-        if (running.length) setRunningId(running[0]);
-        if (sel && running.includes(sel)) setPhase("running");
+        if (running.length) setRunningIds(new Set(running));
 
         let next = s;
         if (ver && s.last_version !== ver) {
@@ -294,11 +309,17 @@ export default function Home() {
     if (!api.isTauri()) return;
     const unlisteners = [
       api.onLaunchProgress((p) => {
-        if (p.instance_id === selectedRef.current) setProgress(p);
+        setProgressById((m) => ({ ...m, [p.instance_id]: p }));
       }),
       api.onLaunchStarted((id) => {
-        setRunningId(id);
-        if (id === selectedRef.current) setPhase("running");
+        setRunningIds((s) => withId(s, id));
+        setWorkingIds((s) => withoutId(s, id));
+        setProgressById((m) => {
+          if (!(id in m)) return m;
+          const next = { ...m };
+          delete next[id];
+          return next;
+        });
         const s = settingsRef.current;
         if (s?.console_on_launch) setLogView(true);
         const behavior = s?.launch_behavior ?? "keep";
@@ -309,12 +330,18 @@ export default function Home() {
         }
       }),
       api.onLaunchExited((info) => {
-        setRunningId((cur) => (cur === info.instance_id ? null : cur));
-        if (info.instance_id === selectedRef.current) {
-          setPhase("idle");
-          setProgress(null);
+        const id = info.instance_id;
+        setRunningIds((s) => withoutId(s, id));
+        setWorkingIds((s) => withoutId(s, id));
+        setProgressById((m) => {
+          if (!(id in m)) return m;
+          const next = { ...m };
+          delete next[id];
+          return next;
+        });
+        if (id === selectedRef.current) {
           if (info.error) setError(info.error);
-          api.modpackStatus(info.instance_id).then(setModStatus).catch(() => {});
+          api.modpackStatus(id).then(setModStatus).catch(() => {});
         }
         api.getInstances().then(setInstances).catch(() => {});
 
@@ -338,21 +365,25 @@ export default function Home() {
     if (!api.isTauri()) return;
     const unlisteners = [
       api.onModpackProgress((p) => {
-        if (p.instance_id !== selectedRef.current) return;
-        setMaintaining(true);
-        setProgress(p);
+        setMaintainingIds((s) => withId(s, p.instance_id));
+        setProgressById((m) => ({ ...m, [p.instance_id]: p }));
       }),
       api.onModpackDone((d) => {
-        if (d.instance_id !== selectedRef.current) return;
-        setMaintaining(false);
-        setProgress(null);
+        const id = d.instance_id;
+        setMaintainingIds((s) => withoutId(s, id));
+        setProgressById((m) => {
+          if (!(id in m)) return m;
+          const next = { ...m };
+          delete next[id];
+          return next;
+        });
         if (d.error) {
-          setError(d.error);
+          if (id === selectedRef.current) setError(d.error);
           toast("Modpack update failed", "error");
         } else if (!d.cancelled) {
           toast("Modpack is up to date", "success");
         }
-        refreshModStatus();
+        if (id === selectedRef.current) refreshModStatus();
       }),
     ];
     return () => {
@@ -429,28 +460,36 @@ export default function Home() {
       if (!target) return;
       if (target !== selectedId) await selectInstance(target);
       setError(null);
-      setProgress(null);
-      setPhase("working");
+      setProgressById((m) => {
+        if (!(target in m)) return m;
+        const next = { ...m };
+        delete next[target];
+        return next;
+      });
+      setWorkingIds((s) => withId(s, target));
       setView("play");
       try {
         await api.launch(target, quickPlay);
       } catch (e) {
         setError(String(e));
-        setPhase("idle");
+        setWorkingIds((s) => withoutId(s, target));
       }
     },
     [selectedId, selectInstance],
   );
 
   const onStop = useCallback(async () => {
-    const target = runningId ?? selectedId;
+    const target =
+      selectedId && runningIds.has(selectedId)
+        ? selectedId
+        : Array.from(runningIds)[0] ?? selectedId;
     if (!target) return;
     try {
       await api.stop(target);
     } catch (e) {
       setError(String(e));
     }
-  }, [runningId, selectedId]);
+  }, [runningIds, selectedId]);
 
   const onCancel = useCallback(async () => {
     if (!selectedId) return;
@@ -504,7 +543,12 @@ export default function Home() {
 
   const refreshAccounts = (s: AccountStore) => setAccounts(s);
   const canPlay = accounts.accounts.length > 0;
-  const running = runningId !== null && runningId === selectedId;
+  const running = !!selectedId && runningIds.has(selectedId);
+  const working = !!selectedId && workingIds.has(selectedId);
+  const maintaining = !!selectedId && maintainingIds.has(selectedId);
+  const progress = selectedId ? progressById[selectedId] ?? null : null;
+  const gearMaintaining = !!gearId && maintainingIds.has(gearId);
+  const gearProgress = gearId ? progressById[gearId] ?? null : null;
   const locked = instance?.modpack_locked ?? true;
   const managed = instance ? instance.pack.kind !== "none" : false;
 
@@ -564,13 +608,13 @@ export default function Home() {
       },
       {
         id: "cycle-theme",
-        label: "Switch theme (system / light / dark)",
+        label: "Switch theme (system / light / dark / grey)",
         group: "Actions",
         icon: <SunMoon size={14} />,
-        keywords: "appearance dark light mode",
+        keywords: "appearance dark light grey gray mode",
         run: () => {
           if (!settings) return;
-          const order = ["system", "brass-light", "brass-dark"];
+          const order = ["system", "brass-light", "brass-dark", "brass-grey"];
           const next = order[(order.indexOf(settings.theme) + 1) % order.length];
           const s = { ...settings, theme: next };
           setSettings(s);
@@ -602,7 +646,7 @@ export default function Home() {
         <Sidebar
           view={view}
           onChange={setView}
-          running={runningId !== null}
+          running={runningIds.size > 0}
           onStop={onStop}
           onViewLogs={setLogView}
           onOpenPalette={() => setPaletteOpen(true)}
@@ -653,7 +697,9 @@ export default function Home() {
               }}
               onSaveInstance={onSaveInstance}
               selectedId={selectedId}
-              runningId={runningId}
+              runningIds={runningIds}
+              maintainingIds={maintainingIds}
+              workingIds={workingIds}
               installingId={installingInstanceId}
               onCancelInstall={() => api.cancelInstall().catch(() => {})}
               onSelect={(id) => {
@@ -672,7 +718,7 @@ export default function Home() {
           {view === "play" && (
             <PlayView
               instance={instance}
-              busy={phase === "working" || maintaining}
+              busy={working || maintaining}
               running={running}
               progress={progress}
               canPlay={canPlay}
@@ -749,8 +795,8 @@ export default function Home() {
               instance={gearInstance}
               settings={settings}
               modStatus={gearId === selectedId ? modStatus : null}
-              maintaining={maintaining && gearId === selectedId}
-              progress={gearId === selectedId ? progress : null}
+              maintaining={gearMaintaining}
+              progress={gearProgress}
               onBack={() => setView("instances")}
               onSaveInstance={onSaveInstance}
               onDeleted={(id) => {

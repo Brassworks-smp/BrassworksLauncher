@@ -350,7 +350,14 @@ pub fn launch_instance(
     jvm.extend(game.jvm_args.drain(..));
     game.jvm_args = jvm;
 
-    let child = game.command().spawn().map_err(|e| {
+    let mut command = game.command();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let child = command.spawn().map_err(|e| {
         CoreError::Launch(format!("failed to spawn game process: {e}"))
     })?;
 

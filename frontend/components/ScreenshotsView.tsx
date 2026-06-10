@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -22,6 +23,107 @@ function fmtDate(ms: number): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+const thumbCache = new Map<string, string>();
+
+const MAX_CONCURRENT_THUMBS = 2;
+let activeThumbs = 0;
+const thumbQueue: (() => void)[] = [];
+function pumpThumbs() {
+  while (activeThumbs < MAX_CONCURRENT_THUMBS && thumbQueue.length > 0) {
+    const job = thumbQueue.shift()!;
+    activeThumbs++;
+    job();
+  }
+}
+function queuedThumb(path: string, large: boolean): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const job = () => {
+      api
+        .screenshotThumb(path, large)
+        .then(resolve, reject)
+        .finally(() => {
+          activeThumbs--;
+          pumpThumbs();
+        });
+    };
+    // The lightbox preview (large) is user-initiated — jump the grid queue.
+    if (large) thumbQueue.unshift(job);
+    else thumbQueue.push(job);
+    pumpThumbs();
+  });
+}
+
+type ThumbState =
+  | { status: "loading"; src: null }
+  | { status: "ready"; src: string }
+  | { status: "error"; src: null };
+
+function useThumb(path: string, large: boolean): ThumbState {
+  const key = `${path}|${large ? "l" : "s"}`;
+  const [state, setState] = useState<ThumbState>(() => {
+    const c = thumbCache.get(key);
+    return c ? { status: "ready", src: c } : { status: "loading", src: null };
+  });
+  useEffect(() => {
+    const cached = thumbCache.get(key);
+    if (cached) {
+      setState({ status: "ready", src: cached });
+      return;
+    }
+    if (!api.isTauri()) {
+      setState({ status: "ready", src: api.fileSrc(path) });
+      return;
+    }
+    let alive = true;
+    setState({ status: "loading", src: null });
+    queuedThumb(path, large)
+      .then((p) => {
+        const s = api.fileSrc(p);
+        thumbCache.set(key, s);
+        if (alive) setState({ status: "ready", src: s });
+      })
+      .catch(() => {
+        if (alive) setState({ status: "error", src: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [key, path, large]);
+  return state;
+}
+
+/** Grid thumbnail with a skeleton placeholder until the image is decoded. */
+function GridThumb({ path, alt }: { path: string; alt: string }) {
+  const thumb = useThumb(path, false);
+  const [loaded, setLoaded] = useState(false);
+  if (thumb.status === "error") {
+    return (
+      <div className="absolute inset-0 grid place-items-center text-ink-600">
+        <ImageIcon size={22} className="opacity-40" />
+      </div>
+    );
+  }
+  return (
+    <>
+      {(thumb.status !== "ready" || !loaded) && (
+        <div className="skeleton absolute inset-0" />
+      )}
+      {thumb.status === "ready" && (
+        <img
+          src={thumb.src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          className={`h-full w-full object-cover transition duration-300 group-hover:scale-[1.03] ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      )}
+    </>
+  );
 }
 
 export function ScreenshotsView({ instanceId }: { instanceId: string }) {
@@ -168,12 +270,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
               onClick={() => setActive(i)}
               className="group relative aspect-video overflow-hidden rounded-lg border border-edge bg-ink-950 transition hover:border-brass-600/50"
             >
-              <img
-                src={api.fileSrc(s.path)}
-                alt={s.name}
-                loading="lazy"
-                className="h-full w-full object-cover transition group-hover:scale-[1.03]"
-              />
+              <GridThumb path={s.path} alt={s.name} />
               <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 py-1 text-left text-[10px] text-gray-300 opacity-0 transition group-hover:opacity-100">
                 {fmtDate(s.modified)}
               </div>
@@ -236,6 +333,7 @@ function Lightbox({
   const s = shots[index];
   const [copied, setCopied] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const large = useThumb(s.path, true);
   const { closing, close } = useClosable(onClose);
 
   const go = useCallback(
@@ -296,6 +394,13 @@ function Lightbox({
             {copied ? "Copied" : "Copy"}
           </button>
           <button
+            onClick={() => api.openFile(s.path).catch(() => toast("Couldn't open this image", "error"))}
+            title="Open in your default photo app"
+            className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <ExternalLink size={13} /> Open
+          </button>
+          <button
             onClick={() => onDelete(s)}
             className="flex items-center gap-1.5 rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10"
           >
@@ -319,17 +424,25 @@ function Lightbox({
             <ChevronLeft size={22} />
           </button>
         )}
-        {!loaded && (
+        {large.status === "loading" && (
           <Loader2 size={26} className="absolute animate-spin text-ink-600" />
         )}
-        <img
-          src={api.fileSrc(s.path)}
-          alt={s.name}
-          onLoad={() => setLoaded(true)}
-          className={`max-h-full max-w-full rounded-lg object-contain transition-opacity ${
-            loaded ? "opacity-100" : "opacity-0"
-          }`}
-        />
+        {large.status === "error" && (
+          <div className="flex flex-col items-center gap-2 text-ink-600">
+            <ImageIcon size={30} className="opacity-40" />
+            <span className="text-xs">Couldn&apos;t load this image</span>
+          </div>
+        )}
+        {large.status === "ready" && (
+          <img
+            src={large.src}
+            alt={s.name}
+            onLoad={() => setLoaded(true)}
+            className={`max-h-full max-w-full rounded-lg object-contain transition-opacity ${
+              loaded ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        )}
         {shots.length > 1 && (
           <button
             onClick={() => go(1)}

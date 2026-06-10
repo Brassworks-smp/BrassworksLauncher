@@ -75,6 +75,28 @@ impl Installer {
         toml::from_str(&text).map_err(|e| PackwizError::toml("pack.toml", e))
     }
 
+    pub fn pack_icon_url(pack_url: &str) -> String {
+        format!("{}icon.png", base_url(pack_url))
+    }
+
+    pub fn find_pack_icon(&self, pack_url: &str) -> Option<String> {
+        let url = Self::pack_icon_url(pack_url);
+        let resp = self.client.get(&url).send().ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let looks_image = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|ct| ct.starts_with("image/"))
+            .unwrap_or(true);
+        if !looks_image {
+            return None;
+        }
+        Some(url)
+    }
+
     pub fn update_available(pack: &Pack, index_hash: &str, manifest: &Manifest) -> bool {
         manifest.pack_version != pack.version || manifest.index_hash != index_hash
     }

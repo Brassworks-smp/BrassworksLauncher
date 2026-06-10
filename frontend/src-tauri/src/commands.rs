@@ -614,6 +614,10 @@ fn run_shell(command: &str) {
     let mut cmd = {
         let mut c = std::process::Command::new("cmd");
         c.args(["/C", command]);
+
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        c.creation_flags(CREATE_NO_WINDOW);
         c
     };
     #[cfg(not(windows))]
@@ -727,6 +731,74 @@ pub(crate) fn delete_screenshot(
         .join("screenshots")
         .join(&name);
     std::fs::remove_file(&path).map_err(err)
+}
+
+/// Build (or reuse) a cached, downscaled JPEG for an image and return its path.
+/// `large` picks the preview size (1600px) vs the grid thumbnail size (480px).
+/// Heavy decode/resize runs on a blocking worker so the UI never stalls.
+fn build_thumbnail(cache_dir: &std::path::Path, src: &str, large: bool) -> Result<String, String> {
+    use std::hash::{Hash, Hasher};
+    let src_path = std::path::Path::new(src);
+    let meta = std::fs::metadata(src_path).map_err(|e| e.to_string())?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let tag = if large { "l" } else { "s" };
+    let max: u32 = if large { 1600 } else { 480 };
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    src.hash(&mut hasher);
+    mtime.hash(&mut hasher);
+    meta.len().hash(&mut hasher);
+    let out = cache_dir.join(format!("{:016x}_{tag}.jpg", hasher.finish()));
+    if out.exists() {
+        return Ok(out.to_string_lossy().into_owned());
+    }
+
+    std::fs::create_dir_all(cache_dir).map_err(|e| e.to_string())?;
+
+    // Gate on the DECODED size, not the on-disk size: a single-colour 16K PNG is
+    // a few KB on disk but ~0.5 GB once decoded. Dimensions come from the header
+    // (cheap, no pixel decode), so we reject oversized images before allocating.
+    const MAX_DECODED_BYTES: u64 = 32 * 1024 * 1024;
+    let (w, h) = image::ImageReader::open(src_path)
+        .map_err(|e| e.to_string())?
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .into_dimensions()
+        .map_err(|e| e.to_string())?;
+    if (w as u64) * (h as u64) * 4 > MAX_DECODED_BYTES {
+        return Err(format!("image too large to preview ({w}×{h})"));
+    }
+
+    let img = image::ImageReader::open(src_path)
+        .map_err(|e| e.to_string())?
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|e| e.to_string())?;
+    let thumb = img.thumbnail(max, max).to_rgb8();
+    drop(img); // free the full-size decode buffer before encoding
+    let file = std::io::BufWriter::new(std::fs::File::create(&out).map_err(|e| e.to_string())?);
+    image::codecs::jpeg::JpegEncoder::new_with_quality(file, 82)
+        .encode_image(&thumb)
+        .map_err(|e| e.to_string())?;
+    Ok(out.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub(crate) async fn screenshot_thumb(
+    state: State<'_, AppState>,
+    path: String,
+    large: bool,
+) -> CmdResult<String> {
+    let cache_dir = state.launcher.paths().thumbnails_dir();
+    tauri::async_runtime::spawn_blocking(move || build_thumbnail(&cache_dir, &path, large))
+        .await
+        .map_err(err)?
 }
 
 #[tauri::command]
@@ -1075,6 +1147,34 @@ pub(crate) fn reveal_path(path: String) -> CmdResult<()> {
     open_in_file_manager(&dir).map_err(err)
 }
 
+/// Open a file with the OS default application (e.g. screenshots in Preview/Photos).
+fn open_with_default(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).spawn().map(|_| ())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map(|_| ())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(path).spawn().map(|_| ())
+    }
+}
+
+#[tauri::command]
+pub(crate) fn open_file(path: String) -> CmdResult<()> {
+    open_with_default(std::path::Path::new(&path)).map_err(err)
+}
+
 #[tauri::command]
 pub(crate) fn delete_java_runtime(state: State<AppState>, path: String) -> CmdResult<()> {
     state.launcher.delete_java_runtime(&path).map_err(err)
@@ -1213,6 +1313,39 @@ pub(crate) fn replace_skin_texture(
     state
         .launcher
         .replace_skin_texture(&account_id, &skin_id, &data)
+        .map_err(err)
+}
+
+/// Add a texture to the library WITHOUT pushing it to the account (used for
+/// batch import / drag-drop). Returns the new saved skin.
+#[tauri::command]
+pub(crate) async fn import_skin(
+    state: State<'_, AppState>,
+    account_id: String,
+    name: String,
+    data: Vec<u8>,
+    model: String,
+) -> CmdResult<SavedSkin> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .save_skin(&account_id, &name, &data, &model, None, None)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn rename_skin(
+    state: State<AppState>,
+    account_id: String,
+    skin_id: String,
+    name: String,
+) -> CmdResult<()> {
+    state
+        .launcher
+        .rename_skin(&account_id, &skin_id, &name)
         .map_err(err)
 }
 

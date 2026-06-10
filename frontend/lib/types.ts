@@ -106,6 +106,7 @@ export interface LauncherSettings {
   java_policy: string;
   keep_open: boolean;
   theme: string;
+  accent_color: string | null;
   pack_url: string | null;
   dev_mode: boolean;
   curseforge_api_key: string | null;

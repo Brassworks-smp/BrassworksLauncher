@@ -52,6 +52,20 @@ const CURSEFORGE_ACCENT_LIGHT: CSSProperties = {
   ["--color-brass-600" as string]: "#c2410c",
   ["--color-brass-700" as string]: "#9a3412",
 };
+const MODRINTH_ACCENT_DARK: CSSProperties = {
+  ["--color-brass-300" as string]: "#5fe393",
+  ["--color-brass-400" as string]: "#34d27a",
+  ["--color-brass-500" as string]: "#1fbf63",
+  ["--color-brass-600" as string]: "#18a153",
+  ["--color-brass-700" as string]: "#14803f",
+};
+const MODRINTH_ACCENT_LIGHT: CSSProperties = {
+  ["--color-brass-300" as string]: "#15803d",
+  ["--color-brass-400" as string]: "#15803d",
+  ["--color-brass-500" as string]: "#1bbf5f",
+  ["--color-brass-600" as string]: "#15a34a",
+  ["--color-brass-700" as string]: "#0e7a37",
+};
 
 const TABS: { id: ProjectType; label: string; icon: typeof Box }[] = [
   { id: "mod", label: "Mods", icon: Box },
@@ -100,11 +114,17 @@ export function AddContentModal({
   };
   const lockedSet = new Set(lockedIds ?? []);
   const detailOnly = !!initial;
-  const cfAccent =
+  const isLight =
     typeof document !== "undefined" &&
-    document.documentElement.classList.contains("theme-light")
-      ? CURSEFORGE_ACCENT_LIGHT
-      : CURSEFORGE_ACCENT_DARK;
+    document.documentElement.classList.contains("theme-light");
+  const accent =
+    source === "curseforge"
+      ? isLight
+        ? CURSEFORGE_ACCENT_LIGHT
+        : CURSEFORGE_ACCENT_DARK
+      : isLight
+        ? MODRINTH_ACCENT_LIGHT
+        : MODRINTH_ACCENT_DARK;
 
   const fetchPage = useCallback(
     (q: string, offset: number) =>
@@ -133,7 +153,7 @@ export function AddContentModal({
     >
       <div
         className="rise flex h-[80vh] w-[780px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-colors"
-        style={source === "curseforge" ? cfAccent : undefined}
+        style={accent}
       >
         {}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">

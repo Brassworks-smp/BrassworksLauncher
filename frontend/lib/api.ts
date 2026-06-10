@@ -240,6 +240,13 @@ export const deleteScreenshot = (
   instanceId: string,
   name: string,
 ): Promise<void> => invoke("delete_screenshot", { instanceId, name });
+export const screenshotThumb = (
+  path: string,
+  large: boolean,
+): Promise<string> => invoke("screenshot_thumb", { path, large });
+
+export const openFile = (path: string): Promise<void> =>
+  invoke("open_file", { path });
 export const fileSrc = (path: string): string => convertFileSrc(path);
 
 
@@ -447,6 +454,20 @@ export const replaceSkinTexture = (
   skinId: string,
   data: number[],
 ): Promise<void> => invoke("replace_skin_texture", { accountId, skinId, data });
+
+export const importSkin = (
+  accountId: string,
+  name: string,
+  data: number[],
+  model: string,
+): Promise<SavedSkin> =>
+  invoke("import_skin", { accountId, name, data, model });
+
+export const renameSkin = (
+  accountId: string,
+  skinId: string,
+  name: string,
+): Promise<void> => invoke("rename_skin", { accountId, skinId, name });
 
 export const exportSkin = (source: string, name: string): Promise<string> =>
   invoke("export_skin", { source, name });

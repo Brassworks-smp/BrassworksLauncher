@@ -86,6 +86,10 @@ impl Paths {
         self.shared_dir().join("jvm")
     }
 
+    pub fn thumbnails_dir(&self) -> PathBuf {
+        self.root().join("thumbnails")
+    }
+
     pub fn skins_dir(&self) -> PathBuf {
         self.shared_dir().join("skins")
     }

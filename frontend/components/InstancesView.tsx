@@ -11,6 +11,7 @@ import {
   ChevronRight,
   FolderPlus,
   Folder as FolderIcon,
+  FolderOpen,
   MoreVertical,
   Trash2,
   Check,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { Collapse } from "./ui";
+import { ACCENT_COLORS as FOLDER_COLORS } from "@/lib/colors";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
 const LOADER_LABEL: Record<string, string> = {
@@ -28,24 +30,6 @@ const LOADER_LABEL: Record<string, string> = {
   vanilla: "Vanilla",
 };
 
-const FOLDER_COLORS = [
-  "#34d27a", 
-  "#10b981", 
-  "#14b8a6", 
-  "#06b6d4", 
-  "#3b82f6", 
-  "#6366f1", 
-  "#8b5cf6", 
-  "#a855f7", 
-  "#ec4899", 
-  "#f43f5e", 
-  "#ef4444", 
-  "#f97316", 
-  "#f59e0b", 
-  "#eab308", 
-  "#84cc16", 
-  "#9b9b9b", 
-];
 
 function loaderLabel(i: Instance): string {
   return LOADER_LABEL[i.loader] ?? i.loader;
@@ -64,7 +48,9 @@ export function InstancesView({
   instances,
   folders,
   selectedId,
-  runningId,
+  runningIds,
+  maintainingIds,
+  workingIds,
   installingId,
   onCancelInstall,
   onSelect,
@@ -77,7 +63,9 @@ export function InstancesView({
   instances: Instance[];
   folders: InstanceFolder[];
   selectedId: string | null;
-  runningId: string | null;
+  runningIds: Set<string>;
+  maintainingIds: Set<string>;
+  workingIds: Set<string>;
   installingId?: string | null;
   onCancelInstall?: () => void;
   onSelect: (id: string) => void;
@@ -136,7 +124,10 @@ export function InstancesView({
       instance={i}
       folders={folders}
       selected={i.id === selectedId}
-      running={i.id === runningId}
+      running={runningIds.has(i.id)}
+      updating={
+        (maintainingIds.has(i.id) || workingIds.has(i.id)) && i.id !== installingId
+      }
       installing={i.id === installingId}
       onCancelInstall={onCancelInstall}
       onSelect={() => onSelect(i.id)}
@@ -307,7 +298,7 @@ function FolderGroup({
   onDropInstance: (id: string) => void;
   children: React.ReactNode;
 }) {
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = useState<{ top: number; right: number } | null>(null);
   const [name, setName] = useState(folder.name);
   const [editingHeader, setEditingHeader] = useState(false);
   const [over, setOver] = useState(false);
@@ -394,17 +385,31 @@ function FolderGroup({
           </span>
         </button>
         <button
-          onClick={() => setMenu((m) => !m)}
+          onClick={(e) => {
+            if (menu) {
+              setMenu(null);
+              return;
+            }
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setMenu({ top: r.bottom + 4, right: window.innerWidth - r.right });
+          }}
           style={{ "--accent": color } as React.CSSProperties}
-          className="grid h-7 w-7 place-items-center rounded-md text-ink-600 opacity-0 transition hover:bg-ink-700 hover:text-[var(--accent)] group-hover/fh:opacity-100"
+          className={`grid h-7 w-7 place-items-center rounded-md text-ink-600 transition hover:bg-ink-700 hover:text-[var(--accent)] group-hover/fh:opacity-100 ${
+            menu ? "opacity-100" : "opacity-0"
+          }`}
         >
           <MoreVertical size={15} />
         </button>
 
-        {menu && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
-            <div className="rise absolute right-0 top-9 z-50 w-56 rounded-lg border border-edge bg-ink-850 p-2.5 shadow-2xl">
+        {menu &&
+          createPortal(
+            <>
+              <div className="fixed inset-0 z-[60]" onClick={() => setMenu(null)} />
+              <div
+                style={{ top: menu.top, right: menu.right }}
+                onClick={(e) => e.stopPropagation()}
+                className="rise fixed z-[61] w-56 rounded-lg border border-edge bg-ink-850 p-2.5 shadow-2xl"
+              >
               <div className="mb-1 text-[10px] uppercase tracking-widest text-ink-600">
                 Rename
               </div>
@@ -415,7 +420,7 @@ function FolderGroup({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     if (name.trim()) onRename(name.trim());
-                    setMenu(false);
+                    setMenu(null);
                   }
                 }}
                 style={{ "--accent": color } as React.CSSProperties}
@@ -441,15 +446,16 @@ function FolderGroup({
               <button
                 onClick={() => {
                   onDelete();
-                  setMenu(false);
+                  setMenu(null);
                 }}
                 className="mt-2.5 flex w-full items-center gap-2 rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10"
               >
                 <Trash2 size={13} /> Delete folder
               </button>
-            </div>
-          </>
-        )}
+              </div>
+            </>,
+            document.body,
+          )}
       </div>
 
       <Collapse open={!folder.collapsed}>
@@ -466,6 +472,7 @@ function InstanceCard({
   folders,
   selected,
   running,
+  updating,
   installing,
   onCancelInstall,
   onSelect,
@@ -481,6 +488,7 @@ function InstanceCard({
   folders: InstanceFolder[];
   selected: boolean;
   running: boolean;
+  updating?: boolean;
   installing?: boolean;
   onCancelInstall?: () => void;
   onSelect: () => void;
@@ -490,7 +498,6 @@ function InstanceCard({
   onNewFolder: () => void;
   onRename: (name: string) => void;
   onTagClick: (tag: string) => void;
-  /** Folder colour — themes the card when it lives inside a folder. */
   accent?: string;
 }) {
   const [folderMenu, setFolderMenu] = useState<{ top: number; right: number } | null>(
@@ -564,6 +571,18 @@ function InstanceCard({
         )}
 
         <div className="absolute right-2 top-2 flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              api.openInstanceDir(instance.id).catch(() => {});
+            }}
+            title="Open game folder"
+            className={`grid h-7 w-7 place-items-center rounded-md border border-edge bg-ink-950/60 text-ink-600 transition group-hover:opacity-100 ${
+              folderMenu ? "opacity-100" : "opacity-0"
+            } ${accent ? "hover:text-[var(--accent)]" : "hover:text-brass-300"}`}
+          >
+            <FolderOpen size={13} />
+          </button>
           {!instance.featured && (
             <button
               onClick={(e) => {
@@ -579,11 +598,11 @@ function InstanceCard({
                 });
               }}
               title="Move to folder"
-              className={`grid h-7 w-7 place-items-center rounded-md border border-edge bg-ink-950/60 text-ink-600 opacity-0 transition group-hover:opacity-100 ${
-                accent ? "hover:text-[var(--accent)]" : "hover:text-brass-300"
-              }`}
+              className={`grid h-7 w-7 place-items-center rounded-md border border-edge bg-ink-950/60 text-ink-600 transition group-hover:opacity-100 ${
+                folderMenu ? "opacity-100" : "opacity-0"
+              } ${accent ? "hover:text-[var(--accent)]" : "hover:text-brass-300"}`}
             >
-              <FolderIcon size={13} />
+              <MoreVertical size={14} />
             </button>
           )}
           {!instance.featured && (
@@ -598,12 +617,12 @@ function InstanceCard({
                   ? { borderColor: `${accent}80`, background: `${accent}33`, color: accent }
                   : undefined
               }
-              className={`grid h-7 w-7 place-items-center rounded-md border transition ${
+              className={`grid h-7 w-7 place-items-center rounded-md border transition group-hover:opacity-100 ${
                 instance.pinned
                   ? "border-brass-500/50 bg-brass-500/20 text-brass-300"
-                  : accent
-                    ? "border-edge bg-ink-950/60 text-ink-600 opacity-0 hover:text-[var(--accent)] group-hover:opacity-100"
-                    : "border-edge bg-ink-950/60 text-ink-600 opacity-0 hover:text-brass-300 group-hover:opacity-100"
+                  : `border-edge bg-ink-950/60 text-ink-600 ${
+                      folderMenu ? "opacity-100" : "opacity-0"
+                    } ${accent ? "hover:text-[var(--accent)]" : "hover:text-brass-300"}`
               }`}
             >
               <Star size={13} className={instance.pinned ? "fill-current" : ""} />
