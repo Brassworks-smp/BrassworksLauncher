@@ -7,7 +7,7 @@ use brassworks_core::{
     LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload,
     McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
     ProjectDetail, SavedSkin, SearchHit, ServerEntry, ServerStatus, SkinLibraryView, SkinProfile,
-    WorldInfo,
+    WorldBackup, WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -116,7 +116,12 @@ pub(crate) fn get_running(state: State<AppState>) -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String) -> CmdResult<()> {
+pub(crate) fn launch(
+    app: AppHandle,
+    state: State<AppState>,
+    instance_id: String,
+    quick_play: Option<brassworks_core::QuickPlay>,
+) -> CmdResult<()> {
     {
         let mut running = state.running.lock().map_err(|_| "state poisoned")?;
         if running.contains(&instance_id) {
@@ -169,7 +174,7 @@ pub(crate) fn launch(app: AppHandle, state: State<AppState>, instance_id: String
             move || flag.load(Ordering::Relaxed)
         };
 
-        let exit = match launcher.launch(&id, &cancel, &mut sink) {
+        let exit = match launcher.launch(&id, quick_play, &cancel, &mut sink) {
             Ok(child) => {
                 if let Ok(mut map) = children.lock() {
                     map.insert(id.clone(), child);
@@ -1557,4 +1562,57 @@ pub(crate) fn toggle_star(
     key: String,
 ) -> CmdResult<bool> {
     state.launcher.toggle_star(&instance_id, &kind, &key).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn export_modpack(
+    state: State<'_, AppState>,
+    instance_id: String,
+    format: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.export_modpack(&instance_id, &format).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn backup_world(
+    state: State<'_, AppState>,
+    instance_id: String,
+    world: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.backup_world(&instance_id, &world).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn list_world_backups(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<WorldBackup>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.list_world_backups(&instance_id)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn export_world(
+    state: State<'_, AppState>,
+    instance_id: String,
+    world: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.export_world(&instance_id, &world).map_err(err)
+    })
+    .await
+    .map_err(err)?
 }

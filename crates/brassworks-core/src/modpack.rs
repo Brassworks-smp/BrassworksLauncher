@@ -1006,6 +1006,124 @@ impl<'a> Modpack<'a> {
         Ok(())
     }
 
+    pub fn export_modrinth(
+        &self,
+        name: &str,
+        mc_version: &str,
+        loader: &str,
+        loader_version: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let game_dir = self.game_dir();
+        let installer = Installer::new();
+        let http = installer.modrinth(self.paths.modrinth_cache_dir());
+
+        let mut files: Vec<serde_json::Value> = Vec::new();
+        let mut overrides: Vec<(String, Vec<u8>)> = Vec::new();
+        for m in self.list_mods().unwrap_or_default() {
+            if !m.enabled {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(game_dir.join(&m.path)) else {
+                continue;
+            };
+            if m.source == "modrinth" {
+                if let Some(rv) = m
+                    .version_id
+                    .as_deref()
+                    .and_then(|v| http.resolve_version(v).ok().flatten())
+                {
+                    if let (Some(sha1), Some(sha512)) = (rv.sha1.clone(), rv.sha512.clone()) {
+                        files.push(serde_json::json!({
+                            "path": m.path,
+                            "hashes": { "sha1": sha1, "sha512": sha512 },
+                            "env": { "client": "required", "server": "required" },
+                            "downloads": [rv.url],
+                            "fileSize": bytes.len(),
+                        }));
+                        continue;
+                    }
+                }
+            }
+            overrides.push((m.path.clone(), bytes));
+        }
+        collect_config_overrides(&game_dir, &mut overrides);
+
+        let mut deps = serde_json::Map::new();
+        deps.insert("minecraft".into(), serde_json::json!(mc_version));
+        if let (Some(key), Some(v)) = (modrinth_loader_key(loader), loader_version) {
+            deps.insert(key.into(), serde_json::json!(v));
+        }
+        let index = serde_json::json!({
+            "formatVersion": 1,
+            "game": "minecraft",
+            "versionId": "1.0.0",
+            "name": name,
+            "files": files,
+            "dependencies": serde_json::Value::Object(deps),
+        });
+
+        zip_pack("modrinth.index.json", &index, &overrides)
+    }
+
+    pub fn export_curseforge(
+        &self,
+        name: &str,
+        mc_version: &str,
+        loader: &str,
+        loader_version: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let game_dir = self.game_dir();
+
+        let mut cf_files: Vec<serde_json::Value> = Vec::new();
+        let mut overrides: Vec<(String, Vec<u8>)> = Vec::new();
+        for m in self.list_mods().unwrap_or_default() {
+            if !m.enabled {
+                continue;
+            }
+            if m.source == "curseforge" {
+                if let (Some(pid), Some(fid)) = (
+                    m.project_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
+                    m.version_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
+                ) {
+                    cf_files.push(serde_json::json!({
+                        "projectID": pid, "fileID": fid, "required": true,
+                    }));
+                    continue;
+                }
+            }
+            if let Ok(bytes) = std::fs::read(game_dir.join(&m.path)) {
+                overrides.push((m.path.clone(), bytes));
+            }
+        }
+        collect_config_overrides(&game_dir, &mut overrides);
+
+        let loader_id = match loader {
+            "neoforge" => "neoforge",
+            "fabric" => "fabric",
+            "quilt" => "quilt",
+            _ => "forge",
+        };
+        let loader_str = match loader_version {
+            Some(v) => format!("{loader_id}-{v}"),
+            None => loader_id.to_string(),
+        };
+        let manifest = serde_json::json!({
+            "minecraft": {
+                "version": mc_version,
+                "modLoaders": [{ "id": loader_str, "primary": true }],
+            },
+            "manifestType": "minecraftModpack",
+            "manifestVersion": 1,
+            "name": name,
+            "version": "1.0.0",
+            "author": "",
+            "files": cf_files,
+            "overrides": "overrides",
+        });
+
+        zip_pack("manifest.json", &manifest, &overrides)
+    }
+
     pub fn uninstall(&self) -> Result<()> {
         let game_dir = self.game_dir();
         if game_dir.exists() {
@@ -1047,6 +1165,81 @@ fn folder_for(project_type: &str) -> &'static str {
         "shader" => "shaderpacks",
         _ => "mods",
     }
+}
+
+fn collect_config_overrides(
+    game_dir: &std::path::Path,
+    overrides: &mut Vec<(String, Vec<u8>)>,
+) {
+    for sub in ["config", "defaultconfigs", "kubejs", "scripts", "options.txt"] {
+        let root = game_dir.join(sub);
+        if root.is_file() {
+            if let Ok(bytes) = std::fs::read(&root) {
+                overrides.push((sub.to_string(), bytes));
+            }
+            continue;
+        }
+        let mut stack = vec![root];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                match entry.file_type() {
+                    Ok(ft) if ft.is_dir() => stack.push(path),
+                    Ok(ft) if ft.is_file() => {
+                        if let Ok(rel) = path.strip_prefix(game_dir) {
+                            if let Ok(bytes) = std::fs::read(&path) {
+                                overrides.push((
+                                    rel.to_string_lossy().replace('\\', "/"),
+                                    bytes,
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+fn modrinth_loader_key(loader: &str) -> Option<&'static str> {
+    match loader {
+        "neoforge" => Some("neoforge"),
+        "forge" => Some("forge"),
+        "fabric" => Some("fabric-loader"),
+        "quilt" => Some("quilt-loader"),
+        _ => None,
+    }
+}
+
+fn zip_pack(
+    index_name: &str,
+    index: &serde_json::Value,
+    overrides: &[(String, Vec<u8>)],
+) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let zip_err = |e: zip::result::ZipError| CoreError::Modpack(format!("zip: {e}"));
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default();
+        let json =
+            serde_json::to_vec_pretty(index).map_err(|e| CoreError::serde("modpack index", e))?;
+        zip.start_file(index_name.to_string(), opts).map_err(zip_err)?;
+        zip.write_all(&json)
+            .map_err(|e| CoreError::Modpack(format!("zip write: {e}")))?;
+        for (path, bytes) in overrides {
+            zip.start_file(format!("overrides/{path}"), opts)
+                .map_err(zip_err)?;
+            zip.write_all(bytes)
+                .map_err(|e| CoreError::Modpack(format!("zip write: {e}")))?;
+        }
+        zip.finish().map_err(zip_err)?;
+    }
+    Ok(buf)
 }
 
 fn project_type_for_category(category: &str) -> &'static str {

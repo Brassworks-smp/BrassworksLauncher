@@ -23,9 +23,9 @@ type DefaultSkin = { name: string; preview: string; url: string; model: string }
 const DEFAULT_SKINS: DefaultSkin[] = [
   { name: "Steve", preview: "/skins/steve.png", url: TEX("1abc803022d8300ab7578b189294cce39622d9a404cdc00d3feacfdf45be6981"), model: "classic" },
   { name: "Alex", preview: "/skins/alex.png", url: TEX("46acd06e8483b176e8ea39fc12fe105eb3a2a4970f5100057e9d84d4b60bdfa7"), model: "slim" },
-  { name: "Ari", preview: "/skins/ari.png", url: TEX("4c05ab9e07b3505dc3ec11370c3bdce5570ad2fb2b562e9b9dd9cf271f81aa44"), model: "classic" },
+  { name: "Ari", preview: "/skins/ari.png", url: TEX("4c05ab9e07b3505dc3ec11370c3bdce5570ad2fb2b562e9b9dd9cf271f81aa44"), model: "slim" },
   { name: "Kai", preview: "/skins/kai.png", url: TEX("6ac6ca262d67bcfb3dbc924ba8215a18195497c780058a5749de674217721892"), model: "slim" },
-  { name: "Efe", preview: "/skins/efe.png", url: TEX("daf3d88ccb38f11f74814e92053d92f7728ddb1a7955652a60e30cb27ae6659f"), model: "classic" },
+  { name: "Efe", preview: "/skins/efe.png", url: TEX("daf3d88ccb38f11f74814e92053d92f7728ddb1a7955652a60e30cb27ae6659f"), model: "slim" },
   { name: "Makena", preview: "/skins/makena.png", url: TEX("fece7017b1bb13926d1158864b283b8b930271f80a90482f174cca6a17e88236"), model: "slim" },
   { name: "Noor", preview: "/skins/noor.png", url: TEX("e5cdc3243b2153ab28a159861be643a4fc1e3c17d291cdd3e57a7f370ad676f3"), model: "classic" },
   { name: "Sunny", preview: "/skins/sunny.png", url: TEX("226c617fde5b1ba569aa08bd2cb6fd84c93337532a872b3eb7bf66bdd5b395f8"), model: "slim" },
@@ -68,6 +68,7 @@ function SkinCanvas({
   skinRef.current = skin;
   capeRef.current = cape;
   modelRef.current = model;
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -100,7 +101,9 @@ function SkinCanvas({
       if (sk)
         viewer
           .loadSkin(sk, { model: modelRef.current === "slim" ? "slim" : "default" })
-          .catch(() => {});
+          .then(() => alive && setLoaded(true))
+          .catch(() => alive && setLoaded(true));
+      else setLoaded(true);
       if (capeRef.current) viewer.loadCape(capeRef.current).catch(() => {});
       const tick = () => {
         if (!alive || !viewer) return;
@@ -144,7 +147,9 @@ function SkinCanvas({
   return (
     <canvas
       ref={ref}
-      className="[filter:drop-shadow(0_8px_8px_rgba(0,0,0,0.4))]"
+      className={`[filter:drop-shadow(0_8px_8px_rgba(0,0,0,0.4))] transition-opacity duration-500 ${
+        loaded ? "opacity-100" : "opacity-0"
+      }`}
     />
   );
 }
@@ -657,17 +662,17 @@ function ApplySkinModal({
         await api.updateSkin(accountId, savedSkin.id, model, capeId);
         await api.applySavedSkin(accountId, savedSkin.id);
         api.setFaceTexture(accountId, bust(api.fileSrc(savedSkin.file)));
-        toast(`Applied ${savedSkin.name}`, "success");
+        toast("Applied skin and cape", "success");
         onApplied(savedSkin.id);
       } else if (preset) {
         const saved = await api.applyPreset(accountId, preset.name, preset.url, model, capeId);
         api.setFaceTexture(accountId, bust(api.fileSrc(saved.file)));
-        toast(`Applied ${preset.name}`, "success");
+        toast("Applied skin and cape", "success");
         onApplied(saved.id);
       } else {
         await api.setCape(accountId, capeId);
-        toast("Cape updated", "success");
-        onApplied(); 
+        toast("Applied cape", "success");
+        onApplied();
       }
     } catch (e) {
       onError(String(e));
@@ -771,25 +776,42 @@ function ApplySkinModal({
               <div className="grid grid-cols-[repeat(auto-fill,minmax(58px,1fr))] gap-2">
                 <button
                   onClick={() => setCapeId(null)}
-                  className={`flex aspect-[10/16] flex-col items-center justify-center gap-1 rounded-lg border text-ink-600 transition ${
-                    !capeId ? "border-patina-500/70" : "border-edge hover:border-brass-600/40"
+                  className={`relative flex aspect-[10/16] flex-col items-center justify-center gap-1 rounded-lg border transition ${
+                    !capeId
+                      ? "border-patina-400 text-patina-300 ring-2 ring-patina-400/60"
+                      : "border-edge text-ink-600 hover:border-brass-600/40"
                   }`}
                 >
                   <X size={16} />
                   <span className="text-[11px]">None</span>
+                  {!capeId && (
+                    <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-patina-500 text-ink-950 shadow-md ring-1 ring-ink-950/40">
+                      <Check size={10} />
+                    </span>
+                  )}
                 </button>
-                {capes.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setCapeId(c.id)}
-                    title={c.name}
-                    className={`aspect-[10/16] overflow-hidden rounded-lg border bg-ink-950/60 transition ${
-                      capeId === c.id ? "border-patina-500/70" : "border-edge hover:border-brass-600/40"
-                    }`}
-                  >
-                    <CapeImage url={c.url} />
-                  </button>
-                ))}
+                {capes.map((c) => {
+                  const on = capeId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setCapeId(c.id)}
+                      title={c.name}
+                      className={`relative aspect-[10/16] overflow-hidden rounded-lg border bg-ink-950/60 transition ${
+                        on
+                          ? "border-patina-400 ring-2 ring-patina-400/60"
+                          : "border-edge hover:border-brass-600/40"
+                      }`}
+                    >
+                      <CapeImage url={c.url} />
+                      {on && (
+                        <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-patina-500 text-ink-950 shadow-md ring-1 ring-ink-950/40">
+                          <Check size={10} />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
               {capes.length === 0 && (
                 <p className="mt-1 text-xs text-ink-600">No capes on this account.</p>

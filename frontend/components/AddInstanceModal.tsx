@@ -161,7 +161,7 @@ export function AddInstanceModal({
     >
       <div
         style={ACCENTS[tab] as React.CSSProperties | undefined}
-        className="rise flex max-h-[86vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
+        className="rise flex h-[80vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
       >
         <input
           ref={fileInput}
@@ -191,9 +191,9 @@ export function AddInstanceModal({
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex min-h-0 flex-1 flex-col p-5">
           {tab === "custom" && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
               <div>
                 <div className="mb-1.5 text-sm text-ink-600">Name</div>
                 <input
@@ -248,7 +248,7 @@ export function AddInstanceModal({
           )}
 
           {tab === "packwiz" && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
               <p className="text-xs text-ink-600">
                 Point at a <span className="text-brass-300">pack.toml</span> URL.
                 The launcher fetches it, detects the loader + Minecraft version,
@@ -297,10 +297,10 @@ export function AddInstanceModal({
           )}
 
           {(tab === "modrinth" || tab === "curseforge") && (
-            <div className="flex flex-col gap-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
               <button
                 onClick={() => fileInput.current?.click()}
-                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-edge px-3 py-2 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-edge px-3 py-2 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
               >
                 <Upload size={14} /> Upload a .mrpack / CurseForge .zip instead
               </button>

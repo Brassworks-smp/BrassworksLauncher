@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -367,6 +368,54 @@ export function LinkButton({
 
 export function Spinner() {
   return <Loader2 size={15} className="animate-spin" />;
+}
+
+/**
+ * Renders a large list/grid in batches (one per frame) so opening a tab with
+ * hundreds of items never freezes the UI. `resetKey` re-starts the ramp when the
+ * filter/scope changes. Returns the visible slice and whether more are pending.
+ */
+export function useProgressive<T>(
+  items: T[],
+  batch = 48,
+  resetKey: string = "",
+): { shown: T[]; hasMore: boolean } {
+  const [limit, setLimit] = useState(batch);
+  useEffect(() => {
+    setLimit(batch);
+  }, [resetKey, batch]);
+  useEffect(() => {
+    if (limit >= items.length) return;
+    const raf = requestAnimationFrame(() => setLimit((n) => n + batch));
+    return () => cancelAnimationFrame(raf);
+  }, [limit, items.length, batch]);
+  const shown = useMemo(() => items.slice(0, limit), [items, limit]);
+  return { shown, hasMore: limit < items.length };
+}
+
+/** A shimmering placeholder block. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={`skeleton rounded-md ${className ?? ""}`} />;
+}
+
+/**
+ * Returns false on first paint, then true a couple of frames later. Lets a heavy
+ * view render a cheap skeleton instantly (so the tab opens with zero lag) and
+ * defer the expensive content until after the click/transition has painted.
+ */
+export function useDeferredReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setReady(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
+  return ready;
 }
 
 /** Star/favourite toggle shared by worlds, servers and screenshots. */

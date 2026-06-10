@@ -8,10 +8,59 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use brassworks_core::Launcher;
-use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{Manager, WindowEvent};
 
 use discord::Discord;
 use state::AppState;
+
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "tray-show", "Open Brassworks", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "tray-hide", "Hide to tray", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &hide, &PredefinedMenuItem::separator(app)?, &quit],
+    )?;
+
+    let reveal = |app: &tauri::AppHandle| {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+        }
+    };
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().cloned().expect("window icon"))
+        .tooltip("Brassworks Launcher")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(move |app, event| match event.id.as_ref() {
+            "tray-show" => reveal(app),
+            "tray-hide" => {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.hide();
+                }
+            }
+            "tray-quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(move |tray, event| {
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                reveal(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +90,28 @@ pub fn run() {
                 cancels: Arc::new(Mutex::new(HashMap::new())),
                 discord,
             });
+
+            setup_tray(app.handle())?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        let hide = handle
+                            .state::<AppState>()
+                            .launcher
+                            .settings()
+                            .map(|s| s.close_to_tray)
+                            .unwrap_or(false);
+                        if hide {
+                            api.prevent_close();
+                            if let Some(win) = handle.get_webview_window("main") {
+                                let _ = win.hide();
+                            }
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -129,6 +200,10 @@ pub fn run() {
             commands::save_servers,
             commands::ping_server,
             commands::toggle_star,
+            commands::export_modpack,
+            commands::backup_world,
+            commands::list_world_backups,
+            commands::export_world,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

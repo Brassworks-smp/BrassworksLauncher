@@ -23,6 +23,14 @@ pub struct LaunchRequest<'a> {
     pub instance: &'a Instance,
     pub account: &'a Account,
     pub settings: &'a LauncherSettings,
+    pub quick_play: Option<QuickPlay>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum QuickPlay {
+    Server { ip: String },
+    World { folder: String },
 }
 
 struct ProgressHandler<'a> {
@@ -327,6 +335,17 @@ pub fn launch_instance(
 
     handler.stage(LaunchStage::Launching, "Starting Minecraft");
 
+    if let Some(qp) = &req.quick_play {
+        match qp {
+            QuickPlay::Server { ip } => game
+                .game_args
+                .extend(["--quickPlayMultiplayer".to_string(), ip.clone()]),
+            QuickPlay::World { folder } => game
+                .game_args
+                .extend(["--quickPlaySingleplayer".to_string(), folder.clone()]),
+        }
+    }
+
     let mut jvm = jvm_args(&req);
     jvm.extend(game.jvm_args.drain(..));
     game.jvm_args = jvm;
@@ -358,9 +377,40 @@ fn resolve_java(req: &LaunchRequest, handler: &mut ProgressHandler) -> Option<Pa
     if effective != "auto" {
         return None;
     }
-    let major = java::major_for_minecraft(&req.instance.minecraft_version);
+    let major = required_java_major(&req.instance.minecraft_version);
     handler.stage(LaunchStage::PreparingJvm, format!("Preparing Java {major}"));
     java::ensure_runtime(&req.paths.jvm_dir(), major).ok()
+}
+
+fn required_java_major(mc_version: &str) -> u32 {
+    fetch_required_major(mc_version).unwrap_or_else(|| java::major_for_minecraft(mc_version))
+}
+
+fn fetch_required_major(mc_version: &str) -> Option<u32> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let manifest: serde_json::Value = client
+        .get("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json")
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
+    let url = manifest
+        .get("versions")?
+        .as_array()?
+        .iter()
+        .find(|v| v.get("id").and_then(|i| i.as_str()) == Some(mc_version))?
+        .get("url")?
+        .as_str()?
+        .to_string();
+    let version: serde_json::Value = client.get(&url).send().ok()?.json().ok()?;
+    version
+        .get("javaVersion")?
+        .get("majorVersion")?
+        .as_u64()
+        .map(|n| n as u32)
 }
 
 fn sync_thirdparty(

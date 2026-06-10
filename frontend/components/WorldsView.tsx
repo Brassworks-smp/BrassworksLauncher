@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Globe2,
   Loader2,
@@ -12,12 +13,18 @@ import {
   Skull,
   AlertTriangle,
   X,
+  Sprout,
+  Copy,
+  Play,
+  MoreVertical,
+  Archive,
+  Download,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { SegmentedTabs, StarButton } from "./ui";
+import { SegmentedTabs, StarButton, useProgressive, useClosable } from "./ui";
 import { DatapacksModal } from "./DatapacksModal";
-import type { WorldInfo } from "@/lib/types";
+import type { WorldInfo, WorldBackup } from "@/lib/types";
 
 const worldsCache = new Map<string, WorldInfo[]>();
 
@@ -86,7 +93,15 @@ function WorldThumb({ src }: { src: string | null }) {
   return <DefaultWorldIcon />;
 }
 
-export function WorldsView({ instanceId }: { instanceId: string }) {
+export function WorldsView({
+  instanceId,
+  canPlay,
+  onQuickPlay,
+}: {
+  instanceId: string;
+  canPlay: boolean;
+  onQuickPlay: (qp: api.QuickPlay) => void;
+}) {
   const [worlds, setWorlds] = useState<WorldInfo[] | null>(
     () => worldsCache.get(instanceId) ?? null,
   );
@@ -97,6 +112,19 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
   const [datapacksFor, setDatapacksFor] = useState<WorldInfo | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<WorldInfo | null>(null);
   const [deleteClosing, setDeleteClosing] = useState(false);
+  const [showBackups, setShowBackups] = useState(false);
+  const [detail, setDetail] = useState<WorldInfo | null>(null);
+
+  const backup = (w: WorldInfo) =>
+    api
+      .backupWorld(instanceId, w.folder)
+      .then(() => toast(`Backed up “${w.name}”`, "success"))
+      .catch((e) => toast(String(e), "error"));
+  const download = (w: WorldInfo) =>
+    api
+      .exportWorld(instanceId, w.folder)
+      .then((p) => toast(`Saved to ${p}`, "success"))
+      .catch((e) => toast(String(e), "error"));
 
   const load = useCallback(() => {
     if (!api.isTauri()) {
@@ -164,6 +192,7 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
       (a, b) => Number(b.starred) - Number(a.starred) || b.last_played - a.last_played,
     );
   }, [worlds, query, modeFilter, starredOnly]);
+  const { shown } = useProgressive(filtered, 48, `${query}:${modeFilter}:${starredOnly}`);
 
   const starredCount = (worlds ?? []).filter((w) => w.starred).length;
 
@@ -176,13 +205,21 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
             {worlds ? `${worlds.length} world${worlds.length === 1 ? "" : "s"}` : "Loading…"}
           </p>
         </div>
-        <button
-          onClick={load}
-          title="Refresh"
-          className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-        >
-          <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBackups(true)}
+            className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <Archive size={15} /> Backups
+          </button>
+          <button
+            onClick={load}
+            title="Refresh"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
@@ -231,20 +268,25 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
             <div>
               <Globe2 size={28} className="mx-auto mb-2 opacity-50" />
               {(worlds?.length ?? 0) === 0
-                ? "No worlds yet — create one in-game and it'll show up here."
+                ? "No worlds yet - create one in-game and it'll show up here."
                 : "No worlds match your filters."}
             </div>
           </div>
         ) : (
           <div className="stagger grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-            {filtered.map((w) => (
+            {shown.map((w) => (
               <WorldCard
                 key={w.folder}
                 instanceId={instanceId}
                 world={w}
+                canPlay={canPlay}
+                onPlay={() => onQuickPlay({ kind: "world", folder: w.folder })}
                 onStar={() => toggleStar(w)}
                 onDatapacks={() => setDatapacksFor(w)}
+                onBackup={() => backup(w)}
+                onDownload={() => download(w)}
                 onDelete={() => setConfirmDelete(w)}
+                onOpen={() => setDetail(w)}
               />
             ))}
           </div>
@@ -259,6 +301,32 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
             setDatapacksFor(null);
             load();
           }}
+        />
+      )}
+
+      {showBackups && (
+        <BackupsModal
+          instanceId={instanceId}
+          onClose={() => setShowBackups(false)}
+        />
+      )}
+
+      {detail && (
+        <WorldDetailModal
+          instanceId={instanceId}
+          world={detail}
+          canPlay={canPlay}
+          onPlay={() => {
+            onQuickPlay({ kind: "world", folder: detail.folder });
+            setDetail(null);
+          }}
+          onDatapacks={() => {
+            setDatapacksFor(detail);
+            setDetail(null);
+          }}
+          onBackup={() => backup(detail)}
+          onDownload={() => download(detail)}
+          onClose={() => setDetail(null)}
         />
       )}
 
@@ -303,20 +371,31 @@ export function WorldsView({ instanceId }: { instanceId: string }) {
 function WorldCard({
   instanceId,
   world,
+  canPlay,
+  onPlay,
   onStar,
   onDatapacks,
+  onBackup,
+  onDownload,
   onDelete,
+  onOpen,
 }: {
   instanceId: string;
   world: WorldInfo;
+  canPlay: boolean;
+  onPlay: () => void;
   onStar: () => void;
   onDatapacks: () => void;
+  onBackup: () => void;
+  onDownload: () => void;
   onDelete: () => void;
+  onOpen: () => void;
 }) {
   const iconSrc = useWorldIcon(instanceId, world);
+  const [menu, setMenu] = useState<{ top: number; right: number } | null>(null);
   return (
     <div className="group hover-lift relative flex flex-col overflow-hidden rounded-xl border border-edge bg-ink-900/40 hover:border-brass-600/40">
-      <div className="relative h-28 overflow-hidden">
+      <div onClick={onOpen} className="relative h-28 cursor-pointer overflow-hidden">
         <div className="absolute inset-0 scale-110 blur-sm brightness-50">
           <WorldThumb src={iconSrc} />
         </div>
@@ -340,9 +419,13 @@ function WorldCard({
       </div>
 
       <div className="flex flex-1 flex-col p-3">
-        <div className="truncate font-mc text-sm text-gray-100" title={world.name}>
+        <button
+          onClick={onOpen}
+          className="truncate text-left font-mc text-sm text-gray-100 transition hover:text-brass-200"
+          title={world.name}
+        >
           {world.name}
-        </div>
+        </button>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-600">
           {world.game_mode >= 0 && (
             <span className="flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 text-brass-300/90">
@@ -354,12 +437,38 @@ function WorldCard({
           )}
           {world.version_name && <span>· {world.version_name}</span>}
         </div>
+        {world.seed != null && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              api.copyText(String(world.seed));
+              toast("Seed copied", "success");
+            }}
+            title="Copy seed"
+            className="group/seed mt-1.5 flex w-full items-center gap-1.5 rounded-md border border-edge bg-ink-950/40 px-2 py-1 text-[11px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <Sprout size={11} className="shrink-0 text-brass-400/80" />
+            <span className="truncate font-mono">{String(world.seed)}</span>
+            <Copy size={11} className="ml-auto shrink-0 opacity-0 transition group-hover/seed:opacity-100" />
+          </button>
+        )}
         <div className="mt-1.5 flex items-center gap-1 text-[11px] text-ink-600">
           <Clock size={11} /> {relativeTime(world.last_played)}
           <span className="ml-auto">{api.formatBytes(world.size_bytes)}</span>
         </div>
 
-        <div className="mt-3 flex items-center gap-1.5">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlay();
+          }}
+          disabled={!canPlay}
+          title="Launch straight into this world"
+          className="brass-btn mt-3 flex items-center justify-center gap-1.5 rounded-md bg-brass-500 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Play size={13} className="fill-current" /> Play
+        </button>
+        <div className="mt-1.5 flex items-center gap-1.5">
           <button
             onClick={onDatapacks}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-edge px-2 py-1.5 text-xs font-medium text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
@@ -372,19 +481,326 @@ function WorldCard({
             )}
           </button>
           <button
-            onClick={() => api.openDir(instanceId, `saves/${world.folder}`).catch(() => {})}
-            title="Open world folder"
-            className="grid h-7 w-7 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (menu) {
+                setMenu(null);
+                return;
+              }
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setMenu({ top: r.bottom + 4, right: window.innerWidth - r.right });
+            }}
+            title="More"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <FolderOpen size={13} />
+            <MoreVertical size={14} />
+          </button>
+          {menu &&
+            createPortal(
+              <>
+              <div className="fixed inset-0 z-[60]" onClick={() => setMenu(null)} />
+              <div
+                style={{ top: menu.top, right: menu.right }}
+                className="rise fixed z-[61] w-44 rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
+              >
+                <MenuItem
+                  icon={<Archive size={13} />}
+                  label="Back up now"
+                  onClick={() => {
+                    onBackup();
+                    setMenu(null);
+                  }}
+                />
+                <MenuItem
+                  icon={<Download size={13} />}
+                  label="Download .zip"
+                  onClick={() => {
+                    onDownload();
+                    setMenu(null);
+                  }}
+                />
+                <MenuItem
+                  icon={<FolderOpen size={13} />}
+                  label="Open folder"
+                  onClick={() => {
+                    api.openDir(instanceId, `saves/${world.folder}`).catch(() => {});
+                    setMenu(null);
+                  }}
+                />
+                <MenuItem
+                  icon={<Trash2 size={13} />}
+                  label="Delete world"
+                  danger
+                  onClick={() => {
+                    onDelete();
+                    setMenu(null);
+                  }}
+                />
+              </div>
+              </>,
+              document.body,
+            )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition ${
+        danger ? "text-red-300 hover:bg-red-500/10" : "text-gray-200 hover:bg-ink-800"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+function BackupsModal({
+  instanceId,
+  onClose,
+}: {
+  instanceId: string;
+  onClose: () => void;
+}) {
+  const { closing, close } = useClosable(onClose);
+  const [backups, setBackups] = useState<WorldBackup[] | null>(null);
+  useEffect(() => {
+    api.listWorldBackups(instanceId).then(setBackups).catch(() => setBackups([]));
+  }, [instanceId]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, [close]);
+
+  return (
+    <div
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
+    >
+      <div className="flex max-h-[80vh] w-[560px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-edge px-5 py-3">
+          <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
+            <Archive size={17} className="text-brass-400" /> World backups
+          </h2>
+          <button
+            onClick={close}
+            className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {backups === null ? (
+            <div className="grid place-items-center py-10 text-ink-600">
+              <Loader2 className="animate-spin" />
+            </div>
+          ) : backups.length === 0 ? (
+            <div className="grid place-items-center py-10 text-center text-sm text-ink-600">
+              <div>
+                <Archive size={26} className="mx-auto mb-2 opacity-50" />
+                No backups yet - use “Back up now” on a world.
+              </div>
+            </div>
+          ) : (
+            <div className="stagger flex flex-col gap-1.5">
+              {backups.map((b) => (
+                <div
+                  key={b.filename}
+                  className="flex items-center gap-3 rounded-lg border border-edge bg-ink-800/50 px-3 py-2"
+                >
+                  <Archive size={15} className="shrink-0 text-brass-400/80" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-gray-100">{b.filename}</div>
+                    <div className="text-[11px] text-ink-600">
+                      {new Date(b.modified).toLocaleString()} · {api.formatBytes(b.size_bytes)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-between border-t border-edge px-5 py-3">
+          <button
+            onClick={() => api.openDir(instanceId, "backups").catch(() => {})}
+            className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <FolderOpen size={13} /> Open backups folder
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorldDetailModal({
+  instanceId,
+  world,
+  canPlay,
+  onPlay,
+  onDatapacks,
+  onBackup,
+  onDownload,
+  onClose,
+}: {
+  instanceId: string;
+  world: WorldInfo;
+  canPlay: boolean;
+  onPlay: () => void;
+  onDatapacks: () => void;
+  onBackup: () => void;
+  onDownload: () => void;
+  onClose: () => void;
+}) {
+  const { closing, close } = useClosable(onClose);
+  const iconSrc = useWorldIcon(instanceId, world);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, [close]);
+
+  const facts: { label: string; value: string }[] = [
+    {
+      label: "Game mode",
+      value: world.game_mode >= 0 ? GAME_MODES[world.game_mode] ?? "?" : "Unknown",
+    },
+    {
+      label: "Difficulty",
+      value: world.hardcore
+        ? "Hardcore"
+        : world.difficulty >= 0
+          ? DIFFICULTIES[world.difficulty] ?? "?"
+          : "Unknown",
+    },
+    { label: "Version", value: world.version_name ?? "Unknown" },
+    { label: "Size", value: api.formatBytes(world.size_bytes) },
+    { label: "Last played", value: relativeTime(world.last_played) },
+    {
+      label: "Datapacks",
+      value: world.datapack_count > 0 ? String(world.datapack_count) : "None",
+    },
+  ];
+
+  return (
+    <div
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
+    >
+      <div className="flex max-h-[85vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
+        <div className="relative h-44 shrink-0 overflow-hidden">
+          <div className="absolute inset-0 scale-110 blur-md brightness-50">
+            <WorldThumb src={iconSrc} />
+          </div>
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="h-24 w-24 overflow-hidden rounded-lg border border-black/40 shadow-2xl">
+              <WorldThumb src={iconSrc} />
+            </div>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/30 to-transparent" />
+          {world.hardcore && (
+            <span className="absolute left-3 top-3 flex items-center gap-1 rounded bg-red-500/85 px-2 py-0.5 text-[11px] font-semibold text-white">
+              <Skull size={11} /> Hardcore
+            </span>
+          )}
+          <button
+            onClick={close}
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-md bg-ink-950/50 text-ink-400 backdrop-blur-sm transition hover:bg-ink-800 hover:text-gray-200"
+          >
+            <X size={16} />
+          </button>
+          <div className="absolute bottom-3 left-4 right-4">
+            <h2 className="truncate font-mc text-xl tracking-wide text-gray-50" title={world.name}>
+              {world.name}
+            </h2>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {world.seed != null && (
+            <button
+              onClick={() => {
+                api.copyText(String(world.seed));
+                toast("Seed copied", "success");
+              }}
+              title="Copy seed"
+              className="group/seed mb-4 flex w-full items-center gap-2 rounded-lg border border-edge bg-ink-950/50 px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <Sprout size={15} className="shrink-0 text-brass-400/80" />
+              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-600">
+                Seed
+              </span>
+              <span className="truncate font-mono text-gray-200">{String(world.seed)}</span>
+              <Copy size={14} className="ml-auto shrink-0 opacity-0 transition group-hover/seed:opacity-100" />
+            </button>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {facts.map((f) => (
+              <div key={f.label} className="rounded-lg border border-edge bg-ink-800/40 p-3">
+                <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-ink-600">
+                  {f.label}
+                </div>
+                <div className="truncate text-sm text-gray-100">{f.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 truncate font-mono text-[11px] text-ink-700" title={world.folder}>
+            {world.folder}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-edge px-5 py-3">
+          <button
+            onClick={onPlay}
+            disabled={!canPlay}
+            className="brass-btn flex items-center gap-2 rounded-md bg-brass-500 px-4 py-1.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Play size={14} className="fill-current" /> Play
           </button>
           <button
-            onClick={onDelete}
-            title="Delete world"
-            className="grid h-7 w-7 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-red-500/40 hover:text-red-300"
+            onClick={onDatapacks}
+            className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <Trash2 size={13} />
+            <Boxes size={13} /> Datapacks
           </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={onBackup}
+              className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <Archive size={13} /> Back up
+            </button>
+            <button
+              onClick={onDownload}
+              className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <Download size={13} /> Export
+            </button>
+          </div>
         </div>
       </div>
     </div>

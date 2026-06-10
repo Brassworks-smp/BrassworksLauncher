@@ -276,7 +276,7 @@ export function DatapacksModal({
                 ) : hits.length === 0 ? (
                   <div className="grid h-full place-items-center text-center text-sm text-ink-600">
                     {query
-                      ? "No datapacks found — try a different search."
+                      ? "No datapacks found - try a different search."
                       : `Start typing to search ${api.sourceLabel(source)}.`}
                   </div>
                 ) : (

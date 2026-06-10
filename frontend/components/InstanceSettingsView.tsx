@@ -16,10 +16,14 @@ import {
   Download,
   Image as ImageIcon,
   ExternalLink,
+  StickyNote,
+  X,
+  Share2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { VersionList } from "@/components/VersionList";
+import { VersionPicker } from "@/components/VersionPicker";
 import type {
   Instance,
   LauncherSettings,
@@ -27,6 +31,8 @@ import type {
   ModpackStatus,
   ContentVersion,
   JavaReport,
+  LoaderKind,
+  LoaderVersion,
 } from "@/lib/types";
 import {
   Card,
@@ -43,7 +49,7 @@ const JVM_PRESETS: { id: string; label: string; args: string[] }[] = [
   { id: "none", label: "None (vanilla defaults)", args: [] },
   {
     id: "balanced",
-    label: "Balanced — smooth G1GC (recommended)",
+    label: "Balanced - smooth G1GC (recommended)",
     args: [
       "-XX:+UseG1GC",
       "-XX:+ParallelRefProcEnabled",
@@ -54,7 +60,7 @@ const JVM_PRESETS: { id: string; label: string; args: string[] }[] = [
   },
   {
     id: "aikars",
-    label: "Aikar's flags — heavy modpacks",
+    label: "Aikar's flags - heavy modpacks",
     args: [
       "-XX:+UseG1GC",
       "-XX:+ParallelRefProcEnabled",
@@ -127,6 +133,10 @@ export function InstanceSettingsView({
     : "default";
 
   const managed = instance.pack.kind !== "none";
+  const canEditVersion =
+    !managed ||
+    ((instance.pack.kind === "modrinth" || instance.pack.kind === "curseforge") &&
+      !instance.modpack_locked);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -146,7 +156,7 @@ export function InstanceSettingsView({
               {instance.name}
             </h1>
             <div className="text-xs text-ink-600">
-              Instance settings — overrides apply only to this instance.
+              Instance settings - overrides apply only to this instance.
             </div>
           </div>
         </div>
@@ -154,6 +164,52 @@ export function InstanceSettingsView({
 
       <div className="flex-1 overflow-y-auto pr-1">
         <div className="grid grid-cols-2 gap-4">
+          <Card title="Notes & tags" icon={<StickyNote size={14} />}>
+            <textarea
+              defaultValue={instance.notes ?? ""}
+              onBlur={(e) => patch({ notes: e.target.value.trim() || null })}
+              placeholder="Personal notes about this instance - mods to try, server rules, whatever you like…"
+              rows={3}
+              className={`${inputCls} resize-none leading-relaxed`}
+              spellCheck={false}
+            />
+            <div>
+              <div className="mb-1.5 text-sm text-ink-600">Tags</div>
+              <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-ink-950/70 px-2 py-1.5 ring-1 ring-edge">
+                {(instance.tags ?? []).map((t) => (
+                  <span
+                    key={t}
+                    className="flex items-center gap-1 rounded-full bg-brass-500/15 px-2 py-0.5 text-xs text-brass-300"
+                  >
+                    {t}
+                    <button
+                      onClick={() =>
+                        patch({ tags: (instance.tags ?? []).filter((x) => x !== t) })
+                      }
+                      className="text-brass-300/70 hover:text-red-300"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  placeholder="Add tag…"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const v = e.currentTarget.value.trim().toLowerCase();
+                      if (v && !(instance.tags ?? []).includes(v))
+                        patch({ tags: [...(instance.tags ?? []), v] });
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                  className="min-w-[80px] flex-1 bg-transparent py-0.5 text-xs outline-none placeholder:text-ink-600"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+          </Card>
+          <ExportCard instanceId={instance.id} />
+          {canEditVersion && <VersionLoaderCard instance={instance} onSave={patch} />}
           <Card title="Memory" icon={<SlidersHorizontal size={14} />}>
             <Toggle
               label="Override launcher default"
@@ -303,6 +359,18 @@ export function InstanceSettingsView({
                 <input
                   defaultValue={instance.banner ?? ""}
                   onBlur={(e) => patch({ banner: e.target.value.trim() || null })}
+                  placeholder="https://… or /local.png"
+                  className={`${inputCls} font-mono text-xs`}
+                  spellCheck={false}
+                />
+              </Field>
+              <Field
+                label="Logo URL"
+                hint="Hero logo shown centered above the Play button. Any aspect ratio."
+              >
+                <input
+                  defaultValue={instance.logo ?? ""}
+                  onBlur={(e) => patch({ logo: e.target.value.trim() || null })}
                   placeholder="https://… or /local.png"
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
@@ -516,9 +584,9 @@ function ModpackCard({
 
   return (
     <Card title="Modpack" icon={<Package size={14} />}>
-      <Row label="Installed version" value={modStatus?.installed_version ?? "—"} />
+      <Row label="Installed version" value={modStatus?.installed_version ?? "-"} />
       {isPackwiz && (
-        <Row label="Latest version" value={modStatus?.latest_version || "—"} />
+        <Row label="Latest version" value={modStatus?.latest_version || "-"} />
       )}
 
       {maintaining && (
@@ -713,5 +781,134 @@ function DeleteButton({
         Cancel
       </button>
     </div>
+  );
+}
+
+function ExportCard({ instanceId }: { instanceId: string }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = (format: "modrinth" | "curseforge") => {
+    setBusy(format);
+    api
+      .exportModpack(instanceId, format)
+      .then((path) => toast(`Exported to ${path}`, "success"))
+      .catch((e) => toast(String(e), "error"))
+      .finally(() => setBusy(null));
+  };
+  const btn =
+    "flex flex-1 items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <Card title="Export modpack" icon={<Share2 size={14} />}>
+      <p className="text-xs text-ink-600">
+        Bundle this instance&apos;s added content into a shareable modpack file
+        (saved to your Downloads folder).
+      </p>
+      <div className="flex gap-2">
+        <button onClick={() => run("modrinth")} disabled={!!busy} className={btn}>
+          {busy === "modrinth" ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Download size={15} />
+          )}
+          Modrinth .mrpack
+        </button>
+        <button
+          onClick={() => run("curseforge")}
+          disabled={!!busy}
+          className={btn}
+        >
+          {busy === "curseforge" ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Download size={15} />
+          )}
+          CurseForge .zip
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+const VL_LOADERS: { id: string; kind: LoaderKind; label: string }[] = [
+  { id: "vanilla", kind: "vanilla", label: "Vanilla" },
+  { id: "neoforge", kind: "neo_forge", label: "NeoForge" },
+  { id: "forge", kind: "forge", label: "Forge" },
+  { id: "fabric", kind: "fabric", label: "Fabric" },
+  { id: "quilt", kind: "quilt", label: "Quilt" },
+];
+
+const lvToStr = (lv: LoaderVersion): string =>
+  lv.channel === "exact" ? lv.value : lv.channel;
+const strToLv = (s: string): LoaderVersion =>
+  s === "stable" || s === "unstable"
+    ? { channel: s }
+    : { channel: "exact", value: s };
+
+function VersionLoaderCard({
+  instance,
+  onSave,
+}: {
+  instance: Instance;
+  onSave: (p: Partial<Instance>) => void;
+}) {
+  const kindToPicker = (k: string) => (k === "neo_forge" ? "neoforge" : k);
+  const [pickerLoader, setPickerLoader] = useState(kindToPicker(instance.loader));
+  const [mc, setMc] = useState(instance.minecraft_version);
+  const [lv, setLv] = useState(lvToStr(instance.loader_version));
+  const kind = VL_LOADERS.find((l) => l.id === pickerLoader)?.kind ?? "vanilla";
+  const changed =
+    kind !== instance.loader ||
+    mc !== instance.minecraft_version ||
+    lvToStr(instance.loader_version) !== lv;
+
+  return (
+    <Card title="Version & loader" icon={<Hammer size={14} />}>
+      <Field
+        label="Mod loader"
+        hint="Switch loaders or make a vanilla instance modded. Re-installs on next launch."
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {VL_LOADERS.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => {
+                setPickerLoader(l.id);
+                if (l.id !== pickerLoader) setLv("stable");
+              }}
+              className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                pickerLoader === l.id
+                  ? "border-brass-500/50 bg-brass-500/15 text-brass-300"
+                  : "border-edge text-ink-600 hover:text-brass-300"
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <VersionPicker
+        loader={pickerLoader}
+        mc={mc}
+        setMc={setMc}
+        loaderVersion={lv}
+        setLoaderVersion={setLv}
+      />
+      <button
+        onClick={() => {
+          onSave({
+            minecraft_version: mc,
+            loader: kind,
+            loader_version: strToLv(lv),
+          });
+          toast("Version updated - it installs on next launch", "info");
+        }}
+        disabled={!changed}
+        className="brass-btn flex items-center justify-center gap-2 self-start rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Wrench size={15} /> Apply changes
+      </button>
+      <p className="text-xs text-ink-600">
+        Existing mods may need to be updated for the new version or loader.
+      </p>
+    </Card>
   );
 }

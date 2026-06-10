@@ -17,12 +17,10 @@ export function ServerCard({
   const hasQueue = !!data?.queue.online && (data?.queue.players_online ?? 0) > 0;
 
   return (
-    <div className="group relative w-[240px] rounded-xl panel p-4 transition-colors hover:border-brass-600/40 hover:bg-ink-800/80">
+    <div className="group relative rounded-lg border border-edge bg-ink-900/40 p-4 transition-colors hover:border-brass-600/40">
       <CardRefresh onRefresh={onRefresh} />
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-widest text-ink-600">
-          Server
-        </span>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-mc text-sm tracking-wide text-brass-300">Server</h3>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] ${
             online
@@ -34,7 +32,7 @@ export function ServerCard({
           {data ? (online ? "Online" : "Offline") : error ? "Unavailable" : "…"}
         </span>
       </div>
-      <div className="mt-2 font-mono text-sm text-brass-300">{address}</div>
+      <div className="font-mono text-xs text-brass-300">{address}</div>
       <div className="mt-3 flex items-center gap-2 text-sm text-ink-600">
         <Users size={14} className="text-brass-400" />
         {online && data ? (

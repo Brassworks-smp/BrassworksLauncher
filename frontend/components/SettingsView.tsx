@@ -287,6 +287,12 @@ export function SettingsView({
                 checked={settings.reduce_motion}
                 onChange={(v) => patch({ reduce_motion: v })}
               />
+              <Toggle
+                label="Close to tray"
+                description="Keep running in the system tray when you close the window."
+                checked={settings.close_to_tray}
+                onChange={(v) => patch({ close_to_tray: v })}
+              />
             </Card>
 
             <Card title="Playtime" icon={<Clock size={14} />}>
@@ -479,7 +485,7 @@ function UpdatesCard({
 
   return (
     <Card title="Updates" icon={<ArrowUpCircle size={14} />}>
-      <Row label="Current version" value={appVersion ? `v${appVersion}` : "—"} />
+      <Row label="Current version" value={appVersion ? `v${appVersion}` : "-"} />
       <Toggle
         label="Automatic updates"
         description="Check for and install launcher updates on startup."
@@ -553,6 +559,9 @@ function UpdatesCard({
   );
 }
 
+const javaReportCache = new Map<string, JavaReport>();
+let javaRuntimesCache: JavaInstall[] | null = null;
+
 function JavaTab({
   instanceId,
   settings,
@@ -562,28 +571,52 @@ function JavaTab({
   settings: LauncherSettings;
   patchSettings: (p: Partial<LauncherSettings>) => void;
 }) {
-  const [report, setReport] = useState<JavaReport | null>(null);
+  const [report, setReport] = useState<JavaReport | null>(() =>
+    instanceId ? javaReportCache.get(instanceId) ?? null : null,
+  );
   const [loading, setLoading] = useState(false);
   const [customDraft, setCustomDraft] = useState(settings.java_path ?? "");
-  const [runtimes, setRuntimes] = useState<JavaInstall[]>([]);
+  const [runtimes, setRuntimes] = useState<JavaInstall[]>(
+    () => javaRuntimesCache ?? [],
+  );
   const [downloading, setDownloading] = useState<number | null>(null);
 
   const reloadRuntimes = () => {
-    if (api.isTauri()) api.listJavaRuntimes().then(setRuntimes).catch(() => {});
+    if (api.isTauri())
+      api
+        .listJavaRuntimes()
+        .then((r) => {
+          javaRuntimesCache = r;
+          setRuntimes(r);
+        })
+        .catch(() => {});
   };
 
   const load = () => {
     if (!api.isTauri()) return;
     reloadRuntimes();
     if (!instanceId) return;
-    setLoading(true);
+    if (!javaReportCache.has(instanceId)) setLoading(true);
     api
       .javaInfo(instanceId)
-      .then(setReport)
+      .then((r) => {
+        javaReportCache.set(instanceId, r);
+        setReport(r);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
-  useEffect(load, [instanceId]);
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(load);
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId]);
 
   const download = (major: number) => {
     setDownloading(major);
@@ -597,7 +630,7 @@ function JavaTab({
       .finally(() => setDownloading(null));
   };
 
-  const MAJORS = [8, 17, 21];
+  const MAJORS = [8, 17, 21, 25];
 
   const current =
     settings.java_policy === "system"
@@ -618,7 +651,7 @@ function JavaTab({
   };
 
   const options = [
-    { value: "auto", label: "Automatic — download the right Java (recommended)" },
+    { value: "auto", label: "Automatic - download the right Java (recommended)" },
     ...(report?.system
       ? [
           {
@@ -715,7 +748,7 @@ function JavaTab({
             </div>
           ) : (
             <p className="text-xs text-ink-600">
-              None yet — the right runtime downloads automatically on first
+              None yet - the right runtime downloads automatically on first
               launch.
             </p>
           )}

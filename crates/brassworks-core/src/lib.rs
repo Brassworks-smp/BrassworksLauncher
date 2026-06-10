@@ -35,14 +35,14 @@ pub use auth::MicrosoftCode;
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
 pub use instance::{Instance, InstanceManager, LoaderKind, LoaderVersion, PackSource};
-pub use launch::{launch_instance, LaunchRequest};
+pub use launch::{launch_instance, LaunchRequest, QuickPlay};
 pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
 pub use packwiz::SearchHit;
 pub use paths::Paths;
 pub use ping::ServerStatus;
-pub use saves::{DatapackInfo, ServerEntry, WorldInfo};
+pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
 pub use stars::StarKind;
 pub use progress::{LaunchProgress, LaunchStage, ProgressSink};
 pub use remote::{
@@ -190,6 +190,7 @@ impl Launcher {
     pub fn launch(
         &self,
         instance_id: &str,
+        quick_play: Option<QuickPlay>,
         cancel: &dyn Fn() -> bool,
         on_progress: &mut ProgressSink,
     ) -> Result<Child> {
@@ -204,6 +205,7 @@ impl Launcher {
                 instance: &instance,
                 account: &account,
                 settings: &settings,
+                quick_play,
             },
             cancel,
             on_progress,
@@ -930,7 +932,43 @@ impl Launcher {
         self.modpack_for(instance_id).uninstall()
     }
 
-    // ---- Worlds, servers, datapacks, favourites (per instance) ----
+    /// Export an instance's content as a Modrinth `.mrpack` or CurseForge `.zip`,
+    /// written to the Downloads folder. Returns the saved path.
+    pub fn export_modpack(&self, instance_id: &str, format: &str) -> Result<String> {
+        let instance = self.instances().get(instance_id)?;
+        let mp = self.modpack_for(instance_id);
+        let loader = instance.loader.as_str();
+        let loader_version = match &instance.loader_version {
+            instance::LoaderVersion::Exact(v) => Some(v.clone()),
+            _ => mp.installed_neoforge(),
+        };
+        let bytes = if format == "curseforge" {
+            mp.export_curseforge(
+                &instance.name,
+                &instance.minecraft_version,
+                loader,
+                loader_version.as_deref(),
+            )?
+        } else {
+            mp.export_modrinth(
+                &instance.name,
+                &instance.minecraft_version,
+                loader,
+                loader_version.as_deref(),
+            )?
+        };
+        let ext = if format == "curseforge" { "zip" } else { "mrpack" };
+        let safe: String = instance
+            .name
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        let dir = dirs::download_dir().unwrap_or_else(|| self.paths.root().to_path_buf());
+        let dest = dir.join(format!("{}.{ext}", safe.trim_matches('-')));
+        std::fs::write(&dest, bytes).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().into_owned())
+    }
+
 
     pub fn list_worlds(&self, instance_id: &str) -> Vec<WorldInfo> {
         let stars = stars::load(&self.paths, instance_id);
@@ -948,6 +986,30 @@ impl Launcher {
 
     pub fn delete_world(&self, instance_id: &str, folder: &str) -> Result<()> {
         saves::delete_world(&self.paths.instance_saves_dir(instance_id), folder)
+    }
+
+    pub fn backup_world(&self, instance_id: &str, world: &str) -> Result<String> {
+        saves::backup_world(
+            &self.paths.instance_saves_dir(instance_id),
+            &self.paths.instance_game_dir(instance_id),
+            world,
+        )
+    }
+
+    pub fn list_world_backups(&self, instance_id: &str) -> Vec<WorldBackup> {
+        saves::list_backups(&self.paths.instance_game_dir(instance_id))
+    }
+
+    pub fn export_world(&self, instance_id: &str, world: &str) -> Result<String> {
+        let bytes = saves::zip_world(&self.paths.instance_saves_dir(instance_id), world)?;
+        let safe: String = world
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        let dir = dirs::download_dir().unwrap_or_else(|| self.paths.root().to_path_buf());
+        let dest = dir.join(format!("{}.zip", safe.trim_matches('-')));
+        std::fs::write(&dest, bytes).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().into_owned())
     }
 
     pub fn list_datapacks(&self, instance_id: &str, world: &str) -> Vec<DatapackInfo> {
@@ -1021,8 +1083,30 @@ impl Launcher {
     pub fn list_servers(&self, instance_id: &str) -> Vec<ServerEntry> {
         let stars = stars::load(&self.paths, instance_id);
         let mut servers = saves::read_servers(&self.paths.instance_servers_file(instance_id));
+        if self.instances().get(instance_id).map(|i| i.featured).unwrap_or(false) {
+            if let Some(fs) = featured::featured_packs()
+                .into_iter()
+                .find(|f| f.id == instance_id)
+                .and_then(|f| f.server)
+            {
+                if !servers.iter().any(|s| s.ip == fs.ip) {
+                    servers.insert(
+                        0,
+                        ServerEntry {
+                            name: fs.name,
+                            ip: fs.ip,
+                            icon: None,
+                            accept_textures: None,
+                            featured: true,
+                            starred: false,
+                        },
+                    );
+                }
+            }
+        }
         for s in servers.iter_mut() {
-            s.starred = stars.contains(StarKind::Servers, &saves::server_key(&s.name, &s.ip));
+            s.starred =
+                s.featured || stars.contains(StarKind::Servers, &saves::server_key(&s.name, &s.ip));
         }
         servers
     }

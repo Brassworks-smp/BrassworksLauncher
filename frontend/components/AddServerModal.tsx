@@ -51,6 +51,7 @@ export function AddServerModal({
       ip: ip.trim(),
       icon: initial?.icon ?? null,
       accept_textures: initial?.accept_textures ?? null,
+      featured: false,
       starred: initial?.starred ?? false,
     });
     close();

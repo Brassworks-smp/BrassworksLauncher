@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "brassworks-core"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "brassworks-launcher"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "brassworks-core",
  "discord-rich-presence",
@@ -2044,7 +2044,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "java"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "reqwest 0.12.28",
@@ -2861,7 +2861,7 @@ dependencies = [
 
 [[package]]
 name = "packwiz"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "hex",
  "reqwest 0.12.28",
@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "portablemc"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "dirs",

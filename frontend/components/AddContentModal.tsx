@@ -240,7 +240,7 @@ export function AddContentModal({
               ) : hits.length === 0 ? (
                 <div className="grid h-full place-items-center text-center text-sm text-ink-600">
                   {query
-                    ? "No results — try a different search."
+                    ? "No results - try a different search."
                     : `Start typing to search ${api.sourceLabel(source)}.`}
                 </div>
               ) : (

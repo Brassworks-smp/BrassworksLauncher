@@ -53,7 +53,7 @@ export function MicrosoftModal({
             <Loader2 size={26} className="animate-spin text-brass-400" />
             <p className="text-sm text-ink-600">
               {state.status === "code"
-                ? "A sign-in window has opened. Finish logging in there — the launcher will pick it up automatically."
+                ? "A sign-in window has opened. Finish logging in there - the launcher will pick it up automatically."
                 : "Opening Microsoft sign-in…"}
             </p>
             {state.status === "code" && (

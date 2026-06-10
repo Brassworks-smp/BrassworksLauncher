@@ -152,6 +152,8 @@ pub struct Instance {
     pub icon: Option<String>,
     #[serde(default)]
     pub banner: Option<String>,
+    #[serde(default)]
+    pub logo: Option<String>,
     #[serde(default = "default_true")]
     pub modpack_locked: bool,
 
@@ -169,6 +171,13 @@ pub struct Instance {
     pub last_played: Option<DateTime<Utc>>,
     #[serde(default)]
     pub playtime_seconds: u64,
+
+    #[serde(default)]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub folder_id: Option<String>,
 }
 
 impl Instance {
@@ -194,6 +203,7 @@ impl Instance {
             pinned: false,
             icon: fp.icon.clone(),
             banner: fp.banner.clone(),
+            logo: fp.logo.clone(),
             modpack_locked: fp.locked_default,
             news_url: fp.news_url.clone(),
             playercount_url: fp.playercount_url.clone(),
@@ -202,6 +212,9 @@ impl Instance {
             created_at: Utc::now(),
             last_played: None,
             playtime_seconds: 0,
+            notes: None,
+            tags: Vec::new(),
+            folder_id: None,
         }
     }
 
@@ -233,6 +246,7 @@ impl Instance {
             pinned: false,
             icon: None,
             banner: None,
+            logo: None,
             modpack_locked,
             news_url: None,
             playercount_url: None,
@@ -241,6 +255,9 @@ impl Instance {
             created_at: Utc::now(),
             last_played: None,
             playtime_seconds: 0,
+            notes: None,
+            tags: Vec::new(),
+            folder_id: None,
         }
     }
 
@@ -351,6 +368,9 @@ impl InstanceManager {
                     }
                     if inst.banner.is_none() {
                         inst.banner = fp.banner.clone();
+                    }
+                    if inst.logo.is_none() {
+                        inst.logo = fp.logo.clone();
                     }
                     if inst.news_url.is_none() {
                         inst.news_url = fp.news_url.clone();

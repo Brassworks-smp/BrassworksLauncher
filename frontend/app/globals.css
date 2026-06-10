@@ -452,6 +452,29 @@ a:focus-visible,
   transform: translateX(130%);
 }
 
+/* ---- Skeleton placeholders (shown instantly while heavy content mounts) ---- */
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-ink-800) 25%,
+    var(--color-ink-700) 37%,
+    var(--color-ink-800) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Off-screen rows in long lists are skipped by the browser (cheap to scroll a
+   huge list). Progressive enhancement — a no-op where unsupported. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
 /* Soft pulsing halo for "live"/running status dots. */
 @keyframes halo {
   0%,

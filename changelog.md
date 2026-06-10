@@ -1,19 +1,19 @@
 ### **Additions:**
-* A brand new **Worlds** tab — every singleplayer world in an instance shows up with its real in-game thumbnail (or a classic grass-block icon if it doesnt have one), plus its game mode, difficulty, last-played time and size. Star ur favourites, jump straight to the world folder, or delete a world right from here
-* A per-world **datapack manager** — browse and install datapacks straight from Modrinth and CurseForge into any world, exactly like the content page. Manage the ones u already have (enable, disable, remove), see each pack's logo, description and which site it came from, and click an installed one to change its version or update it later
-* A brand new **Servers** tab — add, edit, reorder and remove servers without ever opening the game. Each server gets live-pinged so u can see its MOTD, player count, version, icon and ping right in the list, and it follows SRV records so community server addresses actually connect
-* **Star ur favourites** — worlds, servers and screenshots can all be starred now (just like pinning an instance), each with a quick "starred only" filter, and ur stars are saved per instance
-* When making a custom instance u can now **type a Minecraft version by hand** instead of scrolling through the giant dropdown
+* **Instance folders** — group ur instances into colour-coded, collapsible folders. Drag an instance straight onto a folder to file it away, rename folders inline, pick from a big palette of colours, and pin ur favourites to the top. Everything inside a folder (the card outline, buttons, icons and tags) picks up that folder's colour so it's obvious what belongs where
+* **Tags** — tag any instance (modded, smp, testing, whatever) and filter the whole list down to a single tag with one click
+* A **command palette** — hit `Ctrl/⌘ K` anywhere to fuzzy-search and jump to any tab, switch instances, launch the game, view the last log, open the game folder or flip the theme. Type `/` to narrow it down to just actions, then keep typing and hit enter — no arrow keys needed
+* **Quick Play** — launch straight into a server or a singleplayer world right from the Servers and Worlds tabs (Minecraft 1.20+). One click boots the game and drops u directly in
+* **Export** — export any instance as a Modrinth `.mrpack` or a CurseForge modpack to share it, and export or back up individual worlds as zips with a per-world backup manager
+* **Close to tray** — an optional setting that tucks the launcher into the system tray (with Show / Hide / Quit) instead of quitting, so it stays out of the way while the game is running
+* **Per-instance notes, tags and a custom logo** — jot down personal notes, manage tags, and set a hero logo shown above the Play button, all from the instance settings
+* Worlds now show their **seed** so u can grab it without loading in
+* Featured packs can ship a **default server** that shows up read-only in ur Servers tab, pre-pinged and ready to join
 
 ### **Improvements:**
-* A big pass of polish and animation across the whole app — pages fade in as u switch tabs, windows ease open and shut instead of popping in and out, the highlight slides between tabs and filters, dropdowns expand smoothly, and the version and changelog lists glide into place
-* The content list now animates when u switch category or filter, and moving between browse, details and versions inside Add Content / Install Modpack slides instead of snapping
-* Worlds, servers, screenshots and datapacks all got proper search, filters and hover states so they feel like the rest of the launcher, and the per-instance Java cards now match the ones in the main settings
-* The Content page remembers what it loaded, so reopening it for the same instance is instant instead of loading from scratch every single time
-* Once u dismiss the "possible duplicate mods" warning it stays dismissed for that instance instead of popping up every time u open the page
-* Sliders now fill and glide as u drag them, and the star buttons and tab highlights all match the brass theme
+* The skin & cape editor makes the **active cape obvious now** — the selected cape gets a bright highlight and a check badge so u can always tell which one is on, instead of the faint outline it had before
+* A pass of polish on the instance cards and folders — softer hover outlines, the selected card follows its folder colour, the default cube icon and action buttons match the folder theme, and the colour swatches are squared off to fit the rest of the app
+* The sidebar search/command button now sits down by the log controls where it's easier to reach
 
 ### **Fixes:**
-* Skins and capes load properly in the installed app now — they were quietly failing in release builds (and only working while developing) because Mojang hands them out over insecure links, so now we fix the links up and ur skin, capes and account avatars actually show
-* Browsing datapacks on CurseForge shows actual datapacks now instead of regular mods, and installing one grabs the real datapack file
-* The version u already have installed shows a clear "Installed" tag instead of letting u reinstall the exact same thing
+* Applying a skin no longer flashes a long internal id in the toast — it just tells u the skin and cape were applied
+* Expanding a folder no longer shows a brief white flash along the bottom of its header

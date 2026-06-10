@@ -32,8 +32,24 @@ pub struct LauncherSettings {
     pub discord_rpc: bool,
     pub reduce_motion: bool,
 
+    #[serde(default)]
+    pub close_to_tray: bool,
+
+    #[serde(default)]
+    pub instance_folders: Vec<InstanceFolder>,
+
     pub auto_update: bool,
     pub last_version: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InstanceFolder {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub collapsed: bool,
 }
 
 impl Default for LauncherSettings {
@@ -66,6 +82,8 @@ impl Default for LauncherSettings {
 
             discord_rpc: true,
             reduce_motion: false,
+            close_to_tray: false,
+            instance_folders: Vec::new(),
 
             auto_update: true,
             last_version: None,

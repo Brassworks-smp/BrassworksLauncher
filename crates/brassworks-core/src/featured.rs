@@ -13,6 +13,10 @@ pub struct FeaturedPack {
     #[serde(default)]
     pub banner: Option<String>,
     #[serde(default)]
+    pub logo: Option<String>,
+    #[serde(default)]
+    pub server: Option<FeaturedServer>,
+    #[serde(default)]
     pub news_url: Option<String>,
     #[serde(default)]
     pub playercount_url: Option<String>,
@@ -22,6 +26,12 @@ pub struct FeaturedPack {
     pub loader: String,
     #[serde(default)]
     pub loader_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeaturedServer {
+    pub name: String,
+    pub ip: String,
 }
 
 fn default_true() -> bool {

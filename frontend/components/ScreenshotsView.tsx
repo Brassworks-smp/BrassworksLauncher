@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { useClosable, StarButton } from "@/components/ui";
+import { useClosable, StarButton, useProgressive } from "@/components/ui";
 import type { Screenshot } from "@/lib/types";
 
 function fmtDate(ms: number): string {
@@ -86,6 +86,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
   const list = (shots ?? [])
     .filter((s) => scope === "all" || s.instance === instanceId)
     .filter((s) => !starredOnly || s.starred);
+  const { shown } = useProgressive(list, 48, `${scope}:${starredOnly}`);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -156,12 +157,12 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
         <div className="grid flex-1 place-items-center text-center text-ink-600">
           <div>
             <ImageIcon size={28} className="mx-auto mb-2 opacity-50" />
-            No screenshots yet — press F2 in‑game to take one.
+            No screenshots yet - press F2 in‑game to take one.
           </div>
         </div>
       ) : (
         <div className="stagger grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
-          {list.map((s, i) => (
+          {shown.map((s, i) => (
             <button
               key={s.path}
               onClick={() => setActive(i)}

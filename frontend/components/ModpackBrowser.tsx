@@ -59,10 +59,10 @@ export function ModpackBrowser({
 
   if (selected) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
         <button
           onClick={() => setSelected(null)}
-          className="flex items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
+          className="flex shrink-0 items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
         >
           <ChevronLeft size={14} /> Back to results
         </button>
@@ -96,7 +96,7 @@ export function ModpackBrowser({
           <div className="text-xs text-red-300">{detailError}</div>
         )}
 
-        <div key={showVersions ? "versions" : "overview"} className="swap-in flex flex-col gap-3">
+        <div key={showVersions ? "versions" : "overview"} className="swap-in flex min-h-0 flex-1 flex-col gap-3">
         {!showVersions ? (
           <>
             <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export function ModpackBrowser({
                 ) : (
                   <Download size={16} />
                 )}
-                Install — choose a version
+                Install - choose a version
               </button>
               {detail?.url && (
                 <button
@@ -123,7 +123,7 @@ export function ModpackBrowser({
               )}
             </div>
             {detail?.body && (
-              <div className="max-h-[300px] overflow-y-auto rounded-lg border border-edge bg-ink-950/30 p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-edge bg-ink-950/30 p-4">
                 <Markdown className="text-[13px]">{detail.body}</Markdown>
               </div>
             )}
@@ -132,11 +132,11 @@ export function ModpackBrowser({
           <>
             <button
               onClick={() => setShowVersions(false)}
-              className="flex items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
+              className="flex shrink-0 items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
             >
               <ChevronLeft size={14} /> Back to overview
             </button>
-            <div className="max-h-[360px] overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <VersionList
                 instanceId={detailInstanceId ?? ""}
                 projectId={selected.project_id}
@@ -155,8 +155,8 @@ export function ModpackBrowser({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 rounded-md bg-ink-950/70 px-3 ring-1 ring-edge focus-within:ring-brass-500/60">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 items-center gap-2 rounded-md bg-ink-950/70 px-3 ring-1 ring-edge focus-within:ring-brass-500/60">
         <Search size={15} className="text-ink-600" />
         <input
           value={query}
@@ -172,7 +172,7 @@ export function ModpackBrowser({
       {error && <div className="text-xs text-red-300">{error}</div>}
 
       <div
-        className="flex max-h-[340px] flex-col gap-2 overflow-y-auto pr-1"
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
         onScroll={handleScroll}
       >
         {hits.map((h) => (

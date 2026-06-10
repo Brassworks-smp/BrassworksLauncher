@@ -34,6 +34,7 @@ import type {
   SavedSkin,
   SkinLibraryView,
   WorldInfo,
+  WorldBackup,
   DatapackInfo,
   ServerEntry,
   ServerStatus,
@@ -97,8 +98,13 @@ export const subscribeFaceTextures = (cb: () => void): (() => void) => {
 };
 
 
-export const launch = (instanceId: string): Promise<void> =>
-  invoke("launch", { instanceId });
+export type QuickPlay =
+  | { kind: "server"; ip: string }
+  | { kind: "world"; folder: string };
+export const launch = (
+  instanceId: string,
+  quickPlay?: QuickPlay,
+): Promise<void> => invoke("launch", { instanceId, quickPlay: quickPlay ?? null });
 export const stop = (instanceId: string): Promise<void> =>
   invoke("stop", { instanceId });
 export const cancelOp = (instanceId: string): Promise<void> =>
@@ -176,6 +182,10 @@ export const contentChangelog = (
   invoke("content_changelog", { instanceId, projectId, versionId, source });
 export const uninstallGame = (instanceId: string): Promise<void> =>
   invoke("uninstall_game", { instanceId });
+export const exportModpack = (
+  instanceId: string,
+  format: "modrinth" | "curseforge",
+): Promise<string> => invoke("export_modpack", { instanceId, format });
 export const contentDetail = (
   instanceId: string,
   projectId: string,
@@ -243,6 +253,17 @@ export const deleteWorld = (
   instanceId: string,
   folder: string,
 ): Promise<void> => invoke("delete_world", { instanceId, folder });
+export const backupWorld = (
+  instanceId: string,
+  world: string,
+): Promise<string> => invoke("backup_world", { instanceId, world });
+export const listWorldBackups = (
+  instanceId: string,
+): Promise<WorldBackup[]> => invoke("list_world_backups", { instanceId });
+export const exportWorld = (
+  instanceId: string,
+  world: string,
+): Promise<string> => invoke("export_world", { instanceId, world });
 
 export const listDatapacks = (
   instanceId: string,

@@ -20,6 +20,8 @@ pub struct WorldInfo {
     pub size_bytes: u64,
     pub datapack_count: usize,
     #[serde(default)]
+    pub seed: Option<i64>,
+    #[serde(default)]
     pub starred: bool,
 }
 
@@ -43,6 +45,23 @@ struct LevelData {
     difficulty: Option<i8>,
     #[serde(rename = "Version")]
     version: Option<LevelVersion>,
+    #[serde(rename = "WorldGenSettings")]
+    world_gen_settings: Option<WorldGenSettings>,
+    #[serde(rename = "RandomSeed")]
+    random_seed: Option<i64>,
+    #[serde(rename = "Player")]
+    player: Option<PlayerData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorldGenSettings {
+    seed: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlayerData {
+    #[serde(rename = "playerGameType")]
+    player_game_type: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +100,15 @@ pub fn list_worlds(saves_dir: &Path) -> Vec<WorldInfo> {
                 .unwrap_or_else(|| folder.clone()),
             icon: dir.join("icon.png").exists(),
             last_played: data.as_ref().and_then(|d| d.last_played).unwrap_or(0),
-            game_mode: data.as_ref().and_then(|d| d.game_type).unwrap_or(-1),
+            game_mode: data
+                .as_ref()
+                .and_then(|d| {
+                    d.player
+                        .as_ref()
+                        .and_then(|p| p.player_game_type)
+                        .or(d.game_type)
+                })
+                .unwrap_or(-1),
             hardcore: data.as_ref().and_then(|d| d.hardcore).unwrap_or(0) != 0,
             difficulty: data
                 .as_ref()
@@ -89,6 +116,12 @@ pub fn list_worlds(saves_dir: &Path) -> Vec<WorldInfo> {
                 .map(|d| d as i32)
                 .unwrap_or(-1),
             version_name: data.as_ref().and_then(|d| d.version.as_ref()).and_then(|v| v.name.clone()),
+            seed: data.as_ref().and_then(|d| {
+                d.world_gen_settings
+                    .as_ref()
+                    .and_then(|w| w.seed)
+                    .or(d.random_seed)
+            }),
             size_bytes: dir_size(&dir),
             datapack_count,
             folder,
@@ -115,6 +148,93 @@ pub fn world_icon_path(saves_dir: &Path, folder: &str) -> Option<PathBuf> {
     }
     let p = saves_dir.join(folder).join("icon.png");
     p.exists().then_some(p)
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldBackup {
+    pub filename: String,
+    pub size_bytes: u64,
+    pub modified: i64,
+}
+
+pub fn zip_world(saves_dir: &Path, world: &str) -> Result<Vec<u8>> {
+    use std::io::Write;
+    if !safe_name(world) {
+        return Err(CoreError::Modpack("invalid world folder".into()));
+    }
+    let root = saves_dir.join(world);
+    if !root.is_dir() {
+        return Err(CoreError::Modpack("world not found".into()));
+    }
+    let zip_err = |e: zip::result::ZipError| CoreError::Modpack(format!("zip: {e}"));
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default();
+        let mut stack = vec![root.clone()];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                match entry.file_type() {
+                    Ok(ft) if ft.is_dir() => stack.push(path),
+                    Ok(ft) if ft.is_file() => {
+                        let rel = path.strip_prefix(saves_dir).unwrap_or(&path);
+                        let name = rel.to_string_lossy().replace('\\', "/");
+                        if let Ok(bytes) = std::fs::read(&path) {
+                            zip.start_file(name, opts).map_err(zip_err)?;
+                            zip.write_all(&bytes)
+                                .map_err(|e| CoreError::Modpack(format!("zip write: {e}")))?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        zip.finish().map_err(zip_err)?;
+    }
+    Ok(buf)
+}
+
+pub fn backup_world(saves_dir: &Path, game_dir: &Path, world: &str) -> Result<String> {
+    let bytes = zip_world(saves_dir, world)?;
+    let dir = game_dir.join("backups");
+    std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+    let filename = format!("{world}_{stamp}.zip");
+    let dest = dir.join(&filename);
+    std::fs::write(&dest, bytes).map_err(|e| CoreError::io(&dest, e))?;
+    Ok(filename)
+}
+
+pub fn list_backups(game_dir: &Path) -> Vec<WorldBackup> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(game_dir.join("backups")) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) if n.to_lowercase().ends_with(".zip") => n.to_string(),
+            _ => continue,
+        };
+        let meta = entry.metadata().ok();
+        out.push(WorldBackup {
+            size_bytes: meta.as_ref().map(|m| m.len()).unwrap_or(0),
+            modified: meta
+                .as_ref()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0),
+            filename: name,
+        });
+    }
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out
 }
 
 pub fn delete_world(saves_dir: &Path, folder: &str) -> Result<()> {
@@ -335,6 +455,8 @@ pub struct ServerEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accept_textures: Option<i8>,
     #[serde(default)]
+    pub featured: bool,
+    #[serde(default)]
     pub starred: bool,
 }
 
@@ -373,6 +495,7 @@ pub fn read_servers(servers_file: &Path) -> Vec<ServerEntry> {
             ip: s.ip,
             icon: s.icon,
             accept_textures: s.accept_textures,
+            featured: false,
             starred: false,
         })
         .collect()
@@ -385,6 +508,7 @@ pub fn write_servers(servers_file: &Path, entries: &[ServerEntry]) -> Result<()>
     let file = ServersFile {
         servers: entries
             .iter()
+            .filter(|e| !e.featured) 
             .map(|e| ServerNbt {
                 name: e.name.clone(),
                 ip: e.ip.clone(),

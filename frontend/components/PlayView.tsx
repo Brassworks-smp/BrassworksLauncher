@@ -191,6 +191,16 @@ export function PlayView({
             </div>
           </div>
 
+          {instance.logo && (
+            <div className="pointer-events-none flex min-h-0 flex-1 items-center justify-center overflow-hidden py-6">
+              <img
+                src={instance.logo}
+                alt=""
+                className="max-h-[58%] max-w-[62%] object-contain drop-shadow-[0_8px_28px_rgba(0,0,0,0.55)]"
+              />
+            </div>
+          )}
+
           <div className="mt-auto">
             {hasUpdate && (
               <div
@@ -205,10 +215,10 @@ export function PlayView({
                   {locked
                     ? `Modpack update available${
                         modStatus?.latest_version
-                          ? ` — v${modStatus.latest_version}`
+                          ? ` - v${modStatus.latest_version}`
                           : ""
                       }`
-                    : "Update available — lock the modpack to install it."}
+                    : "Update available - lock the modpack to install it."}
                 </span>
               </div>
             )}
@@ -275,7 +285,7 @@ export function PlayView({
                   <AlertTriangle size={12} />
                   {modStatus.failed.length} file
                   {modStatus.failed.length === 1 ? "" : "s"} couldn&apos;t
-                  download — they&apos;ll retry on next launch.
+                  download - they&apos;ll retry on next launch.
                 </p>
               )}
           </div>
@@ -294,9 +304,7 @@ export function PlayView({
         {showNews && (
           <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
         )}
-        {!showPlayers && !showNews && (
-          <InstanceInfoCard instance={instance} modStatus={modStatus} />
-        )}
+        <InstanceInfoCard instance={instance} modStatus={modStatus} />
       </div>
     </div>
   );
@@ -339,7 +347,7 @@ function InstanceInfoCard({
         : null;
 
   return (
-    <div className="rounded-lg border border-edge bg-ink-900/40 p-4">
+    <div className="rounded-lg border border-edge bg-ink-900/40 p-4 transition-colors hover:border-brass-600/40">
       <h3 className="mb-3 font-mc text-sm tracking-wide text-brass-300">
         Instance
       </h3>

@@ -31,6 +31,7 @@ export interface Instance {
   pinned: boolean;
   icon: string | null;
   banner: string | null;
+  logo: string | null;
   modpack_locked: boolean;
   news_url: string | null;
   playercount_url: string | null;
@@ -39,6 +40,16 @@ export interface Instance {
   created_at: string;
   last_played: string | null;
   playtime_seconds: number;
+  notes: string | null;
+  tags: string[];
+  folder_id: string | null;
+}
+
+export interface InstanceFolder {
+  id: string;
+  name: string;
+  color: string | null;
+  collapsed: boolean;
 }
 
 export interface McVersion {
@@ -116,6 +127,8 @@ export interface LauncherSettings {
 
   discord_rpc: boolean;
   reduce_motion: boolean;
+  close_to_tray: boolean;
+  instance_folders: InstanceFolder[];
 
   auto_update: boolean;
   last_version: string | null;
@@ -297,7 +310,14 @@ export interface WorldInfo {
   version_name: string | null;
   size_bytes: number;
   datapack_count: number;
+  seed: number | null;
   starred: boolean;
+}
+
+export interface WorldBackup {
+  filename: string;
+  size_bytes: number;
+  modified: number;
 }
 
 export interface DatapackInfo {
@@ -321,6 +341,8 @@ export interface ServerEntry {
   /** Base64 PNG favicon cached by the vanilla client (data URI body). */
   icon: string | null;
   accept_textures: number | null;
+  /** True for the read-only default server from a featured pack. */
+  featured: boolean;
   starred: boolean;
 }
 

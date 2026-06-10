@@ -9,8 +9,13 @@ import {
   Shirt,
   Globe2,
   Server,
+  Search,
 } from "lucide-react";
 import { Logo } from "./Logo";
+
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  /mac/i.test(navigator.platform || navigator.userAgent);
 
 export type View =
   | "instances"
@@ -42,6 +47,7 @@ export function Sidebar({
   onViewLogs,
   activeName,
   onActiveClick,
+  onOpenPalette,
   footer,
 }: {
   view: View;
@@ -51,6 +57,7 @@ export function Sidebar({
   onViewLogs: (live: boolean) => void;
   activeName?: string;
   onActiveClick?: () => void;
+  onOpenPalette?: () => void;
   footer?: React.ReactNode;
 }) {
   return (
@@ -154,6 +161,19 @@ export function Sidebar({
             className="flex items-center justify-center gap-2 rounded-lg border border-edge px-2 py-1.5 text-[11px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <ScrollText size={12} /> View last log
+          </button>
+        )}
+        {onOpenPalette && (
+          <button
+            onClick={onOpenPalette}
+            title="Open the command palette"
+            className="group/k flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-[12px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <Search size={14} />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="rounded border border-edge px-1.5 py-0.5 font-mono text-[10px] text-ink-600 transition group-hover/k:border-brass-600/40">
+              {IS_MAC ? "⌘K" : "Ctrl K"}
+            </kbd>
           </button>
         )}
         {footer}

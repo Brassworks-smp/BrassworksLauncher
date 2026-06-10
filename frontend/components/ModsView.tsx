@@ -23,7 +23,7 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { Changelog } from "./Markdown";
-import { SegmentedTabs, Collapse } from "./ui";
+import { SegmentedTabs, Collapse, Skeleton } from "./ui";
 import { getCachedInfo, setCachedInfo } from "@/lib/modcache";
 import type {
   ContentVersion,
@@ -95,6 +95,26 @@ function storeDupDismissed(id: string, sig: string) {
     localStorage.setItem(dupKey(id), sig);
   } catch {
   }
+}
+
+function ContentSkeleton() {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 rounded-lg border border-edge bg-ink-800/50 p-2.5"
+        >
+          <Skeleton className="h-11 w-11 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-2.5 w-1/2" />
+          </div>
+          <Skeleton className="h-6 w-11 rounded-[4px]" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ModsView({
@@ -290,6 +310,23 @@ export function ModsView({
         .localeCompare((b.title ?? b.name).toLowerCase()),
     );
   }, [mods, cat, query, sourceFilter, statusFilter, originFilter]);
+
+  const RENDER_BATCH = 40;
+  const [renderLimit, setRenderLimit] = useState(RENDER_BATCH);
+  useEffect(() => {
+    setRenderLimit(RENDER_BATCH);
+  }, [cat, query, sourceFilter, statusFilter, originFilter, instanceId]);
+  useEffect(() => {
+    if (renderLimit >= filtered.length) return;
+    const raf = requestAnimationFrame(() =>
+      setRenderLimit((n) => n + RENDER_BATCH),
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [renderLimit, filtered.length]);
+  const shown = useMemo(
+    () => filtered.slice(0, renderLimit),
+    [filtered, renderLimit],
+  );
 
   const conflicts = useMemo(() => {
     const groups = new Map<string, Set<string>>();
@@ -546,11 +583,14 @@ export function ModsView({
       )}
 
       <div className="flex flex-1 flex-col overflow-y-auto pr-1">
+        {mods === null ? (
+          <ContentSkeleton />
+        ) : (
         <div
           key={`${cat}:${sourceFilter}:${statusFilter}:${originFilter}`}
           className="reveal-down flex flex-1 flex-col gap-2"
         >
-        {filtered.map((m) => (
+        {shown.map((m) => (
           <ModRow
             key={m.path}
             instanceId={instanceId}
@@ -563,17 +603,23 @@ export function ModsView({
             onOpenDetail={() => openDetail(m)}
           />
         ))}
+        {renderLimit < filtered.length && (
+          <div className="flex items-center justify-center py-3 text-ink-600">
+            <Loader2 size={16} className="animate-spin" />
+          </div>
+        )}
         {mods && filtered.length === 0 && (
           <div className="grid flex-1 place-items-center py-16 text-center text-ink-600">
             <div>
               <Package size={28} className="mx-auto mb-2 opacity-50" />
               {mods.length === 0
-                ? "Nothing installed yet — press Play to install the modpack."
+                ? "Nothing installed yet - press Play to install the modpack."
                 : "No content matches your search."}
             </div>
           </div>
         )}
         </div>
+        )}
       </div>
 
       {(adding || detail) && (
@@ -785,7 +831,7 @@ function ModRow({
 
   return (
     <div
-      className={`rounded-lg border transition ${
+      className={`cv-auto rounded-lg border transition ${
         mod.enabled
           ? "border-edge bg-ink-800 hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
           : "border-edge/60 bg-ink-900/40 opacity-60 hover:opacity-100"
@@ -852,7 +898,7 @@ function ModRow({
               title={
                 unlocked
                   ? "Modpack content (unlocked)"
-                  : "Part of the modpack — managed automatically"
+                  : "Part of the modpack - managed automatically"
               }
               className="rounded-md border border-edge bg-ink-900/60 px-2 py-1 text-[10px] uppercase tracking-wide text-ink-600"
             >
