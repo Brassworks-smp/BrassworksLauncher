@@ -42,6 +42,7 @@ fn class_id(project_type: &str) -> u32 {
         "resourcepack" => 12,
         "shader" => 6552,
         "modpack" => 4471,
+        "datapack" => 6945,
         _ => 6,
     }
 }

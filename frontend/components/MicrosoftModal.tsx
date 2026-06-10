@@ -1,4 +1,5 @@
 import { Loader2, X, AlertTriangle } from "lucide-react";
+import { useClosable } from "@/components/ui";
 
 export type MsAuthState =
   | { status: "starting" }
@@ -17,16 +18,21 @@ export function MicrosoftModal({
   state: MsAuthState | null;
   onClose: () => void;
 }) {
+  const { closing, close } = useClosable(onClose);
   if (!state) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+    <div
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+    >
       <div className="w-[400px] rounded-lg panel p-6 rise">
         <div className="flex items-start justify-between">
           <h2 className="font-mc text-base tracking-wide text-gray-100">
             Sign in with Microsoft
           </h2>
-          <button onClick={onClose} className="text-ink-600 hover:text-brass-300">
+          <button onClick={close} className="text-ink-600 hover:text-brass-300">
             <X size={18} />
           </button>
         </div>
@@ -36,7 +42,7 @@ export function MicrosoftModal({
             <AlertTriangle size={26} className="text-red-400" />
             <p className="text-sm text-red-300">{state.message}</p>
             <button
-              onClick={onClose}
+              onClick={close}
               className="mt-2 rounded-lg bg-ink-800 px-4 py-2 text-sm hover:bg-ink-700"
             >
               Close

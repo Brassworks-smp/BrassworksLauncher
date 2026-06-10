@@ -142,6 +142,14 @@ pub fn get_profile(token: &str) -> Result<SkinProfile> {
     Ok(map_profile(p))
 }
 
+fn https(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("http://") {
+        format!("https://{rest}")
+    } else {
+        url.to_string()
+    }
+}
+
 fn map_profile(p: ApiProfile) -> SkinProfile {
     let active = p.skins.iter().find(|s| s.state == "ACTIVE").or(p.skins.first());
     let model = active
@@ -154,7 +162,10 @@ fn map_profile(p: ApiProfile) -> SkinProfile {
         })
         .unwrap_or("classic")
         .to_string();
-    let skin_url = active.map(|s| s.url.clone()).filter(|u| !u.is_empty());
+    let skin_url = active
+        .map(|s| s.url.clone())
+        .filter(|u| !u.is_empty())
+        .map(|u| https(&u));
     let capes = p
         .capes
         .into_iter()
@@ -162,7 +173,7 @@ fn map_profile(p: ApiProfile) -> SkinProfile {
             active: c.state == "ACTIVE",
             name: if c.alias.is_empty() { c.id.clone() } else { c.alias },
             id: c.id,
-            url: c.url,
+            url: https(&c.url),
         })
         .collect();
 
@@ -183,7 +194,7 @@ mod tests {
         "id": "0123456789abcdef0123456789abcdef",
         "name": "Notch",
         "skins": [
-            { "id": "a", "state": "INACTIVE", "url": "https://tex/inactive", "variant": "CLASSIC" },
+            { "id": "a", "state": "INACTIVE", "url": "https:
             { "id": "b", "state": "ACTIVE", "url": "https://tex/active", "variant": "SLIM" }
         ],
         "capes": [

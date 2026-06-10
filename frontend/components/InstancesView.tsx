@@ -102,7 +102,7 @@ function Section({
         {icon}
         {title}
       </h2>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+      <div className="stagger grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
         {children}
       </div>
     </section>
@@ -131,12 +131,12 @@ function InstanceCard({
   return (
     <div
       onClick={installing ? undefined : onSelect}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-ink-900/40 transition ${
+      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-ink-900/40 ${
         installing
-          ? "border-brass-500/40 cursor-default"
+          ? "border-brass-500/40 cursor-default transition"
           : selected
-            ? "border-brass-500/60 glow cursor-pointer"
-            : "border-edge hover:border-brass-600/40 cursor-pointer"
+            ? "border-brass-500/60 glow hover-lift cursor-pointer"
+            : "border-edge hover-lift cursor-pointer hover:border-brass-600/40"
       }`}
     >
       {installing && (

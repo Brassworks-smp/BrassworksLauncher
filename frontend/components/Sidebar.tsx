@@ -7,6 +7,8 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   Shirt,
+  Globe2,
+  Server,
 } from "lucide-react";
 import { Logo } from "./Logo";
 
@@ -14,6 +16,8 @@ export type View =
   | "instances"
   | "play"
   | "mods"
+  | "worlds"
+  | "servers"
   | "screenshots"
   | "skin"
   | "settings"
@@ -23,6 +27,8 @@ const NAV: { id: View; label: string; icon: typeof Play }[] = [
   { id: "instances", label: "Instances", icon: LayoutGrid },
   { id: "play", label: "Play", icon: Play },
   { id: "mods", label: "Content", icon: Package },
+  { id: "worlds", label: "Worlds", icon: Globe2 },
+  { id: "servers", label: "Servers", icon: Server },
   { id: "skin", label: "Skins", icon: Shirt },
   { id: "screenshots", label: "Screenshots", icon: ImageIcon },
   { id: "settings", label: "Settings", icon: Settings },
@@ -88,15 +94,22 @@ export function Sidebar({
             <button
               key={id}
               onClick={() => onChange(id)}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
+              className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
                 active
                   ? "bg-brass-500/15 text-brass-300 glow"
-                  : "text-ink-600 hover:bg-ink-800/60 hover:text-brass-300/80"
+                  : "text-ink-600 hover:translate-x-0.5 hover:bg-ink-800/60 hover:text-brass-300/80"
               }`}
             >
+              <span
+                className={`pointer-events-none absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brass-400 transition-all duration-200 ${
+                  active ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0"
+                }`}
+              />
               <Icon
                 size={17}
-                className={active ? "text-brass-400" : "opacity-80"}
+                className={`transition-transform duration-200 group-hover:scale-110 group-active:scale-95 ${
+                  active ? "text-brass-400" : "opacity-80"
+                }`}
               />
               <span className="font-mc text-[13px] tracking-wide">{label}</span>
             </button>

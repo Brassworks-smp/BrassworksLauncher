@@ -118,6 +118,17 @@ pub fn run() {
             commands::replace_skin_texture,
             commands::export_skin,
             commands::update_block_reason,
+            commands::list_worlds,
+            commands::world_icon,
+            commands::delete_world,
+            commands::list_datapacks,
+            commands::set_datapack_enabled,
+            commands::remove_datapack,
+            commands::install_datapack,
+            commands::list_servers,
+            commands::save_servers,
+            commands::ping_server,
+            commands::toggle_star,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

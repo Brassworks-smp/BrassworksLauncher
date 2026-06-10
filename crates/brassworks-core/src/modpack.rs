@@ -209,6 +209,7 @@ impl<'a> Modpack<'a> {
     fn loader_for(&self, project_type: &str) -> Option<&str> {
         match project_type {
             "mod" => self.mod_loader.as_deref(),
+            "datapack" => Some("datapack"),
             _ => None,
         }
     }
@@ -714,6 +715,43 @@ impl<'a> Modpack<'a> {
         let item = self.place_version(source, project_id, project_type, version.clone(), unlocked)?;
         let dependencies = self.install_dependencies(source, &version);
         Ok(InstallResult { item, dependencies })
+    }
+
+    pub fn install_datapack(
+        &self,
+        world: &str,
+        source: &str,
+        project_id: &str,
+        version_id: Option<&str>,
+    ) -> Result<(String, String)> {
+        let version = match version_id {
+            Some(vid) => self.resolve_one(source, project_id, vid)?,
+            None => self.best_one(source, project_id, "datapack")?,
+        }
+        .ok_or_else(|| {
+            CoreError::Modpack(format!(
+                "No datapack version for Minecraft {}",
+                self.game_version()
+            ))
+        })?;
+
+        let installer = Installer::new();
+        let http = installer.modrinth(self.paths.modrinth_cache_dir());
+        let bytes = http.download(&version.url)?;
+        if let Some(expected) = &version.sha512 {
+            let actual = packwiz::sha512_hex(&bytes);
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(CoreError::Modpack(
+                    "Downloaded file failed hash verification".to_string(),
+                ));
+            }
+        }
+
+        let dir = self.game_dir().join("saves").join(world).join("datapacks");
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let dest = dir.join(&version.filename);
+        std::fs::write(&dest, &bytes).map_err(|e| CoreError::io(&dest, e))?;
+        Ok((version.filename, version.version_id))
     }
 
     fn already_present(&self, source: &str, project_id: &str) -> bool {

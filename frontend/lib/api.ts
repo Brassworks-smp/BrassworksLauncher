@@ -33,6 +33,11 @@ import type {
   SkinProfile,
   SavedSkin,
   SkinLibraryView,
+  WorldInfo,
+  DatapackInfo,
+  ServerEntry,
+  ServerStatus,
+  StarKind,
 } from "./types";
 
 export const isTauri = (): boolean =>
@@ -226,6 +231,58 @@ export const deleteScreenshot = (
   name: string,
 ): Promise<void> => invoke("delete_screenshot", { instanceId, name });
 export const fileSrc = (path: string): string => convertFileSrc(path);
+
+
+export const listWorlds = (instanceId: string): Promise<WorldInfo[]> =>
+  invoke("list_worlds", { instanceId });
+export const worldIcon = (
+  instanceId: string,
+  folder: string,
+): Promise<string | null> => invoke("world_icon", { instanceId, folder });
+export const deleteWorld = (
+  instanceId: string,
+  folder: string,
+): Promise<void> => invoke("delete_world", { instanceId, folder });
+
+export const listDatapacks = (
+  instanceId: string,
+  world: string,
+): Promise<DatapackInfo[]> => invoke("list_datapacks", { instanceId, world });
+export const setDatapackEnabled = (
+  instanceId: string,
+  world: string,
+  filename: string,
+  enabled: boolean,
+): Promise<void> =>
+  invoke("set_datapack_enabled", { instanceId, world, filename, enabled });
+export const removeDatapack = (
+  instanceId: string,
+  world: string,
+  filename: string,
+): Promise<void> => invoke("remove_datapack", { instanceId, world, filename });
+export const installDatapack = (
+  instanceId: string,
+  world: string,
+  source: string,
+  projectId: string,
+  versionId: string | null,
+): Promise<string> =>
+  invoke("install_datapack", { instanceId, world, source, projectId, versionId });
+
+export const listServers = (instanceId: string): Promise<ServerEntry[]> =>
+  invoke("list_servers", { instanceId });
+export const saveServers = (
+  instanceId: string,
+  servers: ServerEntry[],
+): Promise<void> => invoke("save_servers", { instanceId, servers });
+export const pingServer = (address: string): Promise<ServerStatus> =>
+  invoke("ping_server", { address });
+
+export const toggleStar = (
+  instanceId: string,
+  kind: StarKind,
+  key: string,
+): Promise<boolean> => invoke("toggle_star", { instanceId, kind, key });
 
 export const javaInfo = (instanceId: string): Promise<JavaReport> =>
   invoke("java_info", { instanceId });

@@ -19,10 +19,13 @@ pub mod launch;
 pub mod modpack;
 pub mod packs;
 pub mod paths;
+pub mod ping;
 pub mod progress;
 pub mod remote;
+pub mod saves;
 pub mod settings;
 pub mod skins;
+pub mod stars;
 pub mod versions;
 
 use std::process::Child;
@@ -38,6 +41,9 @@ pub use modpack::{
 };
 pub use packwiz::SearchHit;
 pub use paths::Paths;
+pub use ping::ServerStatus;
+pub use saves::{DatapackInfo, ServerEntry, WorldInfo};
+pub use stars::StarKind;
 pub use progress::{LaunchProgress, LaunchStage, ProgressSink};
 pub use remote::{
     news, player_count, release_changelog, upload_log, LogUpload, NewsItem, PlayerCount,
@@ -922,6 +928,121 @@ impl Launcher {
 
     pub fn uninstall_game(&self, instance_id: &str) -> Result<()> {
         self.modpack_for(instance_id).uninstall()
+    }
+
+    // ---- Worlds, servers, datapacks, favourites (per instance) ----
+
+    pub fn list_worlds(&self, instance_id: &str) -> Vec<WorldInfo> {
+        let stars = stars::load(&self.paths, instance_id);
+        let mut worlds = saves::list_worlds(&self.paths.instance_saves_dir(instance_id));
+        for w in worlds.iter_mut() {
+            w.starred = stars.contains(StarKind::Worlds, &w.folder);
+        }
+        worlds
+    }
+
+    pub fn world_icon_path(&self, instance_id: &str, folder: &str) -> Option<String> {
+        saves::world_icon_path(&self.paths.instance_saves_dir(instance_id), folder)
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+
+    pub fn delete_world(&self, instance_id: &str, folder: &str) -> Result<()> {
+        saves::delete_world(&self.paths.instance_saves_dir(instance_id), folder)
+    }
+
+    pub fn list_datapacks(&self, instance_id: &str, world: &str) -> Vec<DatapackInfo> {
+        saves::list_datapacks(
+            &self.paths.instance_saves_dir(instance_id),
+            world,
+            &self.paths.datapacks_index(instance_id),
+        )
+    }
+
+    pub fn set_datapack_enabled(
+        &self,
+        instance_id: &str,
+        world: &str,
+        filename: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        saves::set_datapack_enabled(
+            &self.paths.instance_saves_dir(instance_id),
+            world,
+            filename,
+            enabled,
+        )
+    }
+
+    pub fn remove_datapack(&self, instance_id: &str, world: &str, filename: &str) -> Result<()> {
+        saves::remove_datapack(
+            &self.paths.instance_saves_dir(instance_id),
+            world,
+            filename,
+            &self.paths.datapacks_index(instance_id),
+        )
+    }
+
+    pub fn install_datapack(
+        &self,
+        instance_id: &str,
+        world: &str,
+        source: &str,
+        project_id: &str,
+        version_id: Option<&str>,
+    ) -> Result<String> {
+        let saves_dir = self.paths.instance_saves_dir(instance_id);
+        let index_file = self.paths.datapacks_index(instance_id);
+        let previous = saves::tracked_filename(&index_file, world, project_id);
+
+        let modpack = self.modpack_for(instance_id);
+        let (filename, resolved_vid) =
+            modpack.install_datapack(world, source, project_id, version_id)?;
+        if let Some(old) = previous {
+            if old != filename {
+                let _ = saves::remove_datapack(&saves_dir, world, &old, &index_file);
+            }
+        }
+
+        let detail = modpack.project_detail(project_id, source).ok();
+        let _ = saves::record_datapack(
+            &index_file,
+            world,
+            source,
+            project_id,
+            &resolved_vid,
+            &filename,
+            detail.as_ref().map(|d| d.title.clone()),
+            detail.as_ref().map(|d| d.description.clone()),
+            detail.as_ref().and_then(|d| d.icon_url.clone()),
+        );
+        Ok(filename)
+    }
+
+    pub fn list_servers(&self, instance_id: &str) -> Vec<ServerEntry> {
+        let stars = stars::load(&self.paths, instance_id);
+        let mut servers = saves::read_servers(&self.paths.instance_servers_file(instance_id));
+        for s in servers.iter_mut() {
+            s.starred = stars.contains(StarKind::Servers, &saves::server_key(&s.name, &s.ip));
+        }
+        servers
+    }
+
+    pub fn save_servers(&self, instance_id: &str, entries: &[ServerEntry]) -> Result<()> {
+        saves::write_servers(&self.paths.instance_servers_file(instance_id), entries)
+    }
+
+    pub fn ping_server(&self, address: &str) -> ServerStatus {
+        ping::ping(address)
+    }
+
+    pub fn toggle_star(&self, instance_id: &str, kind: &str, key: &str) -> Result<bool> {
+        let kind = StarKind::parse(kind)
+            .ok_or_else(|| CoreError::Modpack(format!("unknown star kind: {kind}")))?;
+        stars::toggle(&self.paths, instance_id, kind, key)
+    }
+
+    pub fn screenshot_stars(&self, instance_id: &str) -> Vec<String> {
+        stars::load(&self.paths, instance_id).screenshots
     }
 
     pub fn update_selected_content(

@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, Loader2, Check } from "lucide-react";
 import { Changelog } from "@/components/Markdown";
+import { Collapse } from "@/components/ui";
 import type { ContentVersion } from "@/lib/types";
 
-/**
- * A list of versions rendered as expandable cards — each row can be expanded
- * (chevron) to read that version's changelog, with a per-version action button.
- * Mirrors the Add Content version list.
- */
 export function VersionList({
   instanceId,
   projectId,
@@ -64,40 +60,45 @@ export function VersionList({
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm text-gray-100">
                   {v.version_number}
-                  {current && (
-                    <span className="ml-2 rounded bg-brass-500/15 px-1.5 text-[10px] text-brass-300">
-                      installed
-                    </span>
-                  )}
                 </div>
                 <div className="truncate text-[11px] text-ink-600">
                   {v.game_versions.join(", ")}
                   {v.loaders.length ? ` · ${v.loaders.join(", ")}` : ""}
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  if (anyBusy) return;
-                  setPicked(v.version_id);
-                  onPick(v.version_id);
-                }}
-                disabled={anyBusy}
-                className="brass-btn flex items-center gap-1.5 rounded-md bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {(busy || picked === v.version_id) && (
-                  <Loader2 size={12} className="animate-spin" />
-                )}
-                {picked === v.version_id ? "Installing…" : actionLabel}
-              </button>
+              {current ? (
+                <button
+                  disabled
+                  className="flex cursor-default items-center gap-1.5 rounded-md border border-patina-500/40 bg-patina-500/10 px-3 py-1.5 text-xs font-semibold text-patina-400"
+                >
+                  <Check size={12} /> Installed
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (anyBusy) return;
+                    setPicked(v.version_id);
+                    onPick(v.version_id);
+                  }}
+                  disabled={anyBusy}
+                  className="brass-btn flex items-center gap-1.5 rounded-md bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {(busy || picked === v.version_id) && (
+                    <Loader2 size={12} className="animate-spin" />
+                  )}
+                  {picked === v.version_id ? "Installing…" : actionLabel}
+                </button>
+              )}
             </div>
-            {expanded && (
+            <Collapse open={expanded}>
               <Changelog
                 instanceId={instanceId}
                 projectId={projectId}
                 versionId={v.version_id}
                 source={source}
+                enabled={expanded}
               />
-            )}
+            </Collapse>
           </div>
         );
       })}

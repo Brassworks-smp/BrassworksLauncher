@@ -20,4 +20,6 @@ chrono.workspace = true
 dirs.workspace = true
 md5.workspace = true
 zip.workspace = true
+fastnbt.workspace = true
+flate2.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "multipart"] }

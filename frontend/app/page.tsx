@@ -6,6 +6,8 @@ import { TitleBar } from "@/components/TitleBar";
 import { AccountMenu } from "@/components/AccountMenu";
 import { PlayView } from "@/components/PlayView";
 import { ModsView } from "@/components/ModsView";
+import { WorldsView } from "@/components/WorldsView";
+import { ServersView } from "@/components/ServersView";
 import { ScreenshotsView } from "@/components/ScreenshotsView";
 import { SkinView } from "@/components/SkinView";
 import { SettingsView } from "@/components/SettingsView";
@@ -492,6 +494,10 @@ export default function Home() {
             </div>
           )}
 
+          <div
+            key={view}
+            className="view-anim flex min-h-0 flex-1 flex-col"
+          >
           {view === "instances" && (
             <InstancesView
               instances={instances}
@@ -549,6 +555,14 @@ export default function Home() {
                   .catch((e) => setError(String(e)));
               }}
             />
+          )}
+
+          {view === "worlds" && selectedId && (
+            <WorldsView instanceId={selectedId} />
+          )}
+
+          {view === "servers" && selectedId && (
+            <ServersView instanceId={selectedId} />
           )}
 
           {view === "screenshots" && selectedId && (
@@ -621,6 +635,7 @@ export default function Home() {
               onError={(e) => setError(e)}
             />
           )}
+          </div>
         </main>
       </div>
 
@@ -650,7 +665,9 @@ export default function Home() {
         />
       )}
 
-      <MicrosoftModal state={msAuth} onClose={() => setMsAuth(null)} />
+      {msAuth && (
+        <MicrosoftModal state={msAuth} onClose={() => setMsAuth(null)} />
+      )}
       {logView !== null && selectedId && (
         <LogViewer
           instanceId={selectedId}

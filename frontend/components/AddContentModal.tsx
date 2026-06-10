@@ -18,6 +18,7 @@ import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { ResultRow, useInfiniteSearch, SEARCH_PAGE } from "./Browse";
 import { Markdown, Changelog } from "./Markdown";
+import { SegmentedTabs, Collapse, useClosable } from "./ui";
 import type {
   ContentSource,
   ContentVersion,
@@ -87,6 +88,16 @@ export function AddContentModal({
   );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SearchHit | null>(initial ?? null);
+  const [dir, setDir] = useState<"fwd" | "back">("fwd");
+  const { closing, close } = useClosable(onClose);
+  const openDetail = (hit: SearchHit) => {
+    setDir("fwd");
+    setSelected(hit);
+  };
+  const goBack = () => {
+    setDir("back");
+    setSelected(null);
+  };
   const lockedSet = new Set(lockedIds ?? []);
   const detailOnly = !!initial;
   const cfAccent =
@@ -108,15 +119,17 @@ export function AddContentModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
       e.key === "Escape" &&
-      (selected && !detailOnly ? setSelected(null) : onClose());
+      (selected && !detailOnly ? goBack() : close());
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, selected, detailOnly]);
+  }, [close, selected, detailOnly]);
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
         className="rise flex h-[80vh] w-[780px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-colors"
@@ -127,8 +140,8 @@ export function AddContentModal({
           <div className="flex items-center gap-2">
             {selected && (
               <button
-                onClick={() => (detailOnly ? onClose() : setSelected(null))}
-                className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
+                onClick={() => (detailOnly ? close() : goBack())}
+                className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:-translate-x-0.5 hover:text-gray-200"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -147,36 +160,28 @@ export function AddContentModal({
                 {api.sourceLabel(selected.source)}
               </span>
             ) : (
-              <div className="flex gap-1 rounded-lg border border-edge bg-ink-950/50 p-0.5">
-                {SOURCES.map((s) => {
-                  const active = source === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setSource(s.id)}
-                      className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                        active
-                          ? s.id === "curseforge"
-                            ? "badge-curseforge"
-                            : "badge-modrinth"
-                          : "text-ink-600"
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedTabs
+                size="sm"
+                value={source}
+                onChange={(v) => setSource(v as Source)}
+                options={SOURCES.map((s) => ({ id: s.id, label: s.label }))}
+              />
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={close}
             className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={17} />
           </button>
         </div>
 
+        <div
+          key={selected ? "detail" : "list"}
+          className={`flex min-h-0 flex-1 flex-col ${
+            dir === "fwd" ? "swap-in" : "swap-in-back"
+          }`}
+        >
         {selected ? (
           <DetailView
             instanceId={instanceId}
@@ -191,25 +196,15 @@ export function AddContentModal({
           <>
             {}
             <div className="flex items-center gap-2 px-5 py-3">
-              <div className="flex gap-1 rounded-lg border border-edge bg-ink-950/50 p-1">
-                {TABS.map(({ id, label, icon: Icon }) => {
-                  const active = type === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setType(id)}
-                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                        active
-                          ? "bg-brass-500/15 text-brass-300"
-                          : "text-ink-600 hover:text-brass-300/80"
-                      }`}
-                    >
-                      <Icon size={14} />
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedTabs
+                value={type}
+                onChange={(v) => setType(v as ProjectType)}
+                options={TABS.map(({ id, label, icon: Icon }) => ({
+                  id,
+                  label,
+                  icon: <Icon size={14} />,
+                }))}
+              />
               <div className="relative flex-1">
                 <Search
                   size={15}
@@ -255,7 +250,7 @@ export function AddContentModal({
                       key={`${hit.source}:${hit.project_id}`}
                       hit={hit}
                       installed={keyOf(hit) in installed}
-                      onOpen={() => setSelected(hit)}
+                      onOpen={() => openDetail(hit)}
                     />
                   ))}
                   {loadingMore && (
@@ -278,6 +273,7 @@ export function AddContentModal({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );
@@ -434,24 +430,26 @@ function DetailView({
       )}
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        {showVersions ? (
-          <VersionList
-            instanceId={instanceId}
-            projectId={hit.project_id}
-            source={hit.source}
-            versions={versions}
-            installedVersion={installedVersion}
-            busy={busy}
-            locked={locked}
-            onPick={(v) => install(v)}
-          />
-        ) : detail ? (
-          <Markdown>{detail.body || detail.description}</Markdown>
-        ) : (
-          <div className="grid place-items-center py-10 text-ink-600">
-            <Loader2 className="animate-spin" />
-          </div>
-        )}
+        <div key={showVersions ? "versions" : "body"} className="swap-in">
+          {showVersions ? (
+            <VersionList
+              instanceId={instanceId}
+              projectId={hit.project_id}
+              source={hit.source}
+              versions={versions}
+              installedVersion={installedVersion}
+              busy={busy}
+              locked={locked}
+              onPick={(v) => install(v)}
+            />
+          ) : detail ? (
+            <Markdown>{detail.body || detail.description}</Markdown>
+          ) : (
+            <div className="grid place-items-center py-10 text-ink-600">
+              <Loader2 className="animate-spin" />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -554,14 +552,15 @@ function VersionList({
                 )}
               </button>
             </div>
-            {expanded && (
+            <Collapse open={expanded}>
               <Changelog
                 instanceId={instanceId}
                 projectId={projectId}
                 versionId={v.version_id}
                 source={source}
+                enabled={expanded}
               />
-            )}
+            </Collapse>
           </div>
         );
       })}

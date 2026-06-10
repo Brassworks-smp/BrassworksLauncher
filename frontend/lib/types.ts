@@ -280,7 +280,63 @@ export interface Screenshot {
   modified: number;
   size: number;
   instance: string;
+  starred: boolean;
 }
+
+export interface WorldInfo {
+  folder: string;
+  name: string;
+  icon: boolean;
+  /** Epoch milliseconds, 0 if unknown. */
+  last_played: number;
+  /** 0 survival, 1 creative, 2 adventure, 3 spectator, -1 unknown. */
+  game_mode: number;
+  hardcore: boolean;
+  /** 0 peaceful … 3 hard, -1 unknown. */
+  difficulty: number;
+  version_name: string | null;
+  size_bytes: number;
+  datapack_count: number;
+  starred: boolean;
+}
+
+export interface DatapackInfo {
+  filename: string;
+  name: string;
+  enabled: boolean;
+  is_dir: boolean;
+  size_bytes: number;
+  /** Present when installed from a content source. */
+  source: string | null;
+  project_id: string | null;
+  version_id: string | null;
+  title: string | null;
+  description: string | null;
+  icon_url: string | null;
+}
+
+export interface ServerEntry {
+  name: string;
+  ip: string;
+  /** Base64 PNG favicon cached by the vanilla client (data URI body). */
+  icon: string | null;
+  accept_textures: number | null;
+  starred: boolean;
+}
+
+export interface ServerStatus {
+  online: boolean;
+  motd: string;
+  version: string | null;
+  players_online: number;
+  players_max: number;
+  /** `data:image/png;base64,…` favicon, when the server advertises one. */
+  favicon: string | null;
+  ping_ms: number;
+  error: string | null;
+}
+
+export type StarKind = "worlds" | "servers" | "screenshots";
 
 export interface LogUpload {
   id: string;

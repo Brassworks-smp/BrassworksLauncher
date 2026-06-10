@@ -3,10 +3,11 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use brassworks_core::{
-    AccountStore, ContentVersion, InstallResult, InstalledMod, Instance, LaunchProgress,
-    LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload, McVersion,
-    MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount, ProjectDetail,
-    SavedSkin, SearchHit, SkinLibraryView, SkinProfile,
+    AccountStore, ContentVersion, DatapackInfo, InstallResult, InstalledMod, Instance,
+    LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload,
+    McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
+    ProjectDetail, SavedSkin, SearchHit, ServerEntry, ServerStatus, SkinLibraryView, SkinProfile,
+    WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -649,6 +650,8 @@ pub(crate) struct Screenshot {
     modified: u64,
     size: u64,
     instance: String,
+    #[serde(default)]
+    starred: bool,
 }
 
 fn collect_screenshots(dir: &std::path::Path, instance: &str, out: &mut Vec<Screenshot>) {
@@ -679,6 +682,7 @@ fn collect_screenshots(dir: &std::path::Path, instance: &str, out: &mut Vec<Scre
             modified,
             size,
             instance: instance.to_string(),
+            starred: false,
         });
     }
 }
@@ -690,10 +694,15 @@ pub(crate) fn list_screenshots(state: State<AppState>) -> CmdResult<Vec<Screensh
     if let Ok(instances) = state.launcher.instances().list() {
         for inst in instances {
             let dir = paths.instance_game_dir(&inst.id).join("screenshots");
+            let before = out.len();
             collect_screenshots(&dir, &inst.id, &mut out);
+            let starred = state.launcher.screenshot_stars(&inst.id);
+            for shot in out[before..].iter_mut() {
+                shot.starred = starred.iter().any(|s| s == &shot.name);
+            }
         }
     }
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.sort_by(|a, b| b.starred.cmp(&a.starred).then(b.modified.cmp(&a.modified)));
     Ok(out)
 }
 
@@ -1420,3 +1429,132 @@ pub(crate) fn restart_app(app: AppHandle) {
     app.restart();
 }
 
+
+
+#[tauri::command]
+pub(crate) async fn list_worlds(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<WorldInfo>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.list_worlds(&instance_id)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn world_icon(
+    state: State<AppState>,
+    instance_id: String,
+    folder: String,
+) -> CmdResult<Option<String>> {
+    Ok(state.launcher.world_icon_path(&instance_id, &folder))
+}
+
+#[tauri::command]
+pub(crate) fn delete_world(
+    state: State<AppState>,
+    instance_id: String,
+    folder: String,
+) -> CmdResult<()> {
+    state.launcher.delete_world(&instance_id, &folder).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn list_datapacks(
+    state: State<'_, AppState>,
+    instance_id: String,
+    world: String,
+) -> CmdResult<Vec<DatapackInfo>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.list_datapacks(&instance_id, &world)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn set_datapack_enabled(
+    state: State<AppState>,
+    instance_id: String,
+    world: String,
+    filename: String,
+    enabled: bool,
+) -> CmdResult<()> {
+    state
+        .launcher
+        .set_datapack_enabled(&instance_id, &world, &filename, enabled)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub(crate) fn remove_datapack(
+    state: State<AppState>,
+    instance_id: String,
+    world: String,
+    filename: String,
+) -> CmdResult<()> {
+    state
+        .launcher
+        .remove_datapack(&instance_id, &world, &filename)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn install_datapack(
+    state: State<'_, AppState>,
+    instance_id: String,
+    world: String,
+    source: String,
+    project_id: String,
+    version_id: Option<String>,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .install_datapack(&instance_id, &world, &source, &project_id, version_id.as_deref())
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn list_servers(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<ServerEntry>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.list_servers(&instance_id)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn save_servers(
+    state: State<AppState>,
+    instance_id: String,
+    servers: Vec<ServerEntry>,
+) -> CmdResult<()> {
+    state.launcher.save_servers(&instance_id, &servers).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn ping_server(
+    state: State<'_, AppState>,
+    address: String,
+) -> CmdResult<ServerStatus> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.ping_server(&address)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn toggle_star(
+    state: State<AppState>,
+    instance_id: String,
+    kind: String,
+    key: String,
+) -> CmdResult<bool> {
+    state.launcher.toggle_star(&instance_id, &kind, &key).map_err(err)
+}

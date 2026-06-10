@@ -54,6 +54,22 @@ impl Paths {
         self.instance_dir(id).join("user_content.json")
     }
 
+    pub fn stars_file(&self, id: &str) -> PathBuf {
+        self.instance_dir(id).join("stars.json")
+    }
+
+    pub fn instance_saves_dir(&self, id: &str) -> PathBuf {
+        self.instance_game_dir(id).join("saves")
+    }
+
+    pub fn instance_servers_file(&self, id: &str) -> PathBuf {
+        self.instance_game_dir(id).join("servers.dat")
+    }
+
+    pub fn datapacks_index(&self, id: &str) -> PathBuf {
+        self.instance_dir(id).join("datapacks.json")
+    }
+
     pub fn instance_game_subdir(&self, id: &str, sub: &str) -> PathBuf {
         self.instance_game_dir(id).join(sub)
     }

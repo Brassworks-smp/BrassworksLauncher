@@ -430,14 +430,14 @@ function JavaCard({
             {report.runtimes.map((r) => (
               <div
                 key={r.path}
-                className="flex items-center gap-2 rounded-md border border-edge bg-ink-950/40 px-2.5 py-1.5 text-xs"
+                className="group flex items-center gap-2 rounded-md border border-edge bg-ink-950/40 px-2.5 py-1.5 text-xs transition hover:border-brass-600/40 hover:bg-brass-500/5"
               >
                 <Coffee size={12} className="text-brass-400" />
                 <span className="flex-1 truncate text-gray-200">{r.label}</span>
                 <button
                   onClick={() => api.revealPath(r.path).catch(() => {})}
                   title="Open folder"
-                  className="text-ink-600 hover:text-brass-300"
+                  className="text-ink-600 opacity-0 transition hover:text-brass-300 group-hover:opacity-100"
                 >
                   <FolderOpen size={13} />
                 </button>
@@ -452,7 +452,7 @@ function JavaCard({
                       .catch((e) => onError(String(e)))
                   }
                   title="Uninstall"
-                  className="text-ink-600 hover:text-red-300"
+                  className="text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -554,7 +554,10 @@ function ModpackCard({
       />
 
       {!isPackwiz && projectId ? (
-        <>
+        <div
+          key={showVersions ? "versions" : "actions"}
+          className="swap-in flex flex-col gap-3"
+        >
           {showVersions ? (
             <>
               <button
@@ -602,7 +605,7 @@ function ModpackCard({
               </ActionButton>
             </>
           )}
-        </>
+        </div>
       ) : isPackwiz ? (
         <>
           <ActionButton

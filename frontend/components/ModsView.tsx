@@ -23,6 +23,7 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { Changelog } from "./Markdown";
+import { SegmentedTabs, Collapse } from "./ui";
 import { getCachedInfo, setCachedInfo } from "@/lib/modcache";
 import type {
   ContentVersion,
@@ -55,6 +56,47 @@ function projectTypeOf(category: string): string {
 
 const ENRICH_CONCURRENCY = 8;
 
+/** Module-level cache of the loaded content list, keyed by instance id. Survives
+ *  unmounting the Content view so re-opening it for the same instance shows the
+ *  list instantly (a silent refresh still runs in the background). */
+const modsCache = new Map<string, InstalledMod[]>();
+
+/** Fold any cached per-mod metadata (title/icon/description) into a freshly
+ *  listed set so reused entries render fully without re-fetching. */
+function mergeCached(list: InstalledMod[]): InstalledMod[] {
+  return list.map((m) => {
+    if (m.project_id) {
+      const c = getCachedInfo(m.source, m.project_id, m.version_id);
+      if (c)
+        return {
+          ...m,
+          title: c.title ?? m.title,
+          description: c.description ?? m.description,
+          icon_url: c.icon_url ?? m.icon_url,
+          version: m.version ?? c.version,
+        };
+    }
+    return m;
+  });
+}
+
+/** Remember (per instance, in localStorage) which duplicate-mod set the user
+ *  dismissed, so the warning doesn't keep reappearing for the same conflicts. */
+const dupKey = (id: string) => `bw:dupDismissed:${id}`;
+function getDupDismissed(id: string): string | null {
+  try {
+    return localStorage.getItem(dupKey(id));
+  } catch {
+    return null;
+  }
+}
+function storeDupDismissed(id: string, sig: string) {
+  try {
+    localStorage.setItem(dupKey(id), sig);
+  } catch {
+  }
+}
+
 export function ModsView({
   instanceId,
   locked,
@@ -64,7 +106,9 @@ export function ModsView({
   locked: boolean;
   onToggleLock: () => void;
 }) {
-  const [mods, setMods] = useState<InstalledMod[] | null>(null);
+  const [mods, setMods] = useState<InstalledMod[] | null>(
+    () => modsCache.get(instanceId) ?? null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cat, setCat] = useState<CategoryId>("all");
@@ -82,8 +126,29 @@ export function ModsView({
   const [detail, setDetail] = useState<SearchHit | null>(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmUpdateAll, setConfirmUpdateAll] = useState(false);
+  const [unlockClosing, setUnlockClosing] = useState(false);
+  const [updateAllClosing, setUpdateAllClosing] = useState(false);
+  const closeUnlock = () => {
+    setUnlockClosing(true);
+    setTimeout(() => {
+      setConfirmUnlock(false);
+      setUnlockClosing(false);
+    }, 190);
+  };
+  const closeUpdateAll = () => {
+    setUpdateAllClosing(true);
+    setTimeout(() => {
+      setConfirmUpdateAll(false);
+      setUpdateAllClosing(false);
+    }, 190);
+  };
   const [updatingAll, setUpdatingAll] = useState(false);
-  const [dupDismissed, setDupDismissed] = useState<string | null>(null);
+  const [dupDismissed, setDupDismissed] = useState<string | null>(() =>
+    getDupDismissed(instanceId),
+  );
+  useEffect(() => {
+    setDupDismissed(getDupDismissed(instanceId));
+  }, [instanceId]);
 
   const applyInfo = useCallback((path: string, info: ModInfo) => {
     setMods((prev) =>
@@ -135,27 +200,22 @@ export function ModsView({
       setMods([]);
       return;
     }
-    setLoading(true);
+    const cached = modsCache.get(instanceId);
+    if (cached) setMods(cached);
+    else {
+      setMods(null);
+      setLoading(true);
+    }
     api
       .listMods(instanceId)
       .then((list) => {
-        const merged = list.map((m) => {
-          if (m.project_id) {
-            const c = getCachedInfo(m.source, m.project_id, m.version_id);
-            if (c)
-              return {
-                ...m,
-                title: c.title ?? m.title,
-                description: c.description ?? m.description,
-                icon_url: c.icon_url ?? m.icon_url,
-                version: m.version ?? c.version,
-              };
-          }
-          return m;
-        });
+        const merged = mergeCached(list);
+        modsCache.set(instanceId, merged);
         setMods(merged);
         setError(null);
-        void enrich(merged);
+        enrich(merged)
+          .then(() => modsCache.set(instanceId, mergeCached(list)))
+          .catch(() => {});
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -271,7 +331,7 @@ export function ModsView({
 
   const runUpdate = () => {
     const keys = [...updateSel];
-    setConfirmUpdateAll(false);
+    closeUpdateAll();
     if (keys.length === 0) return;
     setUpdatingAll(true);
     toast(
@@ -461,7 +521,10 @@ export function ModsView({
           <div className="flex items-center gap-1.5 font-medium">
             <AlertTriangle size={13} /> Possible duplicate mods detected
             <button
-              onClick={() => setDupDismissed(conflictKey)}
+              onClick={() => {
+                setDupDismissed(conflictKey);
+                storeDupDismissed(instanceId, conflictKey);
+              }}
               title="Dismiss"
               className="ml-auto -mr-1 grid h-5 w-5 place-items-center rounded transition hover:bg-amber-500/20"
             >
@@ -482,7 +545,11 @@ export function ModsView({
         </div>
       )}
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
+      <div className="flex flex-1 flex-col overflow-y-auto pr-1">
+        <div
+          key={`${cat}:${sourceFilter}:${statusFilter}:${originFilter}`}
+          className="reveal-down flex flex-1 flex-col gap-2"
+        >
         {filtered.map((m) => (
           <ModRow
             key={m.path}
@@ -506,6 +573,7 @@ export function ModsView({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {(adding || detail) && (
@@ -524,8 +592,10 @@ export function ModsView({
 
       {confirmUnlock && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-          onMouseDown={(e) => e.target === e.currentTarget && setConfirmUnlock(false)}
+          className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+            unlockClosing ? "modal-overlay-out" : ""
+          }`}
+          onMouseDown={(e) => e.target === e.currentTarget && closeUnlock()}
         >
           <div className="rise w-[440px] max-w-full rounded-xl border border-amber-500/30 bg-ink-900 p-6 shadow-2xl">
             <div className="mb-3 flex items-center gap-2 text-amber-300">
@@ -543,15 +613,15 @@ export function ModsView({
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
-                onClick={() => setConfirmUnlock(false)}
+                onClick={closeUnlock}
                 className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
-                  setConfirmUnlock(false);
                   onToggleLock();
+                  closeUnlock();
                 }}
                 className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-amber-400"
               >
@@ -564,9 +634,11 @@ export function ModsView({
 
       {confirmUpdateAll && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+          className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+            updateAllClosing ? "modal-overlay-out" : ""
+          }`}
           onMouseDown={(e) =>
-            e.target === e.currentTarget && setConfirmUpdateAll(false)
+            e.target === e.currentTarget && closeUpdateAll()
           }
         >
           <div className="rise flex max-h-[80vh] w-[480px] max-w-full flex-col rounded-xl border border-brass-600/30 bg-ink-900 shadow-2xl">
@@ -644,7 +716,7 @@ export function ModsView({
             </div>
             <div className="flex justify-end gap-2 border-t border-edge px-5 py-3">
               <button
-                onClick={() => setConfirmUpdateAll(false)}
+                onClick={closeUpdateAll}
                 className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
               >
                 Cancel
@@ -678,24 +750,7 @@ function Segmented({
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-ink-600">{label}</span>
-      <div className="flex gap-1 rounded-lg border border-edge bg-ink-900/50 p-1">
-        {options.map((o) => {
-          const active = value === o.id;
-          return (
-            <button
-              key={o.id}
-              onClick={() => onChange(o.id)}
-              className={`rounded-md px-2.5 py-1 font-medium transition ${
-                active
-                  ? "bg-brass-500/15 text-brass-300"
-                  : "text-ink-600 hover:text-brass-300/80"
-              }`}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedTabs size="sm" value={value} onChange={onChange} options={options} />
     </div>
   );
 }
@@ -830,17 +885,19 @@ function ModRow({
         </div>
       </div>
 
-      {showVersions && canVersion && (
-        <RowVersions
-          instanceId={instanceId}
-          mod={mod}
-          onError={onError}
-          onPicked={() => {
-            setShowVersions(false);
-            onChanged();
-          }}
-        />
-      )}
+      <Collapse open={showVersions && canVersion}>
+        {showVersions && canVersion && (
+          <RowVersions
+            instanceId={instanceId}
+            mod={mod}
+            onError={onError}
+            onPicked={() => {
+              setShowVersions(false);
+              onChanged();
+            }}
+          />
+        )}
+      </Collapse>
     </div>
   );
 }
@@ -950,14 +1007,15 @@ function RowVersions({
                     )}
                   </button>
                 </div>
-                {expanded && (
+                <Collapse open={expanded}>
                   <Changelog
                     instanceId={instanceId}
                     projectId={mod.project_id!}
                     versionId={v.version_id}
                     source={mod.source}
+                    enabled={expanded}
                   />
-                )}
+                </Collapse>
               </div>
             );
           })}

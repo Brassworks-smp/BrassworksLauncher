@@ -32,6 +32,7 @@ import {
   Row,
   ActionButton,
   LinkButton,
+  SegmentedTabs,
   inputCls,
 } from "@/components/ui";
 
@@ -94,29 +95,20 @@ export function SettingsView({
         instance&apos;s gear (Instances → ⚙).
       </p>
 
-      <div className="mb-4 flex gap-1 self-start rounded-lg border border-edge bg-ink-900/50 p-1">
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const active = tab === id;
-          return (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                active
-                  ? "bg-brass-500/15 text-brass-300"
-                  : "text-ink-600 hover:text-brass-300/80"
-              }`}
-            >
-              <Icon size={15} />
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedTabs
+        className="mb-4 self-start"
+        value={tab}
+        onChange={(v) => setTab(v as Tab)}
+        options={TABS.map(({ id, label, icon: Icon }) => ({
+          id,
+          label,
+          icon: <Icon size={15} />,
+        }))}
+      />
 
       <div className="flex-1 overflow-y-auto pr-1">
         {tab === "defaults" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="reveal-down grid grid-cols-2 gap-4">
             <Card title="Default memory" icon={<SlidersHorizontal size={14} />}>
               <Slider
                 label="Maximum memory (-Xmx)"
@@ -249,15 +241,17 @@ export function SettingsView({
         )}
 
         {tab === "java" && (
-          <JavaTab
-            instanceId={javaInstanceId}
-            settings={settings}
-            patchSettings={patch}
-          />
+          <div className="reveal-down">
+            <JavaTab
+              instanceId={javaInstanceId}
+              settings={settings}
+              patchSettings={patch}
+            />
+          </div>
         )}
 
         {tab === "launcher" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="reveal-down grid grid-cols-2 gap-4">
             <UpdatesCard
               appVersion={appVersion}
               autoUpdate={settings.auto_update}

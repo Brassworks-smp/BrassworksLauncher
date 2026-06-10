@@ -10,6 +10,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { useClosable } from "@/components/ui";
 
 type Level = "error" | "warn" | "info" | "debug" | "default";
 
@@ -51,6 +52,7 @@ export function LogViewer({
   const [follow, setFollow] = useState(true);
   const [query, setQuery] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { closing, close } = useClosable(onClose);
 
   useEffect(() => {
     let alive = true;
@@ -80,10 +82,10 @@ export function LogViewer({
   }, [shown, follow, q]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   const copy = () => {
     if (text) api.copyText(text);
@@ -93,8 +95,10 @@ export function LogViewer({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div className="rise flex h-[82vh] w-[860px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-edge px-5 py-3">
@@ -158,7 +162,7 @@ export function LogViewer({
               Upload to mclo.gs
             </button>
             <button
-              onClick={onClose}
+              onClick={close}
               className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
             >
               <X size={16} />

@@ -43,14 +43,19 @@ export function Changelog({
   projectId,
   versionId,
   source,
+  enabled = true,
 }: {
   instanceId: string;
   projectId: string;
   versionId: string;
   source: string;
+  /** When false, defer the network fetch — lets the row stay mounted (and thus
+   *  animate open/closed) without loading every changelog up front. */
+  enabled?: boolean;
 }) {
   const [text, setText] = useState<string | null>(null);
   useEffect(() => {
+    if (!enabled || text !== null) return;
     let alive = true;
     api
       .contentChangelog(instanceId, projectId, versionId, source)
@@ -59,7 +64,7 @@ export function Changelog({
     return () => {
       alive = false;
     };
-  }, [instanceId, projectId, versionId, source]);
+  }, [enabled, instanceId, projectId, versionId, source, text]);
   return (
     <div className="border-t border-edge/60 bg-ink-950/30 px-4 py-3">
       {text === null ? (

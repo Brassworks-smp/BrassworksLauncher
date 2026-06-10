@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, PartyPopper, ScrollText, X } from "lucide-react";
 import * as api from "@/lib/api";
 import { Markdown } from "@/components/Markdown";
+import { useClosable } from "@/components/ui";
 
 export function ChangelogModal({
   version,
@@ -14,12 +15,13 @@ export function ChangelogModal({
 }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const { closing, close } = useClosable(onClose);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   useEffect(() => {
     let alive = true;
@@ -36,8 +38,10 @@ export function ChangelogModal({
 
   return (
     <div
-      className="fixed inset-0 z-[55] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`modal-overlay fixed inset-0 z-[55] grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div className="rise flex max-h-[80vh] w-[620px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
@@ -55,7 +59,7 @@ export function ChangelogModal({
             )}
           </h2>
           <button
-            onClick={onClose}
+            onClick={close}
             className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={16} />
@@ -97,7 +101,7 @@ export function ChangelogModal({
 
         <div className="flex justify-end border-t border-edge px-5 py-3">
           <button
-            onClick={onClose}
+            onClick={close}
             className="rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
           >
             {updated ? "Let's go" : "Close"}

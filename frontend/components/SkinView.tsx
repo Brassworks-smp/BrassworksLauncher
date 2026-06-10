@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { useClosable } from "@/components/ui";
 import type { SkinProfile, SkinCape, SavedSkin } from "@/lib/types";
 
 const TEX = (h: string) => `https://textures.minecraft.net/texture/${h}`;
@@ -629,12 +630,13 @@ function ApplySkinModal({
   const [newBytes, setNewBytes] = useState<number[] | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { closing, close } = useClosable(onClose);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   const capeUrl = capes.find((c) => c.id === capeId)?.url ?? null;
 
@@ -683,14 +685,16 @@ function ApplySkinModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div className="rise flex max-h-[88vh] w-[760px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="font-mc text-base tracking-wide text-gray-100">{title}</h2>
           <button
-            onClick={onClose}
+            onClick={close}
             className="grid h-8 w-8 place-items-center rounded-full text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={16} />
@@ -795,7 +799,7 @@ function ApplySkinModal({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-edge px-5 py-3">
-          <button onClick={onClose} className={BTN}>
+          <button onClick={close} className={BTN}>
             <X size={15} /> Cancel
           </button>
           <button onClick={apply} disabled={saving} className={BTN}>

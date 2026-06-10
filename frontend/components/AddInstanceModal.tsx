@@ -4,6 +4,7 @@ import * as api from "@/lib/api";
 import type { Instance } from "@/lib/types";
 import { VersionPicker } from "@/components/VersionPicker";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
+import { SegmentedTabs, useClosable } from "@/components/ui";
 
 type Tab = "custom" | "modrinth" | "curseforge" | "packwiz";
 
@@ -93,6 +94,7 @@ export function AddInstanceModal({
   const [tab, setTab] = useState<Tab>("custom");
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { closing, close } = useClosable(onClose);
 
   const [name, setName] = useState("");
   const [loader, setLoader] = useState("fabric");
@@ -121,10 +123,10 @@ export function AddInstanceModal({
   const [packUrl, setPackUrl] = useState("");
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   const createCustom = async () => {
     setBusy(true);
@@ -152,8 +154,10 @@ export function AddInstanceModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
+        closing ? "modal-overlay-out" : ""
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
         style={ACCENTS[tab] as React.CSSProperties | undefined}
@@ -172,27 +176,19 @@ export function AddInstanceModal({
             New instance
           </h2>
           <button
-            onClick={onClose}
+            onClick={close}
             className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-edge px-3 py-2">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                tab === t.id
-                  ? "bg-brass-500/15 text-brass-300"
-                  : "text-ink-600 hover:text-brass-300/80"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="border-b border-edge px-3 py-2">
+          <SegmentedTabs
+            value={tab}
+            onChange={(v) => setTab(v as Tab)}
+            options={TABS.map((t) => ({ id: t.id, label: t.label }))}
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">

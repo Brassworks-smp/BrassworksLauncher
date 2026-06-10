@@ -96,6 +96,7 @@ export function ModpackBrowser({
           <div className="text-xs text-red-300">{detailError}</div>
         )}
 
+        <div key={showVersions ? "versions" : "overview"} className="swap-in flex flex-col gap-3">
         {!showVersions ? (
           <>
             <div className="flex items-center gap-2">
@@ -148,6 +149,7 @@ export function ModpackBrowser({
             </div>
           </>
         )}
+        </div>
       </div>
     );
   }

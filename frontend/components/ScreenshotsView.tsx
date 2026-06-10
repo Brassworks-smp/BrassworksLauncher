@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { useClosable, StarButton } from "@/components/ui";
 import type { Screenshot } from "@/lib/types";
 
 function fmtDate(ms: number): string {
@@ -28,6 +29,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState<number | null>(null);
   const [scope, setScope] = useState<"this" | "all">("this");
+  const [starredOnly, setStarredOnly] = useState(false);
 
   const load = useCallback(() => {
     if (!api.isTauri()) {
@@ -70,9 +72,20 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
     }
   };
 
-  const list = (shots ?? []).filter(
-    (s) => scope === "all" || s.instance === instanceId,
-  );
+  const toggleStar = (s: Screenshot) => {
+    setShots((prev) =>
+      prev
+        ? prev.map((x) =>
+            x.path === s.path ? { ...x, starred: !x.starred } : x,
+          )
+        : prev,
+    );
+    api.toggleStar(s.instance, "screenshots", s.name).catch(() => load());
+  };
+
+  const list = (shots ?? [])
+    .filter((s) => scope === "all" || s.instance === instanceId)
+    .filter((s) => !starredOnly || s.starred);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -109,6 +122,18 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
             </button>
           </div>
           <button
+            onClick={() => setStarredOnly((v) => !v)}
+            title="Show starred only"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs transition ${
+              starredOnly
+                ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
+                : "border-edge text-ink-600 hover:text-brass-300"
+            }`}
+          >
+            <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={13} />
+            Starred
+          </button>
+          <button
             onClick={() =>
               api.openDir(instanceId, "screenshots").catch(() => {})
             }
@@ -135,7 +160,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
           </div>
         </div>
       ) : (
-        <div className="grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="stagger grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
           {list.map((s, i) => (
             <button
               key={s.path}
@@ -151,6 +176,14 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
               <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 py-1 text-left text-[10px] text-gray-300 opacity-0 transition group-hover:opacity-100">
                 {fmtDate(s.modified)}
               </div>
+              <StarButton
+                starred={s.starred}
+                onClick={() => toggleStar(s)}
+                size={14}
+                className={`absolute left-1.5 top-1.5 h-7 w-7 bg-ink-950/70 backdrop-blur-sm transition ${
+                  s.starred ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                }`}
+              />
               <span
                 role="button"
                 onClick={(e) => {
@@ -175,6 +208,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
           onClose={() => setActive(null)}
           onDelete={remove}
           onCopy={copy}
+          onStar={toggleStar}
         />
       )}
     </div>
@@ -188,6 +222,7 @@ function Lightbox({
   onClose,
   onDelete,
   onCopy,
+  onStar,
 }: {
   shots: Screenshot[];
   index: number;
@@ -195,10 +230,12 @@ function Lightbox({
   onClose: () => void;
   onDelete: (s: Screenshot) => void;
   onCopy: (s: Screenshot) => void | Promise<void>;
+  onStar: (s: Screenshot) => void;
 }) {
   const s = shots[index];
   const [copied, setCopied] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const { closing, close } = useClosable(onClose);
 
   const go = useCallback(
     (dir: number) => {
@@ -211,18 +248,20 @@ function Lightbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close();
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [go, onClose]);
+  }, [go, close]);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/85 p-6 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      className={`fixed inset-0 z-50 flex flex-col bg-black/85 p-6 backdrop-blur-sm ${
+        closing ? "fade-out" : "fade-in"
+      }`}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div className="flex items-center justify-between pb-3 text-gray-200">
         <div className="min-w-0">
@@ -233,6 +272,17 @@ function Lightbox({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => onStar(s)}
+            className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition ${
+              s.starred
+                ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
+                : "border-edge text-ink-600 hover:border-brass-500/40 hover:text-brass-300"
+            }`}
+          >
+            <StarButton starred={s.starred} onClick={() => onStar(s)} size={13} />
+            {s.starred ? "Starred" : "Star"}
+          </button>
           <button
             onClick={async () => {
               await onCopy(s);
@@ -251,7 +301,7 @@ function Lightbox({
             <Trash2 size={13} /> Delete
           </button>
           <button
-            onClick={onClose}
+            onClick={close}
             className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={17} />

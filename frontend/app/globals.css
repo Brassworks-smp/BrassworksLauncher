@@ -251,6 +251,221 @@
   animation: rise 0.35s ease both;
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.2s ease both;
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.fade-out {
+  animation: fade-out 0.18s ease both;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.view-anim {
+  animation: view-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Modal backdrop fade + panel pop. Add `.modal-overlay` to the full-screen
+   backdrop; its direct child (the panel) gets the pop automatically. */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.modal-overlay {
+  animation: modal-backdrop-in 0.16s ease both;
+}
+.modal-overlay > * {
+  animation: modal-pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes modal-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+.modal-overlay-out {
+  animation: modal-backdrop-out 0.18s ease both;
+}
+.modal-overlay-out > * {
+  animation: modal-pop-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+/* Content swap — used when a panel switches what it shows in place (e.g. the
+   modpack overview ⇄ version list, or a project's readme ⇄ versions). Re-key
+   the swapped node so it slides + fades in. */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.swap-in {
+  animation: swap-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Backwards variant — slides in from the left, for "back" navigation. */
+@keyframes swap-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.swap-in-back {
+  animation: swap-in-back 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Vertical reveal for inline expanders that lazily mount their body. */
+@keyframes reveal-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.reveal-down {
+  animation: reveal-down 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Staggered list/grid entrance — add `.stagger` to a container and its direct
+   children rise in sequence. Capped so long lists don't crawl in. */
+.stagger > * {
+  animation: rise 0.34s ease both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.05s; }
+.stagger > *:nth-child(3) { animation-delay: 0.08s; }
+.stagger > *:nth-child(4) { animation-delay: 0.11s; }
+.stagger > *:nth-child(5) { animation-delay: 0.14s; }
+.stagger > *:nth-child(6) { animation-delay: 0.17s; }
+.stagger > *:nth-child(7) { animation-delay: 0.2s; }
+.stagger > *:nth-child(8) { animation-delay: 0.23s; }
+.stagger > *:nth-child(9) { animation-delay: 0.26s; }
+.stagger > *:nth-child(n + 10) { animation-delay: 0.29s; }
+/* The global reduce-motion override only zeroes durations, not delays — clear
+   the stagger delays too so reduced-motion users don't see items held hidden. */
+:root.reduce-motion .stagger > * {
+  animation-delay: 0s !important;
+}
+
+/* Hover-lift: a gentle float for clickable cards/tiles. Pairs with the existing
+   border-colour hover the cards already have. */
+.hover-lift {
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Tactile press feedback for buttons that don't already have a custom active
+   state (the big PLAY button keeps its own ledge-shadow press). */
+.pressable {
+  transition: transform 0.09s ease;
+}
+.pressable:active {
+  transform: scale(0.96);
+}
+
+/* Keyboard focus ring — only shows for keyboard users (:focus-visible), giving
+   the app proper a11y affordance without cluttering mouse interaction. */
+button:focus-visible,
+a:focus-visible,
+[role="switch"]:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-brass-500);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Animated shine sweep across the primary brass call-to-action on hover. The
+   overflow clip only affects the sheen pseudo-element, not the ledge shadow
+   (box-shadow draws outside the clip box). */
+.brass-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.brass-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+.brass-btn:hover::after {
+  transform: translateX(130%);
+}
+
+/* Soft pulsing halo for "live"/running status dots. */
+@keyframes halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 224, 180, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(52, 224, 180, 0);
+  }
+}
+.halo {
+  animation: halo 1.8s ease-in-out infinite;
+}
+
 /* ---- Rendered Modrinth markdown ---- */
 .markdown {
   color: #c7c7c7;
