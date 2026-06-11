@@ -1,0 +1,27 @@
+{
+  "sections": [
+    {
+      "header": "Default skins",
+      "skins": [
+        { "name": "Steve", "texture": "/skins/steve.png", "model": "classic" },
+        { "name": "Alex", "texture": "/skins/alex.png", "model": "slim" },
+        { "name": "Ari", "texture": "/skins/ari.png", "model": "slim" },
+        { "name": "Kai", "texture": "/skins/kai.png", "model": "slim" },
+        { "name": "Efe", "texture": "/skins/efe.png", "model": "slim" },
+        { "name": "Makena", "texture": "/skins/makena.png", "model": "slim" },
+        { "name": "Noor", "texture": "/skins/noor.png", "model": "classic" },
+        { "name": "Sunny", "texture": "/skins/sunny.png", "model": "slim" },
+        { "name": "Zuri", "texture": "/skins/zuri.png", "model": "slim" }
+      ]
+    },
+    {
+      "header": "Owners & Admins",
+      "skins": [
+        { "name": "swzo", "texture": "/skins/swzo.png", "model": "classic" },
+        { "name": "Pipo1660", "texture": "/skins/pipo1660.png", "model": "classic" },
+        { "name": "DerErneuerer", "texture": "/skins/dererneuerer.png", "model": "slim" },
+        { "name": "Float420", "texture": "/skins/float420.png", "model": "classic" }
+      ]
+    }
+  ]
+}

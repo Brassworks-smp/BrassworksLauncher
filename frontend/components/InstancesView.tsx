@@ -20,6 +20,7 @@ import {
 import * as api from "@/lib/api";
 import { Collapse } from "./ui";
 import { ACCENT_COLORS as FOLDER_COLORS } from "@/lib/colors";
+import { iconSrc } from "@/lib/instanceIcons";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
 const LOADER_LABEL: Record<string, string> = {
@@ -555,9 +556,17 @@ function InstanceCard({
           <div className="schem-bg absolute inset-0" />
         )}
         <div className="absolute inset-0 bg-linear-to-b from-transparent to-ink-900/85" />
+        {updating && (
+          <div className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md border border-brass-500/40 bg-ink-950/70 px-1.5 py-0.5 backdrop-blur-[1px]">
+            <Loader2 size={11} className="animate-spin text-brass-300" />
+            <span className="font-mc text-[10px] tracking-wide text-brass-200">
+              Updating
+            </span>
+          </div>
+        )}
         {instance.icon ? (
           <img
-            src={instance.icon}
+            src={iconSrc(instance.icon, accent) ?? undefined}
             alt=""
             className="relative h-14 w-14 rounded-lg object-cover shadow-lg"
           />

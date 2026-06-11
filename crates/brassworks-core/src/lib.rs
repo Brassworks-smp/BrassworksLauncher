@@ -14,6 +14,7 @@ pub mod account;
 pub mod auth;
 pub mod error;
 pub mod featured;
+pub mod import;
 pub mod instance;
 pub mod launch;
 pub mod modpack;
@@ -34,12 +35,13 @@ pub use account::{Account, AccountKind, AccountStore};
 pub use auth::MicrosoftCode;
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
+pub use import::ImportCandidate;
 pub use instance::{Instance, InstanceManager, LoaderKind, LoaderVersion, PackSource};
 pub use launch::{launch_instance, LaunchRequest, QuickPlay};
 pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
-pub use packwiz::SearchHit;
+pub use packwiz::{PackwizBranch, SearchHit};
 pub use paths::Paths;
 pub use ping::ServerStatus;
 pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
@@ -51,7 +53,7 @@ pub use remote::{
 };
 pub use versions::{loader_versions, minecraft_versions, LoaderVersionInfo, McVersion};
 pub use skins::{Cape, SavedSkin, SkinLibraryView, SkinProfile};
-pub use settings::LauncherSettings;
+pub use settings::{InstanceFolder, LauncherSettings};
 
 pub use java::{JavaInstall, JavaKind};
 
@@ -300,6 +302,122 @@ impl Launcher {
         mgr.create(inst)
     }
 
+    /// Scan other launchers (Prism, Modrinth App) for importable instances.
+    pub fn scan_importable(&self) -> Vec<ImportCandidate> {
+        import::scan()
+    }
+
+    /// Import the selected external instances (keyed `"{source}:{key}"`): create
+    /// a Brassworks instance for each, copy its game files + icon, and map Prism
+    /// groups onto folders. Returns the instances created.
+    pub fn import_external(&self, keys: Vec<String>) -> Result<Vec<Instance>> {
+        let candidates = import::scan();
+        let mgr = self.instances();
+        let mut settings = self.settings()?;
+        // Reuse an existing folder when a group of the same name already exists.
+        let mut group_folder: std::collections::HashMap<String, String> = settings
+            .instance_folders
+            .iter()
+            .map(|f| (f.name.clone(), f.id.clone()))
+            .collect();
+        let mut settings_dirty = false;
+        let mut created = Vec::new();
+
+        for key in keys {
+            let Some(c) = candidates
+                .iter()
+                .find(|c| format!("{}:{}", c.source, c.key) == key)
+            else {
+                continue;
+            };
+            let loader = match c.loader.as_str() {
+                "neoforge" => LoaderKind::NeoForge,
+                "forge" => LoaderKind::Forge,
+                "fabric" => LoaderKind::Fabric,
+                "quilt" => LoaderKind::Quilt,
+                _ => LoaderKind::Vanilla,
+            };
+            let loader_version = match &c.loader_version {
+                Some(v) if !v.is_empty() => LoaderVersion::Exact(v.clone()),
+                _ => LoaderVersion::Stable,
+            };
+            // Preserve a managed modpack link so the instance updates as a Modrinth/
+            // CurseForge pack instead of importing as a plain custom instance.
+            let pack = match (c.pack_provider.as_deref(), &c.pack_id, &c.pack_version) {
+                (Some("modrinth"), Some(pid), Some(vid)) => PackSource::Modrinth {
+                    project_id: Some(pid.clone()),
+                    version_id: vid.clone(),
+                },
+                (Some("curseforge"), Some(pid), Some(fid)) => PackSource::Curseforge {
+                    project_id: pid.clone(),
+                    file_id: fid.clone(),
+                },
+                _ => PackSource::None,
+            };
+            let display = mgr.unique_name(&c.name);
+            let id = mgr.unique_id(&display);
+            let mut inst = Instance::new_custom(
+                &id,
+                display,
+                &c.minecraft,
+                loader,
+                loader_version,
+                pack,
+            );
+            inst.notes = c.notes.clone();
+            if let Some(group) = &c.group {
+                let fid = if let Some(fid) = group_folder.get(group) {
+                    fid.clone()
+                } else {
+                    let fid = unique_folder_id(&settings, group);
+                    settings.instance_folders.push(InstanceFolder {
+                        id: fid.clone(),
+                        name: group.clone(),
+                        color: None,
+                        collapsed: false,
+                    });
+                    group_folder.insert(group.clone(), fid.clone());
+                    settings_dirty = true;
+                    fid
+                };
+                inst.folder_id = Some(fid);
+            }
+            // `c.icon` is already a data: URI built during the scan.
+            inst.icon = c.icon.clone();
+
+            let src_game = import::game_dir_for(c);
+            if src_game.is_dir() {
+                let dst_game = self.paths.instance_game_dir(&id);
+                import::copy_dir_all(&src_game, &dst_game)
+                    .map_err(|e| CoreError::Io { path: dst_game, source: e })?;
+                // Carry over per-mod Modrinth/CurseForge source metadata so imported
+                // mods keep their icons and per-mod updates in the content browser.
+                let items = match c.source.as_str() {
+                    "modrinth" => import::modrinth_mod_items(c),
+                    _ => import::prism_mod_items(&src_game),
+                };
+                if !items.is_empty() {
+                    write_json(
+                        &self.paths.user_content(&id),
+                        &serde_json::json!({ "items": items }),
+                        "user_content",
+                    )?;
+                }
+            }
+            created.push(mgr.create(inst)?);
+        }
+
+        if settings_dirty {
+            self.save_settings(&settings)?;
+        }
+        Ok(created)
+    }
+
+    /// List the branches of a GitHub repo that ship a packwiz `pack.toml`.
+    pub fn list_packwiz_branches(&self, repo: &str) -> Result<Vec<packwiz::PackwizBranch>> {
+        Ok(packwiz::Installer::new().github_pack_branches(repo)?)
+    }
+
     pub fn create_packwiz_instance(&self, name: &str, url: &str) -> Result<Instance> {
         let installer = packwiz::Installer::new();
         let pack = installer.fetch_pack(url)?;
@@ -342,6 +460,48 @@ impl Launcher {
         mgr.create(inst)
     }
 
+
+    /// Re-point a packwiz instance at a different branch's `pack.toml`,
+    /// re-detecting its Minecraft version + loader from the new pack. The caller
+    /// should then reinstall/sync so files match. Returns the updated instance.
+    pub fn switch_packwiz_branch(&self, instance_id: &str, url: &str) -> Result<Instance> {
+        let installer = packwiz::Installer::new();
+        let pack = installer.fetch_pack(url)?;
+        let mc = pack
+            .versions
+            .minecraft
+            .clone()
+            .unwrap_or_else(|| "1.21.1".to_string());
+        let (loader, loader_version) = if let Some(v) = &pack.versions.neoforge {
+            (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.forge {
+            (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.fabric {
+            (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
+        } else if let Some(v) = &pack.versions.quilt {
+            (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
+        } else {
+            (LoaderKind::Vanilla, LoaderVersion::Stable)
+        };
+        let mgr = self.instances();
+        let mut inst = mgr.get(instance_id)?;
+        if !matches!(inst.pack, PackSource::Packwiz { .. }) {
+            return Err(CoreError::Modpack(
+                "instance is not a packwiz pack".to_string(),
+            ));
+        }
+        inst.minecraft_version = mc;
+        inst.loader = loader;
+        inst.loader_version = loader_version;
+        inst.pack = PackSource::Packwiz {
+            url: url.to_string(),
+        };
+        if let Some(icon) = installer.find_pack_icon(url) {
+            inst.icon = Some(icon);
+        }
+        mgr.update(&inst)?;
+        Ok(inst)
+    }
 
     fn cf_key(&self) -> String {
         self.settings()
@@ -580,6 +740,40 @@ impl Launcher {
         self.with_token(account_id, |t| skins::get_profile(t))
     }
 
+    /// On first Skins load, seed the library from the account's currently-applied
+    /// Mojang skin so "Edit skin" starts with a real texture instead of being
+    /// cape-only. No-op once the account has any saved skin; network failures are
+    /// swallowed so the (possibly empty) library still loads. Returns the view.
+    pub fn seed_current_skin(&self, account_id: &str) -> skins::SkinLibraryView {
+        let has_skins = self
+            .skin_library()
+            .accounts
+            .get(account_id)
+            .is_some_and(|a| !a.skins.is_empty());
+        if !has_skins {
+            let _ = self.try_seed_current_skin(account_id);
+        }
+        self.list_skins(account_id)
+    }
+
+    fn try_seed_current_skin(&self, account_id: &str) -> Result<()> {
+        let profile = self.skin_profile(account_id)?;
+        let Some(url) = profile.skin_url.as_deref() else {
+            return Ok(());
+        };
+        let bytes = skins::download_texture(url)?;
+        let cape = profile.capes.iter().find(|c| c.active).map(|c| c.id.clone());
+        let saved = self.create_preset(
+            account_id,
+            "Current skin",
+            &profile.model,
+            cape.as_deref(),
+            Some(bytes),
+            None,
+        )?;
+        self.set_selected_skin(account_id, Some(&saved.id))
+    }
+
     pub fn set_cape(&self, account_id: &str, cape_id: Option<&str>) -> Result<()> {
         self.with_token(account_id, |t| skins::set_cape(t, cape_id))
     }
@@ -592,13 +786,16 @@ impl Launcher {
         write_json(&self.paths.skins_index(), lib, "skins")
     }
 
-    /// `account_id`'s saved skins + selected id. Folds any legacy global skins
-    /// into this account on first access (persisted best-effort).
+    /// `account_id`'s presets + selected id. Folds any legacy global skins into
+    /// this account on first access and repairs the model's invariants (unique
+    /// names, a valid selection); persisted best-effort when anything changed.
     pub fn list_skins(&self, account_id: &str) -> skins::SkinLibraryView {
         let mut lib = self.skin_library();
         let had_legacy = !lib.skins.is_empty();
-        let acct = lib.account_mut(account_id).clone();
-        if had_legacy {
+        let acct = lib.account_mut(account_id);
+        let normalized = acct.normalize();
+        let acct = acct.clone();
+        if had_legacy || normalized {
             let _ = self.save_skin_library(&lib);
         }
         skins::SkinLibraryView {
@@ -617,103 +814,126 @@ impl Launcher {
         Ok((id, file.to_string_lossy().to_string()))
     }
 
-    pub fn save_skin(
+    fn norm_model(model: &str) -> String {
+        if model == "slim" { "slim" } else { "classic" }.to_string()
+    }
+
+    /// Create a new preset (locker outfit) from a texture — either raw `bytes` or a
+    /// `url` to download. Does NOT push to Mojang and does NOT change the selection;
+    /// the name is made unique within the account. Used for imports, blueprints
+    /// (default skins), and the "save without applying" path.
+    pub fn create_preset(
         &self,
         account_id: &str,
         name: &str,
-        bytes: &[u8],
         model: &str,
         cape_id: Option<&str>,
-        source: Option<&str>,
+        bytes: Option<Vec<u8>>,
+        url: Option<String>,
     ) -> Result<skins::SavedSkin> {
-        let (id, file) = self.write_skin_file(bytes)?;
+        let bytes = match bytes {
+            Some(b) => b,
+            None => {
+                let url = url
+                    .ok_or_else(|| CoreError::Modpack("No texture provided".to_string()))?;
+                skins::download_texture(&url)?
+            }
+        };
+        let (id, file) = self.write_skin_file(&bytes)?;
+        let mut lib = self.skin_library();
+        let acct = lib.account_mut(account_id);
         let saved = skins::SavedSkin {
             id,
-            name: if name.trim().is_empty() {
-                "Skin".to_string()
-            } else {
-                name.trim().to_string()
-            },
+            name: skins::unique_name(&acct.skins, name, None),
             file,
-            model: if model == "slim" { "slim" } else { "classic" }.to_string(),
+            model: Self::norm_model(model),
             cape_id: cape_id.map(|c| c.to_string()),
-            source: source.map(|s| s.to_string()),
         };
-        let mut lib = self.skin_library();
-        lib.account_mut(account_id).skins.insert(0, saved.clone());
+        acct.skins.insert(0, saved.clone());
         self.save_skin_library(&lib)?;
         Ok(saved)
     }
 
+    /// Edit an existing preset in place: optionally replace its texture (`bytes`),
+    /// and set name (made unique, excluding itself), model, and cape. Does NOT push
+    /// to Mojang. Returns the updated preset.
+    pub fn update_preset(
+        &self,
+        account_id: &str,
+        skin_id: &str,
+        name: &str,
+        model: &str,
+        cape_id: Option<&str>,
+        bytes: Option<Vec<u8>>,
+    ) -> Result<skins::SavedSkin> {
+        // Write the replacement texture first (if any) so a failure leaves the
+        // library untouched.
+        let new_file = match &bytes {
+            Some(b) => Some(self.write_skin_file(b)?),
+            None => None,
+        };
+        let mut lib = self.skin_library();
+        let acct = lib.account_mut(account_id);
+        let unique = skins::unique_name(&acct.skins, name, Some(skin_id));
+        let skin = acct
+            .skins
+            .iter_mut()
+            .find(|s| s.id == skin_id)
+            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+        let old_file = new_file.as_ref().map(|(_, path)| {
+            std::mem::replace(&mut skin.file, path.clone())
+        });
+        skin.name = unique;
+        skin.model = Self::norm_model(model);
+        skin.cape_id = cape_id.map(|c| c.to_string());
+        let saved = skin.clone();
+        self.save_skin_library(&lib)?;
+        if let Some(old) = old_file {
+            if old != saved.file {
+                let _ = std::fs::remove_file(&old);
+            }
+        }
+        Ok(saved)
+    }
+
+    /// Copy a preset into a new one (own texture file, same model + cape) under
+    /// `name` (made unique). Does NOT apply/select. The caller supplies the desired
+    /// name (e.g. "Skin (1)"); `unique_name` is the safety net.
+    pub fn duplicate_skin(
+        &self,
+        account_id: &str,
+        skin_id: &str,
+        name: &str,
+    ) -> Result<skins::SavedSkin> {
+        let (bytes, model, cape) = {
+            let lib = self.skin_library();
+            let src = lib
+                .accounts
+                .get(account_id)
+                .and_then(|a| a.skins.iter().find(|s| s.id == skin_id))
+                .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
+            let bytes = std::fs::read(&src.file)
+                .map_err(|e| CoreError::io(std::path::Path::new(&src.file), e))?;
+            (bytes, src.model.clone(), src.cape_id.clone())
+        };
+        self.create_preset(account_id, name, &model, cape.as_deref(), Some(bytes), None)
+    }
+
+    /// Delete a preset. Refuses to delete the currently-selected one (the model
+    /// keeps the selected preset == what's applied to Mojang).
     pub fn delete_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
         let mut lib = self.skin_library();
         let acct = lib.account_mut(account_id);
+        if acct.selected.as_deref() == Some(skin_id) {
+            return Err(CoreError::Modpack(
+                "Can't delete the selected skin — apply another first".to_string(),
+            ));
+        }
         if let Some(s) = acct.skins.iter().find(|s| s.id == skin_id) {
             let _ = std::fs::remove_file(&s.file);
         }
         acct.skins.retain(|s| s.id != skin_id);
-        if acct.selected.as_deref() == Some(skin_id) {
-            acct.selected = None;
-        }
         self.save_skin_library(&lib)
-    }
-
-    pub fn update_skin(
-        &self,
-        account_id: &str,
-        skin_id: &str,
-        model: &str,
-        cape_id: Option<&str>,
-    ) -> Result<()> {
-        let mut lib = self.skin_library();
-        let skin = lib
-            .account_mut(account_id)
-            .skins
-            .iter_mut()
-            .find(|s| s.id == skin_id)
-            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
-        skin.model = if model == "slim" { "slim" } else { "classic" }.to_string();
-        skin.cape_id = cape_id.map(|c| c.to_string());
-        self.save_skin_library(&lib)
-    }
-
-    pub fn rename_skin(&self, account_id: &str, skin_id: &str, name: &str) -> Result<()> {
-        let mut lib = self.skin_library();
-        let skin = lib
-            .account_mut(account_id)
-            .skins
-            .iter_mut()
-            .find(|s| s.id == skin_id)
-            .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
-        let trimmed = name.trim();
-        if !trimmed.is_empty() {
-            skin.name = trimmed.to_string();
-        }
-        self.save_skin_library(&lib)
-    }
-
-    pub fn replace_skin_texture(
-        &self,
-        account_id: &str,
-        skin_id: &str,
-        bytes: &[u8],
-    ) -> Result<()> {
-        let (_, new_path) = self.write_skin_file(bytes)?;
-        let mut lib = self.skin_library();
-        let old_path = {
-            let skin = lib
-                .account_mut(account_id)
-                .skins
-                .iter_mut()
-                .find(|s| s.id == skin_id)
-                .ok_or_else(|| CoreError::Modpack("Skin not found".to_string()))?;
-            std::mem::replace(&mut skin.file, new_path.clone())
-        };
-        self.save_skin_library(&lib)?;
-        if old_path != new_path {
-            let _ = std::fs::remove_file(&old_path);
-        }
-        Ok(())
     }
 
     fn set_selected_skin(&self, account_id: &str, skin_id: Option<&str>) -> Result<()> {
@@ -738,74 +958,6 @@ impl Launcher {
             skins::set_cape(t, cape.as_deref())
         })?;
         self.set_selected_skin(account_id, Some(skin_id))
-    }
-
-    /// Apply a default preset by URL: saves it into the account's library (one
-    /// entry per preset, updated in place on re-apply) so it becomes editable,
-    /// pushes the texture + cape to Mojang, and marks it selected.
-    pub fn apply_preset(
-        &self,
-        account_id: &str,
-        name: &str,
-        url: &str,
-        model: &str,
-        cape_id: Option<&str>,
-    ) -> Result<skins::SavedSkin> {
-        let bytes = skins::download_texture(url)?;
-        let model = if model == "slim" { "slim" } else { "classic" }.to_string();
-        let source = format!("preset:{name}");
-
-        let mut lib = self.skin_library();
-        let saved = {
-            let acct = lib.account_mut(account_id);
-            let existing = acct
-                .skins
-                .iter_mut()
-                .find(|s| s.source.as_deref() == Some(source.as_str()));
-            let saved = if let Some(s) = existing {
-                std::fs::write(&s.file, &bytes)
-                    .map_err(|e| CoreError::io(std::path::Path::new(&s.file), e))?;
-                s.model = model.clone();
-                s.cape_id = cape_id.map(|c| c.to_string());
-                s.clone()
-            } else {
-                let (id, file) = self.write_skin_file(&bytes)?;
-                let s = skins::SavedSkin {
-                    id,
-                    name: name.to_string(),
-                    file,
-                    model: model.clone(),
-                    cape_id: cape_id.map(|c| c.to_string()),
-                    source: Some(source.clone()),
-                };
-                acct.skins.insert(0, s.clone());
-                s
-            };
-            acct.selected = Some(saved.id.clone());
-            saved
-        };
-        self.save_skin_library(&lib)?;
-
-        let cape = cape_id.map(|c| c.to_string());
-        let upload_model = model.clone();
-        self.with_token(account_id, move |t| {
-            skins::upload_skin(t, bytes.clone(), &upload_model)?;
-            skins::set_cape(t, cape.as_deref())
-        })?;
-        Ok(saved)
-    }
-
-    pub fn upload_and_apply_skin(
-        &self,
-        account_id: &str,
-        name: &str,
-        bytes: Vec<u8>,
-        model: &str,
-    ) -> Result<skins::SavedSkin> {
-        let saved = self.save_skin(account_id, name, &bytes, model, None, None)?;
-        self.with_token(account_id, |t| skins::upload_skin(t, bytes.clone(), model))?;
-        self.set_selected_skin(account_id, Some(&saved.id))?;
-        Ok(saved)
     }
 
     pub fn update_modpack(
@@ -1299,4 +1451,21 @@ fn write_json<T: serde::Serialize>(
     }
     let json = serde_json::to_vec_pretty(value).map_err(|e| CoreError::serde(what, e))?;
     std::fs::write(path, json).map_err(|e| CoreError::io(path, e))
+}
+
+/// A folder id unique among existing folders, derived from a group name.
+fn unique_folder_id(settings: &LauncherSettings, name: &str) -> String {
+    let slug: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    let slug = slug.trim_matches('-');
+    let base = if slug.is_empty() { "folder" } else { slug };
+    let mut id = format!("f-{base}");
+    let mut n = 1;
+    while settings.instance_folders.iter().any(|f| f.id == id) {
+        id = format!("f-{base}-{n}");
+        n += 1;
+    }
+    id
 }

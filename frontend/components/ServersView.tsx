@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { parseMotd } from "@/lib/motd";
 import { SegmentedTabs, StarButton, useClosable } from "./ui";
 import { AddServerModal } from "./AddServerModal";
 import type { ServerEntry, ServerStatus } from "@/lib/types";
@@ -415,11 +416,13 @@ function ServerRow({
           )}
         </div>
         <div className="truncate font-mono text-[11px] text-ink-600">{server.ip}</div>
-        <div className="truncate text-[12px] text-ink-600">
+        <div className="truncate font-mc text-[12px] text-ink-600">
           {status === "loading"
             ? "Pinging…"
             : live?.online
-              ? live.motd.split("\n")[0] || live.version || ""
+              ? live.motd
+                ? parseMotd(live.motd.split("\n")[0])
+                : live.version || ""
               : "Offline or unreachable"}
         </div>
       </button>
@@ -577,7 +580,7 @@ function ServerDetailModal({
               </div>
             ) : live?.online ? (
               <div className="whitespace-pre-line break-words font-mc text-[13px] leading-relaxed text-gray-200">
-                {live.motd || "-"}
+                {live.motd ? parseMotd(live.motd) : "-"}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-red-300/80">

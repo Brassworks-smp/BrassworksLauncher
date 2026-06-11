@@ -150,8 +150,6 @@ export function DatapacksModal({
     setSelected(null);
   };
 
-  // Only the Browse flow gets a source-branded accent (Modrinth green /
-  // CurseForge orange). The Installed tab keeps the global accent.
   const accentSource =
     tab === "browse" ? (selected ? selected.source : source) : null;
   const isLight =

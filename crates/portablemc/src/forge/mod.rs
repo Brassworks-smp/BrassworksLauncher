@@ -932,6 +932,8 @@ fn try_install(
                     }
                 }
 
+                base::no_window(&mut command);
+
                 let output = command.output()
                     .map_err(|e| base::Error::new_io(e, format!("spawn: {}", jvm_file.display())))?;
 

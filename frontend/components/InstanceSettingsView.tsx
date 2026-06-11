@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   SlidersHorizontal,
@@ -19,9 +19,17 @@ import {
   StickyNote,
   X,
   Share2,
+  GitBranch,
+  Copy,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import {
+  buildInstanceIcons,
+  currentPalette,
+  iconSrc,
+  isBuiltinIcon,
+} from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
 import { VersionPicker } from "@/components/VersionPicker";
 import type {
@@ -38,6 +46,7 @@ import {
   Card,
   Field,
   Select,
+  Dropdown,
   MemorySettings,
   Toggle,
   Row,
@@ -116,6 +125,11 @@ export function InstanceSettingsView({
 }) {
   const patch = (p: Partial<Instance>) => onSaveInstance({ ...instance, ...p });
 
+  const defaultIcons = useMemo(
+    () => buildInstanceIcons(currentPalette()),
+    [settings.accent_color],
+  );
+
   const [argsDraft, setArgsDraft] = useState("");
   useEffect(
     () => setArgsDraft(instance.extra_jvm_args.join(" ")),
@@ -149,7 +163,11 @@ export function InstanceSettingsView({
         </button>
         <div className="flex items-center gap-3">
           {instance.icon && (
-            <img src={instance.icon} alt="" className="h-9 w-9 rounded-md object-cover" />
+            <img
+              src={iconSrc(instance.icon) ?? undefined}
+              alt=""
+              className="h-9 w-9 rounded-md object-cover"
+            />
           )}
           <div>
             <input
@@ -353,9 +371,31 @@ export function InstanceSettingsView({
 
           {!instance.featured && (
             <Card title="Branding" icon={<ImageIcon size={14} />}>
+              <Field label="Default icons" hint="Quick-pick a built-in instance icon.">
+                <div className="flex flex-wrap gap-2">
+                  {defaultIcons.map((ic) => (
+                    <button
+                      key={ic.id}
+                      type="button"
+                      onClick={() => patch({ icon: ic.value })}
+                      title={ic.id}
+                      className={`grid h-10 w-10 place-items-center rounded-lg border bg-ink-950/40 transition hover:border-brass-500/60 ${
+                        instance.icon === ic.value
+                          ? "border-brass-500 ring-1 ring-brass-500/60"
+                          : "border-edge"
+                      }`}
+                    >
+                      <img src={ic.uri} alt="" className="h-7 w-7" />
+                    </button>
+                  ))}
+                </div>
+              </Field>
               <Field label="Icon URL" hint="Square logo shown on the card and Play page.">
                 <input
-                  defaultValue={instance.icon ?? ""}
+                  key={instance.icon ?? "none"}
+                  defaultValue={
+                    isBuiltinIcon(instance.icon) ? "" : (instance.icon ?? "")
+                  }
                   onBlur={(e) => patch({ icon: e.target.value.trim() || null })}
                   placeholder="https://… or /local.png"
                   className={`${inputCls} font-mono text-xs`}
@@ -570,6 +610,8 @@ function ModpackCard({
 
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [showVersions, setShowVersions] = useState(false);
+  const [branches, setBranches] = useState<api.PackwizBranch[] | null>(null);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const currentVersion =
     pack.kind === "modrinth"
       ? pack.version_id
@@ -594,6 +636,74 @@ function ModpackCard({
       <Row label="Installed version" value={modStatus?.installed_version ?? "-"} />
       {isPackwiz && (
         <Row label="Latest version" value={modStatus?.latest_version || "-"} />
+      )}
+
+      {pack.kind === "packwiz" && (
+        <div className="flex flex-col gap-2 rounded-lg border border-edge bg-ink-900/40 p-3">
+          <div className="flex items-center gap-1.5 text-xs text-ink-600">
+            <GitBranch size={13} /> Source
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={pack.url}
+              className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge"
+            />
+            <button
+              title="Copy URL"
+              onClick={() => navigator.clipboard?.writeText(pack.url)}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <Copy size={14} />
+            </button>
+            <button
+              title="Open in browser"
+              onClick={() => api.openExternal(pack.url).catch(() => {})}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <ExternalLink size={14} />
+            </button>
+          </div>
+          {branches && branches.length > 0 ? (
+            <Dropdown
+              value={pack.url}
+              onChange={(v) => {
+                if (v === pack.url) return;
+                run(async () => {
+                  await api.switchPackwizBranch(id, v);
+                  await api.reinstallModpack(id);
+                  const updated = await api.getInstance(id);
+                  onSaveInstance(updated);
+                });
+              }}
+              options={branches.map((b) => ({ value: b.pack_url, label: b.name }))}
+            />
+          ) : (
+            <button
+              disabled={loadingBranches || maintaining}
+              onClick={() => {
+                setLoadingBranches(true);
+                api
+                  .listPackwizBranches(pack.url)
+                  .then((list) => {
+                    setBranches(list);
+                    if (list.length === 0)
+                      onError("No other branches with a pack.toml were found.");
+                  })
+                  .catch((e) => onError(String(e)))
+                  .finally(() => setLoadingBranches(false));
+              }}
+              className="flex items-center justify-center gap-2 self-start rounded-md border border-brass-600/40 px-3 py-1.5 text-xs text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingBranches ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <GitBranch size={14} />
+              )}
+              Switch branch
+            </button>
+          )}
+        </div>
       )}
 
       {maintaining && (

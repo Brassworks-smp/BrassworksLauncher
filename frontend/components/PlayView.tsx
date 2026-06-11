@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { iconSrc } from "@/lib/instanceIcons";
 import type {
   Instance,
   LaunchProgress,
@@ -136,13 +137,6 @@ export function PlayView({
     <div className="flex flex-1 gap-4">
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
-        {instance.banner && (
-          <img
-            src={instance.banner}
-            alt=""
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
-          />
-        )}
         <div className="play-hero-overlay pointer-events-none absolute inset-0" />
 
         <div className="relative z-10 flex h-full w-full flex-col p-7">
@@ -154,7 +148,7 @@ export function PlayView({
             <div className="flex items-center gap-3">
               {instance.icon && (
                 <img
-                  src={instance.icon}
+                  src={iconSrc(instance.icon) ?? undefined}
                   alt=""
                   className="h-12 w-12 rounded-lg object-cover shadow-lg"
                 />
@@ -185,15 +179,6 @@ export function PlayView({
             </div>
           </div>
 
-          {instance.logo && (
-            <div className="pointer-events-none flex min-h-0 flex-1 items-center justify-center overflow-hidden py-6">
-              <img
-                src={instance.logo}
-                alt=""
-                className="max-h-[58%] max-w-[62%] object-contain drop-shadow-[0_8px_28px_rgba(0,0,0,0.55)]"
-              />
-            </div>
-          )}
 
           <div className="mt-auto">
             {hasUpdate && (

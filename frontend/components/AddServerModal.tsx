@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, Server, Loader2, Wifi, WifiOff, Check } from "lucide-react";
 import * as api from "@/lib/api";
+import { parseMotd } from "@/lib/motd";
 import { useClosable } from "./ui";
 import type { ServerEntry, ServerStatus } from "@/lib/types";
 
@@ -139,8 +140,8 @@ export function AddServerModal({
                       <Wifi size={13} /> Online · {status.players_online}/
                       {status.players_max} · {status.ping_ms}ms
                     </div>
-                    <div className="mt-1 whitespace-pre-line break-words text-[12px] text-ink-600">
-                      {status.motd || "(no MOTD)"}
+                    <div className="mt-1 whitespace-pre-line break-words font-mc text-[12px] text-ink-600">
+                      {status.motd ? parseMotd(status.motd) : "(no MOTD)"}
                     </div>
                   </div>
                 </div>

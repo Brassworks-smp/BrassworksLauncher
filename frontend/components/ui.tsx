@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Star, ChevronUp, ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Loader2, Star, ChevronUp, ChevronDown, Check } from "lucide-react";
 
 export function useClosable(onClose: () => void, duration = 190) {
   const [closing, setClosing] = useState(false);
@@ -364,6 +365,99 @@ export function Select({
         </option>
       ))}
     </select>
+  );
+}
+
+/** Styled dropdown (button + portal popover) — replaces the native <select>. */
+export function Dropdown({
+  value,
+  onChange,
+  options,
+  placeholder = "Select…",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen((o) => !o);
+  };
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        className={`${inputCls} flex cursor-pointer items-center justify-between gap-2 text-left`}
+      >
+        <span className={`truncate ${selected ? "" : "text-ink-600"}`}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 text-ink-600 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open &&
+        rect &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[80]"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              className="fixed z-[81] max-h-64 overflow-y-auto rounded-lg border border-edge bg-ink-900 p-1 shadow-2xl"
+              style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+            >
+              {options.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition ${
+                    o.value === value
+                      ? "bg-brass-500/15 text-brass-200"
+                      : "text-gray-200 hover:bg-ink-800"
+                  }`}
+                >
+                  <span className="truncate">{o.label}</span>
+                  {o.value === value && (
+                    <Check size={14} className="shrink-0 text-brass-300" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 

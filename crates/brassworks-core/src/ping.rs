@@ -82,8 +82,11 @@ fn ping_inner(addr: &str) -> io::Result<ServerStatus> {
 
     let motd = value
         .get("description")
-        .map(extract_text)
-        .map(|s| strip_formatting(&s))
+        .map(|d| {
+            let mut out = String::new();
+            extract_motd(d, &Fmt::default(), &mut out);
+            out.trim().to_string()
+        })
         .unwrap_or_default();
     let version = value
         .get("version")
@@ -174,23 +177,106 @@ fn resolve_srv(host: &str) -> Option<(String, u16)> {
 }
 
 
-fn extract_text(v: &serde_json::Value) -> String {
+#[derive(Clone, Default)]
+struct Fmt {
+    color: Option<String>,
+    bold: bool,
+    italic: bool,
+    underlined: bool,
+    strikethrough: bool,
+    obfuscated: bool,
+}
+
+fn named_color_code(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "black" => "0",
+        "dark_blue" => "1",
+        "dark_green" => "2",
+        "dark_aqua" => "3",
+        "dark_red" => "4",
+        "dark_purple" => "5",
+        "gold" => "6",
+        "gray" | "grey" => "7",
+        "dark_gray" | "dark_grey" => "8",
+        "blue" => "9",
+        "green" => "a",
+        "aqua" => "b",
+        "red" => "c",
+        "light_purple" => "d",
+        "yellow" => "e",
+        "white" => "f",
+        _ => return None,
+    })
+}
+
+fn emit_codes(out: &mut String, f: &Fmt) {
+    out.push_str("§r");
+    if let Some(c) = &f.color {
+        out.push('§');
+        out.push_str(c);
+    }
+    if f.bold {
+        out.push_str("§l");
+    }
+    if f.italic {
+        out.push_str("§o");
+    }
+    if f.underlined {
+        out.push_str("§n");
+    }
+    if f.strikethrough {
+        out.push_str("§m");
+    }
+    if f.obfuscated {
+        out.push_str("§k");
+    }
+}
+
+fn extract_motd(v: &serde_json::Value, inherited: &Fmt, out: &mut String) {
     match v {
-        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::String(s) => out.push_str(s),
+        serde_json::Value::Array(arr) => {
+            for e in arr {
+                extract_motd(e, inherited, out);
+            }
+        }
         serde_json::Value::Object(map) => {
-            let mut out = String::new();
+            let mut f = inherited.clone();
+            if let Some(serde_json::Value::String(col)) = map.get("color") {
+                if let Some(code) = named_color_code(col) {
+                    f.color = Some(code.to_string());
+                } else if col.starts_with('#') && col.len() == 7 {
+                    f.color = Some(col.to_lowercase());
+                }
+            }
+            if let Some(b) = map.get("bold").and_then(|x| x.as_bool()) {
+                f.bold = b;
+            }
+            if let Some(b) = map.get("italic").and_then(|x| x.as_bool()) {
+                f.italic = b;
+            }
+            if let Some(b) = map.get("underlined").and_then(|x| x.as_bool()) {
+                f.underlined = b;
+            }
+            if let Some(b) = map.get("strikethrough").and_then(|x| x.as_bool()) {
+                f.strikethrough = b;
+            }
+            if let Some(b) = map.get("obfuscated").and_then(|x| x.as_bool()) {
+                f.obfuscated = b;
+            }
             if let Some(serde_json::Value::String(t)) = map.get("text") {
-                out.push_str(t);
+                if !t.is_empty() {
+                    emit_codes(out, &f);
+                    out.push_str(t);
+                }
             }
             if let Some(serde_json::Value::Array(extra)) = map.get("extra") {
                 for e in extra {
-                    out.push_str(&extract_text(e));
+                    extract_motd(e, &f, out);
                 }
             }
-            out
         }
-        serde_json::Value::Array(arr) => arr.iter().map(extract_text).collect(),
-        _ => String::new(),
+        _ => {}
     }
 }
 

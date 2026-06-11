@@ -33,8 +33,6 @@ pub struct SavedSkin {
     pub model: String,
     #[serde(default)]
     pub cape_id: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -43,6 +41,61 @@ pub struct AccountSkins {
     pub skins: Vec<SavedSkin>,
     #[serde(default)]
     pub selected: Option<String>,
+}
+
+impl AccountSkins {
+    pub fn normalize(&mut self) -> bool {
+        let mut changed = false;
+        let mut seen: Vec<String> = Vec::with_capacity(self.skins.len());
+        for s in &mut self.skins {
+            let base = {
+                let t = s.name.trim();
+                if t.is_empty() { "Skin" } else { t }
+            }
+            .to_string();
+            let mut candidate = base.clone();
+            let mut n = 2;
+            while seen.iter().any(|x| x.eq_ignore_ascii_case(&candidate)) {
+                candidate = format!("{base} {n}");
+                n += 1;
+            }
+            if candidate != s.name {
+                s.name = candidate.clone();
+                changed = true;
+            }
+            seen.push(candidate);
+        }
+        if let Some(sel) = &self.selected {
+            if !self.skins.iter().any(|s| &s.id == sel) {
+                self.selected = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+pub fn unique_name(skins: &[SavedSkin], desired: &str, exclude: Option<&str>) -> String {
+    let base = {
+        let t = desired.trim();
+        if t.is_empty() { "Skin" } else { t }
+    };
+    let taken = |candidate: &str| {
+        skins
+            .iter()
+            .any(|s| exclude != Some(s.id.as_str()) && s.name.eq_ignore_ascii_case(candidate))
+    };
+    if !taken(base) {
+        return base.to_string();
+    }
+    let mut n = 2;
+    loop {
+        let candidate = format!("{base} {n}");
+        if !taken(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -233,8 +286,32 @@ mod tests {
             file: format!("/skins/{id}.png"),
             model: "classic".to_string(),
             cape_id: None,
-            source: None,
         }
+    }
+
+    #[test]
+    fn normalize_dedupes_names_and_clears_dangling_selection() {
+        let mut acct = AccountSkins {
+            skins: vec![saved("1"), saved("2"), saved("3")],
+            selected: Some("missing".to_string()),
+        };
+        assert!(acct.normalize());
+        assert_eq!(acct.skins[0].name, "Old");
+        assert_eq!(acct.skins[1].name, "Old 2");
+        assert_eq!(acct.skins[2].name, "Old 3");
+        assert_eq!(acct.selected, None);
+    }
+
+    #[test]
+    fn unique_name_excludes_self_on_rename() {
+        let mut a = saved("1");
+        a.name = "Alpha".to_string();
+        let mut b = saved("2");
+        b.name = "Beta".to_string();
+        let skins = vec![a, b];
+        assert_eq!(unique_name(&skins, "Alpha", Some("1")), "Alpha");
+        assert_eq!(unique_name(&skins, "Beta", Some("1")), "Beta 2");
+        assert_eq!(unique_name(&skins, "Alpha", None), "Alpha 2");
     }
 
     #[test]
@@ -243,11 +320,9 @@ mod tests {
             accounts: std::collections::HashMap::new(),
             skins: vec![saved("1"), saved("2")],
         };
-        // First account to be touched inherits the legacy global skins.
         let a = lib.account_mut("acc-a");
         assert_eq!(a.skins.len(), 2);
         assert!(lib.skins.is_empty(), "legacy list should be drained");
-        // A different account does not get a second copy.
         let b = lib.account_mut("acc-b");
         assert!(b.skins.is_empty());
     }

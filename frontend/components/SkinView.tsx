@@ -11,6 +11,7 @@ import {
   X,
   Save,
   Download,
+  CopyPlus,
   Upload as UploadIcon,
 } from "lucide-react";
 import * as api from "@/lib/api";
@@ -18,19 +19,17 @@ import { toast } from "@/lib/toast";
 import { useClosable } from "@/components/ui";
 import type { SkinProfile, SkinCape, SavedSkin } from "@/lib/types";
 
-const TEX = (h: string) => `https://textures.minecraft.net/texture/${h}`;
-type DefaultSkin = { name: string; preview: string; url: string; model: string };
-const DEFAULT_SKINS: DefaultSkin[] = [
-  { name: "Steve", preview: "/skins/steve.png", url: TEX("1abc803022d8300ab7578b189294cce39622d9a404cdc00d3feacfdf45be6981"), model: "classic" },
-  { name: "Alex", preview: "/skins/alex.png", url: TEX("46acd06e8483b176e8ea39fc12fe105eb3a2a4970f5100057e9d84d4b60bdfa7"), model: "slim" },
-  { name: "Ari", preview: "/skins/ari.png", url: TEX("4c05ab9e07b3505dc3ec11370c3bdce5570ad2fb2b562e9b9dd9cf271f81aa44"), model: "slim" },
-  { name: "Kai", preview: "/skins/kai.png", url: TEX("6ac6ca262d67bcfb3dbc924ba8215a18195497c780058a5749de674217721892"), model: "slim" },
-  { name: "Efe", preview: "/skins/efe.png", url: TEX("daf3d88ccb38f11f74814e92053d92f7728ddb1a7955652a60e30cb27ae6659f"), model: "slim" },
-  { name: "Makena", preview: "/skins/makena.png", url: TEX("fece7017b1bb13926d1158864b283b8b930271f80a90482f174cca6a17e88236"), model: "slim" },
-  { name: "Noor", preview: "/skins/noor.png", url: TEX("e5cdc3243b2153ab28a159861be643a4fc1e3c17d291cdd3e57a7f370ad676f3"), model: "classic" },
-  { name: "Sunny", preview: "/skins/sunny.png", url: TEX("226c617fde5b1ba569aa08bd2cb6fd84c93337532a872b3eb7bf66bdd5b395f8"), model: "slim" },
-  { name: "Zuri", preview: "/skins/zuri.png", url: TEX("7cb3ba52ddd5cc82c0b050c3f920f87da36add80165846f479079663805433db"), model: "slim" },
-];
+/** A blueprint = a starting texture for a new preset, loaded from
+ *  `public/skins/blueprints.json` so the set is editable without code changes.
+ *  `texture` is either a local public path (e.g. "/skins/steve.png") or an
+ *  https URL (e.g. a textures.minecraft.net URL). `model` defaults to classic.
+ *  Blueprints are grouped into named sections (each renders its own header). */
+type Blueprint = { name: string; texture: string; model?: string };
+type BlueprintSection = { header: string; skins: Blueprint[] };
+type BlueprintConfig = { sections: BlueprintSection[] };
+
+const isUrlTexture = (t: string) => /^https?:\/\//i.test(t);
+const bpModel = (m?: string) => (m === "slim" ? "slim" : "classic");
 
 const BASE_YAW = 0.5;
 
@@ -139,7 +138,7 @@ function SkinCanvas({
 
   useEffect(() => {
     const v = viewerRef.current;
-    if (!v) return;
+    if (!v || !ready) return;
     if (cape) {
       v.loadCape(cape).catch(() => {});
     } else {
@@ -149,7 +148,7 @@ function SkinCanvas({
       } catch {
       }
     }
-  }, [cape, ready]);
+  }, [cape, ready, loaded]);
 
   useEffect(() => {
     targetRef.current = flipped ? BASE_YAW + Math.PI : BASE_YAW;
@@ -380,10 +379,19 @@ const cachedLibraries: Record<string, SavedSkin[]> = {};
 const cachedSelected: Record<string, string | null> = {};
 const cachedProfiles: Record<string, SkinProfile> = {};
 
-type ApplyTarget =
-  | { kind: "saved"; skin: SavedSkin }
-  | { kind: "preset"; preset: DefaultSkin }
-  | { kind: "cape" };
+type TextureSource = { data: number[] } | { url: string };
+
+type NewSeed = {
+  name: string;
+  model: string;
+  capeId: string | null;
+  previewUrl: string;
+  texture: TextureSource;
+};
+
+type EditorState =
+  | { mode: "new"; seed: NewSeed }
+  | { mode: "edit"; preset: SavedSkin };
 
 export function SkinView({
   accountId,
@@ -402,21 +410,29 @@ export function SkinView({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selSaved, setSelSaved] = useState<string | null>(
+  const [selected, setSelected] = useState<string | null>(
     accountId ? cachedSelected[accountId] ?? null : null,
   );
   const [savedOpen, setSavedOpen] = useState(true);
-  const [defaultOpen, setDefaultOpen] = useState(true);
-  const [applyTarget, setApplyTarget] = useState<ApplyTarget | null>(null);
+  const [sections, setSections] = useState<BlueprintSection[]>([]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [pending, setPending] = useState<NewSeed[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const activeCape = profile?.capes.find((c) => c.active)?.url ?? null;
-  const selectedSkin = library.find((s) => s.id === selSaved) ?? null;
+  /** Resolve a preset's own cape id to a renderable URL via the account's capes. */
+  const capeUrlFor = (capeId: string | null) =>
+    profile?.capes.find((c) => c.id === capeId)?.url ?? null;
+
+  const selectedSkin = library.find((s) => s.id === selected) ?? null;
   const displayName = profile?.name || username || "Player";
 
   const previewSkin = selectedSkin ? api.fileSrc(selectedSkin.file) : profile?.skin_url ?? null;
   const previewModel = selectedSkin?.model ?? profile?.model ?? "classic";
+  const previewCape = selectedSkin
+    ? capeUrlFor(selectedSkin.cape_id)
+    : profile?.capes.find((c) => c.active)?.url ?? null;
 
   useEffect(() => {
     if (accountId && profile?.skin_url && !api.getFaceTexture(accountId))
@@ -426,12 +442,12 @@ export function SkinView({
   const refresh = useCallback(() => {
     if (!api.isTauri() || !accountId) return;
     api
-      .listSkins(accountId)
+      .seedCurrentSkin(accountId)
       .then((view) => {
         cachedLibraries[accountId] = view.skins;
         cachedSelected[accountId] = view.selected;
         setLibrary(view.skins);
-        setSelSaved(view.selected);
+        setSelected(view.selected);
       })
       .catch(() => {});
     api
@@ -445,33 +461,38 @@ export function SkinView({
 
   useEffect(refresh, [refresh]);
 
+  useEffect(() => {
+    let alive = true;
+    fetch("/skins/blueprints.json")
+      .then((r) => r.json())
+      .then((cfg: BlueprintConfig) => {
+        if (alive) setSections(cfg.sections ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const importFiles = async (files: File[]) => {
     if (!accountId) return;
     const imgs = files.filter(
       (f) => /\.png$/i.test(f.name) || f.type === "image/png",
     );
     if (imgs.length === 0) return;
-    setBusy(true);
-    try {
-      for (const f of imgs) {
-        const buf = await f.arrayBuffer();
-        await api.importSkin(
-          accountId,
-          f.name.replace(/\.[^.]+$/, ""),
-          Array.from(new Uint8Array(buf)),
-          "classic",
-        );
-      }
-      toast(
-        imgs.length === 1 ? "Skin added" : `${imgs.length} skins added`,
-        "success",
-      );
-      refresh();
-    } catch (e2) {
-      setError(String(e2));
-    } finally {
-      setBusy(false);
+    const seeds: NewSeed[] = [];
+    for (const f of imgs) {
+      const buf = await f.arrayBuffer();
+      seeds.push({
+        name: f.name.replace(/\.[^.]+$/, ""),
+        model: "classic",
+        capeId: null,
+        previewUrl: URL.createObjectURL(f),
+        texture: { data: Array.from(new Uint8Array(buf)) },
+      });
     }
+    setEditor({ mode: "new", seed: seeds[0] });
+    setPending(seeds.slice(1));
   };
 
   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -480,13 +501,52 @@ export function SkinView({
     await importFiles(files);
   };
 
-  const applySaved = async (s: SavedSkin) => {
+  /** Open the new-preset editor from a blueprint: its texture, its default model,
+   *  a default name; cape/everything else is the user's choice. Local textures are
+   *  read straight from the launcher's bundled file (not a remote copy); remote
+   *  https textures are handed to the backend to download. */
+  const openBlueprint = async (d: Blueprint) => {
+    setPending([]);
+    try {
+      const texture: TextureSource = isUrlTexture(d.texture)
+        ? { url: d.texture }
+        : { data: Array.from(new Uint8Array(await (await fetch(d.texture)).arrayBuffer())) };
+      setEditor({
+        mode: "new",
+        seed: {
+          name: d.name,
+          model: bpModel(d.model),
+          capeId: null,
+          previewUrl: d.texture,
+          texture,
+        },
+      });
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const openEdit = (s: SavedSkin) => {
+    setPending([]);
+    setEditor({ mode: "edit", preset: s });
+  };
+
+  const advanceEditor = () => {
+    if (pending.length) {
+      setEditor({ mode: "new", seed: pending[0] });
+      setPending((q) => q.slice(1));
+    } else {
+      setEditor(null);
+    }
+  };
+
+  const quickApply = async (s: SavedSkin) => {
     if (!accountId) return;
     setBusy(true);
     try {
       await api.applySavedSkin(accountId, s.id);
       api.setFaceTexture(accountId, bust(api.fileSrc(s.file)));
-      setSelSaved(s.id);
+      setSelected(s.id);
       toast("Applied skin", "success");
       onSkinApplied?.();
       refresh();
@@ -494,6 +554,28 @@ export function SkinView({
       setError(String(e2));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const removePreset = (s: SavedSkin) => {
+    if (!accountId) return;
+    api
+      .deleteSkin(accountId, s.id)
+      .then(refresh)
+      .catch((er) => setError(String(er)));
+  };
+
+  const duplicate = async (s: SavedSkin) => {
+    if (!accountId) return;
+    const base = s.name.replace(/\s*\(\d+\)\s*$/, "").trim() || s.name;
+    const taken = new Set(library.map((p) => p.name.toLowerCase()));
+    let n = 1;
+    while (taken.has(`${base} (${n})`.toLowerCase())) n++;
+    try {
+      await api.duplicateSkin(accountId, s.id, `${base} (${n})`);
+      refresh();
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -543,7 +625,7 @@ export function SkinView({
           <div className="grid flex-1 place-items-center">
             <SkinCanvas
               skin={previewSkin}
-              cape={activeCape}
+              cape={previewCape}
               model={previewModel}
               flipped={false}
               rotate
@@ -555,15 +637,12 @@ export function SkinView({
           <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-600">
             <Move size={13} /> Drag to rotate
           </div>
+          {selectedSkin && (
+            <div className="mt-2 max-w-full truncate font-mc text-[13px] text-brass-300">
+              {selectedSkin.name}
+            </div>
+          )}
           <div className="mt-3 flex flex-col gap-2 self-stretch">
-            <button
-              onClick={() =>
-                setApplyTarget(selectedSkin ? { kind: "saved", skin: selectedSkin } : { kind: "cape" })
-              }
-              className={`${BTN} justify-center`}
-            >
-              <Pencil size={15} /> {selectedSkin ? "Edit skin" : "Change cape"}
-            </button>
             <button onClick={saveToDisk} className={`${BTN} justify-center`}>
               <Download size={15} /> Save skin
             </button>
@@ -588,7 +667,7 @@ export function SkinView({
             void importFiles(Array.from(e.dataTransfer.files));
           }}
         >
-          <Section title="Your skins" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
+          <Section title="Your presets" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
             <button
               onClick={() => fileInput.current?.click()}
               className={`flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
@@ -596,95 +675,118 @@ export function SkinView({
               }`}
             >
               {busy ? <Loader2 size={22} className="animate-spin" /> : <Plus size={22} />}
-              <span className="text-sm font-medium">Add skins</span>
+              <span className="text-sm font-medium">Add skin</span>
               <span className="text-[11px]">Click or drag &amp; drop PNGs</span>
             </button>
 
-            {library.map((s) => (
-              <Tile
-                key={s.id}
-                selected={selSaved === s.id}
-                onClick={() => setApplyTarget({ kind: "saved", skin: s })}
-                title={s.name}
-              >
-                {selSaved === s.id && <SelectedMark />}
-                <Flip3DThumb url={api.fileSrc(s.file)} model={s.model} cape={activeCape} />
-                <span
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    api
-                      .deleteSkin(accountId, s.id)
-                      .then(() => {
-                        if (selSaved === s.id) setSelSaved(null);
-                        refresh();
-                      })
-                      .catch((er) => setError(String(er)));
-                  }}
-                  title="Delete"
-                  className="absolute left-1.5 top-1.5 z-20 grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
+            {library.map((s) => {
+              const isSel = selected === s.id;
+              return (
+                <Tile
+                  key={s.id}
+                  selected={isSel}
+                  onClick={() => openEdit(s)}
+                  title={s.name}
                 >
-                  <Trash2 size={12} />
-                </span>
-                {}
-                <span className="absolute inset-x-0 bottom-0 z-20 flex justify-center gap-1.5 bg-gradient-to-t from-ink-950/95 to-transparent pb-2 pt-7 opacity-0 transition group-hover:opacity-100">
-                  <span
-                    role="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setApplyTarget({ kind: "saved", skin: s });
-                    }}
-                    className="flex items-center gap-1 rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
-                  >
-                    <Pencil size={11} /> Edit
+                  {isSel && <SelectedMark />}
+                  <Flip3DThumb
+                    url={api.fileSrc(s.file)}
+                    model={s.model}
+                    cape={capeUrlFor(s.cape_id)}
+                  />
+                  <span className="absolute left-1.5 top-1.5 z-20 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void duplicate(s);
+                      }}
+                      title="Duplicate"
+                      className="grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-brass-300"
+                    >
+                      <CopyPlus size={12} />
+                    </span>
+                    {}
+                    {!isSel && (
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removePreset(s);
+                        }}
+                        title="Delete"
+                        className="grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-red-300"
+                      >
+                        <Trash2 size={12} />
+                      </span>
+                    )}
                   </span>
-                  <span
-                    role="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void applySaved(s);
-                    }}
-                    className="flex items-center gap-1 rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
-                  >
-                    <Check size={11} /> Apply
+                  <span className="absolute inset-x-0 bottom-0 z-20 flex justify-center gap-1.5 bg-gradient-to-t from-ink-950/95 to-transparent pb-2 pt-7 opacity-0 transition group-hover:opacity-100">
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(s);
+                      }}
+                      className="flex items-center gap-1 rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
+                    >
+                      <Pencil size={11} /> Edit
+                    </span>
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void quickApply(s);
+                      }}
+                      className="flex items-center gap-1 rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
+                    >
+                      <Check size={11} /> {isSel ? "Re-apply" : "Apply"}
+                    </span>
                   </span>
-                </span>
-              </Tile>
-            ))}
+                </Tile>
+              );
+            })}
           </Section>
 
-          <Section title="Default skins" open={defaultOpen} onToggle={() => setDefaultOpen((v) => !v)}>
-            {DEFAULT_SKINS.map((d) => (
-              <Tile
-                key={d.url}
-                title={d.name}
-                onClick={() => setApplyTarget({ kind: "preset", preset: d })}
-              >
-                <Flip3DThumb url={d.preview} model={d.model} cape={null} />
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-950/90 to-transparent pb-2 pt-6 text-center font-mc text-[11px] tracking-wider text-gray-300">
-                  {d.name}
-                </span>
-              </Tile>
-            ))}
-          </Section>
+          {sections.map((sec) => (
+            <Section
+              key={sec.header}
+              title={sec.header}
+              open={!collapsed[sec.header]}
+              onToggle={() =>
+                setCollapsed((c) => ({ ...c, [sec.header]: !c[sec.header] }))
+              }
+            >
+              {sec.skins.map((d) => (
+                <Tile
+                  key={d.name}
+                  title={`New preset from ${d.name}`}
+                  onClick={() => void openBlueprint(d)}
+                >
+                  <Flip3DThumb url={d.texture} model={bpModel(d.model)} cape={null} />
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-950/90 to-transparent pb-2 pt-6 text-center font-mc text-[11px] tracking-wider text-gray-300">
+                    {d.name}
+                  </span>
+                </Tile>
+              ))}
+            </Section>
+          ))}
         </div>
       </div>
 
-      {applyTarget && (
-        <ApplySkinModal
+      {editor && (
+        <PresetEditor
+          key={editor.mode === "edit" ? `edit:${editor.preset.id}` : `new:${editor.seed.previewUrl}`}
           accountId={accountId}
-          target={applyTarget}
-          activeCape={activeCape}
+          state={editor}
           capes={profile?.capes ?? []}
-          onClose={() => setApplyTarget(null)}
-          onApplied={(selectedId) => {
-            setApplyTarget(null);
-            if (selectedId !== undefined) setSelSaved(selectedId);
-            onSkinApplied?.();
-            refresh();
-          }}
-          onSaved={() => {
-            setApplyTarget(null);
+          library={library}
+          selectedId={selected}
+          onClose={advanceEditor}
+          onSaved={(applied) => {
+            toast(applied ? "Applied skin and cape" : "Saved preset", "success");
+            if (applied) onSkinApplied?.();
+            advanceEditor();
             refresh();
           }}
           onError={setError}
@@ -694,38 +796,39 @@ export function SkinView({
   );
 }
 
-function ApplySkinModal({
+function PresetEditor({
   accountId,
-  target,
-  activeCape,
+  state,
   capes,
+  library,
+  selectedId,
   onClose,
-  onApplied,
   onSaved,
   onError,
 }: {
   accountId: string;
-  target: ApplyTarget;
-  activeCape: string | null;
+  state: EditorState;
   capes: SkinCape[];
+  library: SavedSkin[];
+  selectedId: string | null;
   onClose: () => void;
-  onApplied: (selectedId?: string | null) => void;
-  onSaved: () => void;
+  onSaved: (applied: boolean) => void;
   onError: (e: string) => void;
 }) {
-  const savedSkin = target.kind === "saved" ? target.skin : null;
-  const preset = target.kind === "preset" ? target.preset : null;
-  const capeOnly = target.kind === "cape";
+  const isEdit = state.mode === "edit";
+  const preset = isEdit ? state.preset : null;
+  const seed = isEdit ? null : state.seed;
+  const isSelected = isEdit && preset!.id === selectedId;
 
-  const [name, setName] = useState(savedSkin?.name ?? "");
+  const [name, setName] = useState(preset?.name ?? seed!.name);
   const [model, setModel] = useState(
-    (savedSkin?.model ?? preset?.model ?? "classic") === "slim" ? "slim" : "classic",
+    (preset?.model ?? seed!.model) === "slim" ? "slim" : "classic",
   );
   const [capeId, setCapeId] = useState<string | null>(
-    savedSkin?.cape_id ?? capes.find((c) => c.active)?.id ?? null,
+    preset ? preset.cape_id : seed!.capeId,
   );
   const [previewUrl, setPreviewUrl] = useState<string | null>(
-    savedSkin ? api.fileSrc(savedSkin.file) : preset ? preset.preview : null,
+    preset ? api.fileSrc(preset.file) : seed!.previewUrl,
   );
   const [newBytes, setNewBytes] = useState<number[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -740,6 +843,13 @@ function ApplySkinModal({
 
   const capeUrl = capes.find((c) => c.id === capeId)?.url ?? null;
 
+  const trimmed = name.trim();
+  const dupe = library.some(
+    (s) => s.id !== preset?.id && s.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  const nameError = trimmed === "" ? "Enter a name" : dupe ? "That name is already used" : null;
+  const canSubmit = !nameError && !saving;
+
   const replace = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -749,49 +859,24 @@ function ApplySkinModal({
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  const persistSavedEdits = async (id: string) => {
-    if (newBytes) await api.replaceSkinTexture(accountId, id, newBytes);
-    await api.updateSkin(accountId, id, model, capeId);
-    if (savedSkin && name.trim() && name.trim() !== savedSkin.name)
-      await api.renameSkin(accountId, id, name.trim());
-  };
-
-  const saveOnly = async () => {
-    if (!savedSkin) return;
-    setSaving(true);
-    try {
-      await persistSavedEdits(savedSkin.id);
-      toast("Saved changes", "success");
-      onSaved();
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setSaving(false);
+  const persist = async (): Promise<SavedSkin> => {
+    if (isEdit) {
+      return api.updatePreset(accountId, preset!.id, trimmed, model, capeId, newBytes);
     }
+    const texture: TextureSource = newBytes ? { data: newBytes } : seed!.texture;
+    return api.createPreset(accountId, trimmed, model, capeId, texture);
   };
 
-  const apply = async () => {
+  const save = async () => {
+    if (!canSubmit) return;
     setSaving(true);
     try {
-      if (savedSkin) {
-        await persistSavedEdits(savedSkin.id);
-        await api.applySavedSkin(accountId, savedSkin.id);
-        api.setFaceTexture(
-          accountId,
-          newBytes && previewUrl ? previewUrl : bust(api.fileSrc(savedSkin.file)),
-        );
-        toast("Applied skin and cape", "success");
-        onApplied(savedSkin.id);
-      } else if (preset) {
-        const saved = await api.applyPreset(accountId, preset.name, preset.url, model, capeId);
+      const saved = await persist();
+      if (isSelected) {
+        await api.applySavedSkin(accountId, saved.id);
         api.setFaceTexture(accountId, bust(api.fileSrc(saved.file)));
-        toast("Applied skin and cape", "success");
-        onApplied(saved.id);
-      } else {
-        await api.setCape(accountId, capeId);
-        toast("Applied cape", "success");
-        onApplied();
       }
+      onSaved(isSelected);
     } catch (e) {
       onError(String(e));
     } finally {
@@ -799,12 +884,7 @@ function ApplySkinModal({
     }
   };
 
-  const title = capeOnly
-    ? "Change cape"
-    : preset
-      ? `Apply ${preset.name}?`
-      : "Edit skin";
-  const applyLabel = capeOnly ? "Save cape" : "Apply";
+  const title = isEdit ? "Edit skin" : "New skin";
 
   return (
     <div
@@ -827,11 +907,10 @@ function ApplySkinModal({
         <div className="flex min-h-0 flex-1 gap-5 overflow-y-auto p-5">
           <div className="flex w-[230px] shrink-0 flex-col items-center">
             <div className="grid flex-1 place-items-center">
-              {}
               <SkinCanvas
-                key={`${previewUrl ?? ""}|${capeUrl ?? (capeOnly ? activeCape : null) ?? ""}|${model}`}
+                key={`${previewUrl ?? ""}|${model}`}
                 skin={previewUrl}
-                cape={capeUrl ?? (capeOnly ? activeCape : null)}
+                cape={capeUrl}
                 model={model}
                 flipped={false}
                 rotate
@@ -847,61 +926,60 @@ function ApplySkinModal({
 
           <div className="flex min-w-0 flex-1 flex-col gap-5">
             <input ref={fileInput} type="file" accept=".png" onChange={replace} className="hidden" />
-            {savedSkin && (
-              <div>
-                <div className="mb-2 font-mc text-sm text-gray-100">Name</div>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Skin name"
-                  spellCheck={false}
-                  className="w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-edge transition focus:ring-brass-500/60"
-                />
-              </div>
-            )}
-            {savedSkin && (
-              <div>
-                <div className="mb-2 font-mc text-sm text-gray-100">Texture</div>
-                <button onClick={() => fileInput.current?.click()} className={BTN}>
-                  <UploadIcon size={15} /> Replace texture
-                </button>
-              </div>
-            )}
+            <div>
+              <div className="mb-2 font-mc text-sm text-gray-100">Name</div>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Skin name"
+                spellCheck={false}
+                className={`w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm text-gray-100 outline-none ring-1 transition focus:ring-brass-500/60 ${
+                  nameError && trimmed !== "" ? "ring-red-500/60" : "ring-edge"
+                }`}
+              />
+              {nameError && trimmed !== "" && (
+                <p className="mt-1 text-xs text-red-300">{nameError}</p>
+              )}
+            </div>
+            <div>
+              <div className="mb-2 font-mc text-sm text-gray-100">Texture</div>
+              <button onClick={() => fileInput.current?.click()} className={BTN}>
+                <UploadIcon size={15} /> Replace texture
+              </button>
+            </div>
 
-            {!capeOnly && (
-              <div>
-                <div className="mb-2 font-mc text-sm text-gray-100">Arm style</div>
-                <div className="flex gap-2">
-                  {[
-                    { id: "classic", label: "Wide" },
-                    { id: "slim", label: "Slim" },
-                  ].map((a) => {
-                    const on = model === a.id;
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => setModel(a.id)}
-                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${
-                          on
-                            ? "border-brass-500/50 bg-brass-500/15 text-brass-300"
-                            : "border-edge text-ink-600 hover:text-brass-300"
+            <div>
+              <div className="mb-2 font-mc text-sm text-gray-100">Arm style</div>
+              <div className="flex gap-2">
+                {[
+                  { id: "classic", label: "Wide" },
+                  { id: "slim", label: "Slim" },
+                ].map((a) => {
+                  const on = model === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setModel(a.id)}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${
+                        on
+                          ? "border-brass-500/50 bg-brass-500/15 text-brass-300"
+                          : "border-edge text-ink-600 hover:text-brass-300"
+                      }`}
+                    >
+                      <span
+                        className={`grid h-3 w-3 place-items-center rounded-[3px] border ${
+                          on ? "border-brass-500 bg-brass-500" : "border-ink-600"
                         }`}
                       >
-                        <span
-                          className={`grid h-3 w-3 place-items-center rounded-[3px] border ${
-                            on ? "border-brass-500 bg-brass-500" : "border-ink-600"
-                          }`}
-                        >
-                          {on && <Check size={9} className="text-ink-950" />}
-                        </span>
-                        {a.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                        {on && <Check size={9} className="text-ink-950" />}
+                      </span>
+                      {a.label}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
             <div>
               <div className="mb-2 font-mc text-sm text-gray-100">Cape</div>
@@ -952,23 +1030,18 @@ function ApplySkinModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-edge px-5 py-3">
+        <div className="flex items-center justify-end gap-3 border-t border-edge px-5 py-3">
+          <span className="mr-auto text-xs text-ink-600">
+            {isSelected
+              ? "This skin is selected — saving applies it."
+              : "Saves the preset — use a card's Apply button to wear it."}
+          </span>
           <button onClick={close} className={BTN}>
             <X size={15} /> Cancel
           </button>
-          {savedSkin && (
-            <button onClick={saveOnly} disabled={saving} className={BTN}>
-              {saving ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Save size={15} />
-              )}
-              Save
-            </button>
-          )}
-          <button onClick={apply} disabled={saving} className={BTN_PRIMARY}>
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-            {applyLabel}
+          <button onClick={save} disabled={!canSubmit} className={BTN_PRIMARY}>
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            {isSelected ? "Save & Apply" : "Save"}
           </button>
         </div>
       </div>

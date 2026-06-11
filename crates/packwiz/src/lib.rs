@@ -48,7 +48,7 @@ use std::path::PathBuf;
 
 pub use curseforge::{Curseforge, CurseforgeProject};
 pub use error::{PackwizError, Result};
-pub use installer::{sha512_hex, Installer};
+pub use installer::{sha512_hex, Installer, PackwizBranch};
 pub use manifest::{FileRecord, ManagedMod, Manifest};
 pub use model::{Index, IndexFile, MetaFile, Pack, Versions};
 pub use modrinth::{Modrinth, ModrinthProject, ResolvedVersion, SearchHit, VersionDep};

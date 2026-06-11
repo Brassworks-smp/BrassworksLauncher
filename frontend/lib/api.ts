@@ -364,6 +364,37 @@ export const createPackwizInstance = (
   url: string,
 ): Promise<Instance> => invoke("create_packwiz_instance", { name, url });
 
+export interface ImportCandidate {
+  source: "prism" | "modrinth";
+  key: string;
+  name: string;
+  minecraft: string;
+  loader: string;
+  loader_version: string | null;
+  group: string | null;
+  icon: string | null;
+  path: string;
+  notes: string | null;
+  pack_provider: string | null;
+  pack_id: string | null;
+  pack_version: string | null;
+}
+export const scanImportable = (): Promise<ImportCandidate[]> =>
+  invoke("scan_importable");
+export const importExternal = (keys: string[]): Promise<Instance[]> =>
+  invoke("import_external", { keys });
+
+export interface PackwizBranch {
+  name: string;
+  pack_url: string;
+}
+export const listPackwizBranches = (repo: string): Promise<PackwizBranch[]> =>
+  invoke("list_packwiz_branches", { repo });
+export const switchPackwizBranch = (
+  id: string,
+  url: string,
+): Promise<Instance> => invoke("switch_packwiz_branch", { id, url });
+
 export const minecraftVersions = (
   includeSnapshots: boolean,
 ): Promise<McVersion[]> =>
@@ -421,53 +452,57 @@ export const setCape = (
 ): Promise<void> => invoke("set_cape", { accountId, capeId });
 export const listSkins = (accountId: string): Promise<SkinLibraryView> =>
   invoke("list_skins", { accountId });
+/** Like listSkins, but on first load seeds the library from the account's
+ *  currently-applied Mojang skin so Edit Skin isn't cape-only. */
+export const seedCurrentSkin = (
+  accountId: string,
+): Promise<SkinLibraryView> => invoke("seed_current_skin", { accountId });
 export const deleteSkin = (accountId: string, skinId: string): Promise<void> =>
   invoke("delete_skin", { accountId, skinId });
+/** Apply a preset to Mojang (texture + cape + model) and mark it selected. */
 export const applySavedSkin = (
   accountId: string,
   skinId: string,
 ): Promise<void> => invoke("apply_saved_skin", { accountId, skinId });
-export const uploadSkin = (
-  accountId: string,
-  name: string,
-  data: number[],
-  model: string,
-): Promise<SavedSkin> =>
-  invoke("upload_skin", { accountId, name, data, model });
 
-export const applyPreset = (
+/** Create a preset from a texture — `data` bytes OR a `url` to download. Does NOT
+ *  push to Mojang and does NOT change the selection. */
+export const createPreset = (
   accountId: string,
   name: string,
-  url: string,
   model: string,
   capeId: string | null,
+  texture: { data: number[] } | { url: string },
 ): Promise<SavedSkin> =>
-  invoke("apply_preset", { accountId, name, url, model, capeId });
-export const updateSkin = (
+  invoke("create_preset", {
+    accountId,
+    name,
+    model,
+    capeId,
+    data: "data" in texture ? texture.data : null,
+    url: "url" in texture ? texture.url : null,
+  });
+
+/** Duplicate a preset (own texture copy, same model + cape) under `name`. Does
+ *  NOT push to Mojang. */
+export const duplicateSkin = (
   accountId: string,
   skinId: string,
+  name: string,
+): Promise<SavedSkin> =>
+  invoke("duplicate_skin", { accountId, skinId, name });
+
+/** Edit a preset in place: optional texture replace + name/model/cape. Does NOT
+ *  push to Mojang. */
+export const updatePreset = (
+  accountId: string,
+  skinId: string,
+  name: string,
   model: string,
   capeId: string | null,
-): Promise<void> => invoke("update_skin", { accountId, skinId, model, capeId });
-export const replaceSkinTexture = (
-  accountId: string,
-  skinId: string,
-  data: number[],
-): Promise<void> => invoke("replace_skin_texture", { accountId, skinId, data });
-
-export const importSkin = (
-  accountId: string,
-  name: string,
-  data: number[],
-  model: string,
+  data: number[] | null,
 ): Promise<SavedSkin> =>
-  invoke("import_skin", { accountId, name, data, model });
-
-export const renameSkin = (
-  accountId: string,
-  skinId: string,
-  name: string,
-): Promise<void> => invoke("rename_skin", { accountId, skinId, name });
+  invoke("update_preset", { accountId, skinId, name, model, capeId, data });
 
 export const exportSkin = (source: string, name: string): Promise<string> =>
   invoke("export_skin", { source, name });

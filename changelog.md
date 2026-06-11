@@ -1,17 +1,23 @@
 ### **Additions:**
-* **Type ur RAM in megabytes** — enter exact JVM min/max memory values instead of relying on slider steps, with quick steppers and an option to raise the cap beyond 16 GB
-* **Screenshots load instantly** — screenshots now use cached thumbnails with loading skeletons, large-image previews, and an Open button to jump straight into ur system image viewer. Massive images are safely blocked before they can slow down the launcher
-* **Open a folder straight from the instance card** — every instance now has a dedicated game-folder button for one-click access to its files
-* **Edit skin presets without wearing them** — update a skin's texture, cape or name and save it without changing ur currently equipped skin. Supports bulk importing multiple skins at once with quick Edit and Apply actions on every card
-* **Packwiz modpack icons** — Packwiz installs now automatically pick up and use the modpack's icon when one is provided
+* **Import current Minecraft skin automatically** — opening Skins with an empty library now imports the account's currently-equipped Minecraft skin as a preset called **"Current skin"**, including its arm model and active cape. Fresh accounts immediately have a real editable skin instead of starting from an empty library
+* **Import from other launchers** — bring ur instances straight over from Prism Launcher and the Modrinth App. Modpacks come in as proper Modrinth/CurseForge packs so they stay updatable, Prism groups turn into folders, instance icons carry over, and every mod keeps its source so it shows its icon and can be updated individually. Pack icons now show right in the import list before u even import
+* **Import GitHub-hosted packwiz modpacks** — paste a GitHub repository URL and the launcher will discover valid packwiz branches automatically. Instances can later switch branches directly from the Modpack card without recreating the pack
+* **Default instance icons** — choose from built-in launcher icons (box, gem, sword, heart, star, zap, crown, shield) and have them automatically tinted using the instance folder accent color
+* **Duplicate any preset** — one click copies a preset (texture, model and cape) as "Name (1)", "(2)", … so u can branch off variations without starting from scratch
 
 ### **Improvements:**
-* **Modpack installs keep their progress visible** — switching between instances while a modpack is installing or updating no longer causes progress bars to disappear or get mixed up
-* **Cleaner instance folder controls** — the old folder button has been moved into the more-actions menu, folder dropdowns no longer get clipped when collapsed, and folder actions stay visible while menus are open
+* **Launcher import quality** — imported Modrinth profiles now preserve managed-pack links, allowing supported Modrinth and CurseForge packs to continue receiving updates after import
+* **Richer imported mod metadata** — imported Modrinth mods, resource packs and shader packs now retain project/version information, enabling icons, source tracking and per-item updates in the content browser
+* **Packwiz workflow improvements** — modpack details now expose the source URL with quick copy/open actions, and switching branches automatically refreshes pack metadata and reinstall state
+* **Instance branding improvements** — custom instance icons now appear consistently across instance cards, the Play view and settings previews
+* **Server browser presentation** — Minecraft MOTD formatting is now rendered with proper colors, styling codes and Minecraft font support across server lists, previews and details
+* **Screenshot browsing performance** — screenshots now use cached thumbnails, skeleton loading states and large-preview lightboxes while avoiding expensive full-resolution image loads
 
 ### **Fixes:**
-* Fixed skin texture replacements sometimes failing to refresh correctly after editing
-* Fixed the skin editor preview occasionally not updating after changes were made
-* Fixed screenshot browsing potentially causing excessive memory usage when opening extremely large images
-* Fixed modpack actions incorrectly reporting that an operation was already running after switching between instances
-* Fixed folder dropdown menus being cut off inside collapsed folder sections
+* Fixed Prism and Modrinth launcher scans occasionally failing to discover Modrinth profiles because JSON group metadata was being read incorrectly
+* Fixed imported Modrinth instances missing pack icons in the import menu
+* Fixed imported Modrinth instances not loading their mod icons and per-mod updates
+* Fixed modal backdrops being constrained to the current tab view on WebKit/macOS instead of covering the entire launcher window
+* Fixed the macOS double-title-bar appearance when using the custom launcher title bar
+* Fixed browser/webview right-click menus appearing throughout the launcher outside editable text fields
+* Fixed server MOTDs losing Minecraft color and formatting codes during ping parsing

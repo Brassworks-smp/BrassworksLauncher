@@ -23,6 +23,19 @@ use crate::path::{PathExt, PathBufExt};
 use crate::download::{self, Batch};
 use crate::maven::Gav;
 
+/// Suppress the console window that flashes on Windows when a child process is
+/// spawned from a GUI app (Java `-version` probes, install processors, etc.).
+pub(crate) fn no_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
 
 pub(crate) const RESOURCES_URL: &str = "https://resources.download.minecraft.net/";
 
@@ -1282,12 +1295,13 @@ impl Installer {
 
         for jvm in jvms.iter_mut() {
             
-            let child = Command::new(&jvm.file)
+            let mut probe = Command::new(&jvm.file);
+            probe
                 .arg("-version")
                 .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .ok();
+                .stderr(Stdio::piped());
+            no_window(&mut probe);
+            let child = probe.spawn().ok();
             
             if child.is_some() {
                 remaining += 1;
@@ -1774,6 +1788,7 @@ impl Game {
             .args(&self.jvm_args)
             .arg(&self.main_class)
             .args(&self.game_args);
+        no_window(&mut command);
         command
     }
 

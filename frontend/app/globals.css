@@ -306,14 +306,19 @@
   animation: fade-out 0.18s ease both;
 }
 
+/* Slide-up driven by margin-top (a layout property) rather than `transform`.
+   WebKit/WKWebView keeps an element with a transform animation acting as the
+   containing block for `position: fixed` descendants even at rest, which would
+   trap every modal's full-screen backdrop inside the current tab instead of
+   covering the whole launcher. A margin-based slide avoids that entirely. */
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    margin-top: 8px;
   }
   to {
     opacity: 1;
-    transform: none;
+    margin-top: 0;
   }
 }
 .view-anim {

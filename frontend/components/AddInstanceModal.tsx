@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Loader2, Boxes, Hammer, Upload, BookOpen } from "lucide-react";
+import {
+  X,
+  Loader2,
+  Boxes,
+  Hammer,
+  Upload,
+  BookOpen,
+  GitBranch,
+  Check,
+  Box,
+  Download,
+} from "lucide-react";
 import * as api from "@/lib/api";
 import type { Instance } from "@/lib/types";
 import { VersionPicker } from "@/components/VersionPicker";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
-import { SegmentedTabs, useClosable } from "@/components/ui";
+import { SegmentedTabs, Dropdown, useClosable } from "@/components/ui";
 
-type Tab = "custom" | "modrinth" | "curseforge" | "packwiz";
+type Tab = "custom" | "modrinth" | "curseforge" | "packwiz" | "import";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "custom", label: "Custom" },
   { id: "modrinth", label: "Modrinth" },
   { id: "curseforge", label: "CurseForge" },
-  { id: "packwiz", label: "packwiz URL" },
+  { id: "packwiz", label: "packwiz" },
+  { id: "import", label: "Import" },
 ];
 
 const LOADERS: { id: string; label: string }[] = [
@@ -45,6 +57,13 @@ const ACCENTS: Record<Tab, Record<string, string> | undefined> = {
     "--color-brass-500": "#ec4899",
     "--color-brass-600": "#db2777",
     "--color-brass-700": "#be185d",
+  },
+  import: {
+    "--color-brass-300": "#93c5fd",
+    "--color-brass-400": "#60a5fa",
+    "--color-brass-500": "#3b82f6",
+    "--color-brass-600": "#2563eb",
+    "--color-brass-700": "#1d4ed8",
   },
 };
 
@@ -121,6 +140,77 @@ export function AddInstanceModal({
 
   const [packName, setPackName] = useState("");
   const [packUrl, setPackUrl] = useState("");
+  const [packBranches, setPackBranches] = useState<api.PackwizBranch[] | null>(
+    null,
+  );
+  const [packBranch, setPackBranch] = useState("");
+  const [findingBranches, setFindingBranches] = useState(false);
+
+  const looksLikeRepo = (s: string) =>
+      /github\.com\//.test(s);
+
+  useEffect(() => {
+    setPackBranches(null);
+    setPackBranch("");
+  }, [packUrl]);
+
+  const [imports, setImports] = useState<api.ImportCandidate[] | null>(null);
+  const [scanningImports, setScanningImports] = useState(false);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const importKey = (c: api.ImportCandidate) => `${c.source}:${c.key}`;
+
+  useEffect(() => {
+    if (tab !== "import" || imports || scanningImports) return;
+    setScanningImports(true);
+    api
+      .scanImportable()
+      .then(setImports)
+      .catch((e) => {
+        onError(String(e));
+        setImports([]);
+      })
+      .finally(() => setScanningImports(false));
+  }, [tab, imports, scanningImports, onError]);
+
+  const toggleImport = (k: string) =>
+    setSelectedImports((prev) => {
+      const next = new Set(prev);
+      next.has(k) ? next.delete(k) : next.add(k);
+      return next;
+    });
+
+  const runImport = async () => {
+    if (selectedImports.size === 0) return;
+    setBusy(true);
+    try {
+      const created = await api.importExternal(Array.from(selectedImports));
+      if (created.length > 0) onCreated(created[created.length - 1]);
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const findBranches = async () => {
+    setFindingBranches(true);
+    setPackBranches(null);
+    try {
+      const list = await api.listPackwizBranches(packUrl.trim());
+      setPackBranches(list);
+      if (list.length === 0) {
+        onError("No branches with a pack.toml found in that repo.");
+      } else {
+        const pref =
+          list.find((b) => b.name === "main" || b.name === "master") ?? list[0];
+        setPackBranch(pref.name);
+      }
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setFindingBranches(false);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
@@ -143,7 +233,12 @@ export function AddInstanceModal({
   const createPackwiz = async () => {
     setBusy(true);
     try {
-      const inst = await api.createPackwizInstance(packName, packUrl.trim());
+      let url = packUrl.trim();
+      if (packBranches && packBranch) {
+        const b = packBranches.find((x) => x.name === packBranch);
+        if (b) url = b.pack_url;
+      }
+      const inst = await api.createPackwizInstance(packName, url);
       onCreated(inst);
     } catch (e) {
       onError(String(e));
@@ -250,9 +345,10 @@ export function AddInstanceModal({
           {tab === "packwiz" && (
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
               <p className="text-xs text-ink-600">
-                Point at a <span className="text-brass-300">pack.toml</span> URL.
-                The launcher fetches it, detects the loader + Minecraft version,
-                and syncs on launch.
+                Point at a <span className="text-brass-300">pack.toml</span> URL,
+                or a <span className="text-brass-300">GitHub repo</span> to pick a
+                branch. The launcher detects the loader + Minecraft version and
+                syncs on launch.
               </p>
               <div>
                 <div className="mb-1.5 text-sm text-ink-600">Name (optional)</div>
@@ -264,15 +360,49 @@ export function AddInstanceModal({
                 />
               </div>
               <div>
-                <div className="mb-1.5 text-sm text-ink-600">pack.toml URL</div>
+                <div className="mb-1.5 text-sm text-ink-600">
+                  pack.toml URL or GitHub repo
+                </div>
                 <input
                   value={packUrl}
                   onChange={(e) => setPackUrl(e.target.value)}
-                  placeholder="https://example.com/pack.toml"
+                  placeholder="https://github.com/owner/repo  or  …/pack.toml"
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </div>
+
+              {looksLikeRepo(packUrl) && !packBranches && (
+                <button
+                  disabled={findingBranches || !packUrl.trim()}
+                  onClick={findBranches}
+                  className="flex items-center justify-center gap-2 self-start rounded-lg border border-brass-600/40 px-3 py-2 text-sm text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {findingBranches ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <GitBranch size={15} />
+                  )}
+                  Find branches
+                </button>
+              )}
+
+              {packBranches && packBranches.length > 0 && (
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5 text-sm text-ink-600">
+                    <GitBranch size={13} /> Branch
+                  </div>
+                  <Dropdown
+                    value={packBranch}
+                    onChange={setPackBranch}
+                    options={packBranches.map((b) => ({
+                      value: b.name,
+                      label: b.name,
+                    }))}
+                  />
+                </div>
+              )}
+
               <button
                 onClick={() =>
                   api.openExternal("https://packwiz.infra.link/").catch(() => {})
@@ -282,7 +412,11 @@ export function AddInstanceModal({
                 <BookOpen size={13} /> What is packwiz? Read the wiki →
               </button>
               <button
-                disabled={busy || !packUrl.trim()}
+                disabled={
+                  busy ||
+                  !packUrl.trim() ||
+                  (looksLikeRepo(packUrl) && !packBranch)
+                }
                 onClick={createPackwiz}
                 className="brass-btn flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -293,6 +427,117 @@ export function AddInstanceModal({
                 )}
                 Add packwiz instance
               </button>
+            </div>
+          )}
+
+          {tab === "import" && (
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              <p className="text-xs text-ink-600">
+                Instances found in Prism Launcher and the Modrinth App. Importing
+                copies their mods, configs, and worlds into a new Brassworks
+                instance (Prism groups become folders).
+              </p>
+              {scanningImports ? (
+                <div className="flex flex-1 items-center justify-center gap-2 text-sm text-ink-600">
+                  <Loader2 size={16} className="animate-spin" /> Scanning launchers…
+                </div>
+              ) : !imports || imports.length === 0 ? (
+                <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-ink-600">
+                  No Prism Launcher or Modrinth App instances found.
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-ink-600">
+                    <span>
+                      {imports.length} found · {selectedImports.size} selected
+                    </span>
+                    <button
+                      onClick={() =>
+                        setSelectedImports(
+                          selectedImports.size === imports.length
+                            ? new Set()
+                            : new Set(imports.map(importKey)),
+                        )
+                      }
+                      className="text-brass-300 hover:text-brass-400"
+                    >
+                      {selectedImports.size === imports.length
+                        ? "Clear all"
+                        : "Select all"}
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+                    {imports.map((c) => {
+                      const k = importKey(c);
+                      const on = selectedImports.has(k);
+                      return (
+                        <button
+                          key={k}
+                          onClick={() => toggleImport(k)}
+                          className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                            on
+                              ? "border-brass-500/60 bg-brass-500/10"
+                              : "border-edge hover:border-brass-600/40"
+                          }`}
+                        >
+                          <span
+                            className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                              on
+                                ? "border-brass-500 bg-brass-500 text-ink-950"
+                                : "border-edge"
+                            }`}
+                          >
+                            {on && <Check size={12} />}
+                          </span>
+                          <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md border border-edge bg-ink-950/60 text-brass-400">
+                            {c.icon ? (
+                              <img
+                                src={c.icon}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Box size={18} />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm text-gray-100">
+                              {c.name}
+                            </span>
+                            <span className="block truncate text-[11px] text-ink-600">
+                              {c.loader} · {c.minecraft}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            {c.group && (
+                              <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500">
+                                {c.group}
+                              </span>
+                            )}
+                            <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-500">
+                              {c.source}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    disabled={busy || selectedImports.size === 0}
+                    onClick={runImport}
+                    className="brass-btn flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busy ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Download size={16} />
+                    )}
+                    Import{" "}
+                    {selectedImports.size > 0 ? `${selectedImports.size} ` : ""}
+                    selected
+                  </button>
+                </>
+              )}
             </div>
           )}
 

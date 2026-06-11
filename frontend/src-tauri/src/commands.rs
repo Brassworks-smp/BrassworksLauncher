@@ -733,9 +733,6 @@ pub(crate) fn delete_screenshot(
     std::fs::remove_file(&path).map_err(err)
 }
 
-/// Build (or reuse) a cached, downscaled JPEG for an image and return its path.
-/// `large` picks the preview size (1600px) vs the grid thumbnail size (480px).
-/// Heavy decode/resize runs on a blocking worker so the UI never stalls.
 fn build_thumbnail(cache_dir: &std::path::Path, src: &str, large: bool) -> Result<String, String> {
     use std::hash::{Hash, Hasher};
     let src_path = std::path::Path::new(src);
@@ -760,9 +757,6 @@ fn build_thumbnail(cache_dir: &std::path::Path, src: &str, large: bool) -> Resul
 
     std::fs::create_dir_all(cache_dir).map_err(|e| e.to_string())?;
 
-    // Gate on the DECODED size, not the on-disk size: a single-colour 16K PNG is
-    // a few KB on disk but ~0.5 GB once decoded. Dimensions come from the header
-    // (cheap, no pixel decode), so we reject oversized images before allocating.
     const MAX_DECODED_BYTES: u64 = 32 * 1024 * 1024;
     let (w, h) = image::ImageReader::open(src_path)
         .map_err(|e| e.to_string())?
@@ -781,7 +775,7 @@ fn build_thumbnail(cache_dir: &std::path::Path, src: &str, large: bool) -> Resul
         .decode()
         .map_err(|e| e.to_string())?;
     let thumb = img.thumbnail(max, max).to_rgb8();
-    drop(img); // free the full-size decode buffer before encoding
+    drop(img); 
     let file = std::io::BufWriter::new(std::fs::File::create(&out).map_err(|e| e.to_string())?);
     image::codecs::jpeg::JpegEncoder::new_with_quality(file, 82)
         .encode_image(&thumb)
@@ -892,6 +886,54 @@ pub(crate) async fn create_packwiz_instance(
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher.create_packwiz_instance(&name, &url).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn scan_importable(
+    state: State<'_, AppState>,
+) -> CmdResult<Vec<brassworks_core::ImportCandidate>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.scan_importable()))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn import_external(
+    state: State<'_, AppState>,
+    keys: Vec<String>,
+) -> CmdResult<Vec<Instance>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.import_external(keys).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn list_packwiz_branches(
+    state: State<'_, AppState>,
+    repo: String,
+) -> CmdResult<Vec<brassworks_core::PackwizBranch>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.list_packwiz_branches(&repo).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn switch_packwiz_branch(
+    state: State<'_, AppState>,
+    id: String,
+    url: String,
+) -> CmdResult<Instance> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.switch_packwiz_branch(&id, &url).map_err(err)
     })
     .await
     .map_err(err)?
@@ -1147,7 +1189,6 @@ pub(crate) fn reveal_path(path: String) -> CmdResult<()> {
     open_in_file_manager(&dir).map_err(err)
 }
 
-/// Open a file with the OS default application (e.g. screenshots in Preview/Photos).
 fn open_with_default(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -1230,6 +1271,19 @@ pub(crate) fn list_skins(
 }
 
 #[tauri::command]
+pub(crate) async fn seed_current_skin(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> CmdResult<SkinLibraryView> {
+    let launcher = state.launcher.clone();
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || launcher.seed_current_skin(&account_id))
+            .await
+            .map_err(err)?,
+    )
+}
+
+#[tauri::command]
 pub(crate) fn delete_skin(
     state: State<AppState>,
     account_id: String,
@@ -1253,36 +1307,19 @@ pub(crate) async fn apply_saved_skin(
 }
 
 #[tauri::command]
-pub(crate) async fn upload_skin(
+pub(crate) async fn create_preset(
     state: State<'_, AppState>,
     account_id: String,
     name: String,
-    data: Vec<u8>,
-    model: String,
-) -> CmdResult<SavedSkin> {
-    let launcher = state.launcher.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .upload_and_apply_skin(&account_id, &name, data, &model)
-            .map_err(err)
-    })
-    .await
-    .map_err(err)?
-}
-
-#[tauri::command]
-pub(crate) async fn apply_preset(
-    state: State<'_, AppState>,
-    account_id: String,
-    name: String,
-    url: String,
     model: String,
     cape_id: Option<String>,
+    data: Option<Vec<u8>>,
+    url: Option<String>,
 ) -> CmdResult<SavedSkin> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .apply_preset(&account_id, &name, &url, &model, cape_id.as_deref())
+            .create_preset(&account_id, &name, &model, cape_id.as_deref(), data, url)
             .map_err(err)
     })
     .await
@@ -1290,46 +1327,16 @@ pub(crate) async fn apply_preset(
 }
 
 #[tauri::command]
-pub(crate) fn update_skin(
-    state: State<AppState>,
-    account_id: String,
-    skin_id: String,
-    model: String,
-    cape_id: Option<String>,
-) -> CmdResult<()> {
-    state
-        .launcher
-        .update_skin(&account_id, &skin_id, &model, cape_id.as_deref())
-        .map_err(err)
-}
-
-#[tauri::command]
-pub(crate) fn replace_skin_texture(
-    state: State<AppState>,
-    account_id: String,
-    skin_id: String,
-    data: Vec<u8>,
-) -> CmdResult<()> {
-    state
-        .launcher
-        .replace_skin_texture(&account_id, &skin_id, &data)
-        .map_err(err)
-}
-
-/// Add a texture to the library WITHOUT pushing it to the account (used for
-/// batch import / drag-drop). Returns the new saved skin.
-#[tauri::command]
-pub(crate) async fn import_skin(
+pub(crate) async fn duplicate_skin(
     state: State<'_, AppState>,
     account_id: String,
+    skin_id: String,
     name: String,
-    data: Vec<u8>,
-    model: String,
 ) -> CmdResult<SavedSkin> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .save_skin(&account_id, &name, &data, &model, None, None)
+            .duplicate_skin(&account_id, &skin_id, &name)
             .map_err(err)
     })
     .await
@@ -1337,16 +1344,23 @@ pub(crate) async fn import_skin(
 }
 
 #[tauri::command]
-pub(crate) fn rename_skin(
-    state: State<AppState>,
+pub(crate) async fn update_preset(
+    state: State<'_, AppState>,
     account_id: String,
     skin_id: String,
     name: String,
-) -> CmdResult<()> {
-    state
-        .launcher
-        .rename_skin(&account_id, &skin_id, &name)
-        .map_err(err)
+    model: String,
+    cape_id: Option<String>,
+    data: Option<Vec<u8>>,
+) -> CmdResult<SavedSkin> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .update_preset(&account_id, &skin_id, &name, &model, cape_id.as_deref(), data)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
 }
 
 #[tauri::command]

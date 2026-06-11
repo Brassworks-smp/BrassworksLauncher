@@ -83,19 +83,19 @@ export interface SkinProfile {
   capes: SkinCape[];
 }
 
+/** A skin preset: a complete "locker outfit" — texture + arm model + its own cape.
+ *  `id` is a hidden uuid; `name` is unique within the account. */
 export interface SavedSkin {
   id: string;
   name: string;
   file: string;
   model: string;
   cape_id: string | null;
-  /** Origin marker, e.g. "preset:Steve", for default-preset dedupe. */
-  source: string | null;
 }
 
 export interface SkinLibraryView {
   skins: SavedSkin[];
-  /** The saved-skin id currently applied for this account, if any. */
+  /** The preset id currently selected (== applied to Mojang), if any. */
   selected: string | null;
 }
 

@@ -97,6 +97,53 @@ impl Installer {
         Some(url)
     }
 
+    pub fn github_pack_branches(&self, repo_url: &str) -> Result<Vec<PackwizBranch>> {
+        let GithubRepo { owner, repo, spec } = parse_github_repo(repo_url)
+            .ok_or_else(|| PackwizError::Http(format!("not a GitHub repo URL: {repo_url}")))?;
+
+        let api = format!("https://api.github.com/repos/{owner}/{repo}/branches?per_page=100");
+        let resp = self
+            .client
+            .get(&api)
+            .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+            .send()
+            .map_err(PackwizError::http)?;
+        if !resp.status().is_success() {
+            return Err(PackwizError::Http(format!(
+                "GitHub branches {api} -> {}",
+                resp.status()
+            )));
+        }
+        let branches: serde_json::Value = resp.json().map_err(PackwizError::http)?;
+        let names: Vec<String> = branches
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|b| b.get("name").and_then(|n| n.as_str()).map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let path = resolve_path(spec.as_deref(), &names);
+        let prefix = if path.is_empty() {
+            String::new()
+        } else {
+            format!("{path}/")
+        };
+        let mut out = Vec::new();
+        for name in names {
+            let pack_url = format!(
+                "https://raw.githubusercontent.com/{owner}/{repo}/{name}/{prefix}pack.toml"
+            );
+            if let Ok(resp) = self.client.get(&pack_url).send() {
+                if resp.status().is_success() {
+                    out.push(PackwizBranch { name, pack_url });
+                }
+            }
+        }
+        Ok(out)
+    }
+
     pub fn update_available(pack: &Pack, index_hash: &str, manifest: &Manifest) -> bool {
         manifest.pack_version != pack.version || manifest.index_hash != index_hash
     }
@@ -381,6 +428,62 @@ fn emit(
         total,
         message: message.into(),
     });
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PackwizBranch {
+    pub name: String,
+    pub pack_url: String,
+}
+
+struct GithubRepo {
+    owner: String,
+    repo: String,
+    spec: Option<String>,
+}
+
+fn parse_github_repo(input: &str) -> Option<GithubRepo> {
+    let s = input.trim();
+    let rest = s
+        .strip_prefix("https://github.com/")
+        .or_else(|| s.strip_prefix("http://github.com/"))
+        .or_else(|| s.strip_prefix("github.com/"))
+        .or_else(|| s.strip_prefix("https://raw.githubusercontent.com/"))
+        .or_else(|| s.strip_prefix("http://raw.githubusercontent.com/"))?;
+    let mut segs = rest.split('/').filter(|s| !s.is_empty());
+    let owner = segs.next()?.to_string();
+    let repo = segs.next()?.trim_end_matches(".git").to_string();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    let tail: Vec<&str> = segs.collect();
+    let spec = match tail.first() {
+        Some(&"tree") | Some(&"blob") if tail.len() > 1 => Some(tail[1..].join("/")),
+        Some(_) => Some(tail.join("/")),
+        None => None,
+    };
+    Some(GithubRepo { owner, repo, spec })
+}
+
+fn resolve_path(spec: Option<&str>, branches: &[String]) -> String {
+    let spec = match spec {
+        Some(s) if !s.is_empty() => s.trim_matches('/'),
+        _ => return String::new(),
+    };
+    let spec = spec.strip_suffix("/pack.toml").unwrap_or(spec);
+
+    let mut best: Option<&str> = None;
+    for b in branches {
+        let matches = spec == b || spec.starts_with(&format!("{b}/"));
+        if matches && best.map(|cur| b.len() > cur.len()).unwrap_or(true) {
+            best = Some(b);
+        }
+    }
+    let path = match best {
+        Some(b) => spec.strip_prefix(b).unwrap_or("").trim_start_matches('/'),
+        None => spec.split_once('/').map(|(_, rest)| rest).unwrap_or(""),
+    };
+    path.trim_matches('/').to_string()
 }
 
 fn base_url(url: &str) -> String {

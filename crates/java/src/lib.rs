@@ -178,8 +178,20 @@ fn parse_major(raw: &str) -> Option<u32> {
     }
 }
 
+fn no_window(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 pub fn probe(java_exe: &Path) -> Option<(Option<u32>, Option<String>)> {
-    let out = Command::new(java_exe).arg("-version").output().ok()?;
+    let mut cmd = Command::new(java_exe);
+    cmd.arg("-version");
+    let out = no_window(&mut cmd).output().ok()?;
     let text = String::from_utf8_lossy(&out.stderr);
     let parsed = parse_version(&text);
     if parsed.0.is_none() && parsed.1.is_none() {
@@ -208,18 +220,11 @@ pub fn detect_system() -> Option<JavaInstall> {
 }
 
 fn which_java() -> Option<PathBuf> {
-    let prog = if cfg!(windows) { "where" } else { "which" };
-    let out = Command::new(prog).arg("java").output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let line = String::from_utf8_lossy(&out.stdout);
-    let first = line.lines().next()?.trim();
-    if first.is_empty() {
-        None
-    } else {
-        Some(PathBuf::from(first))
-    }
+    let exe = exec_name();
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(exe))
+        .find(|candidate| candidate.is_file())
 }
 
 pub fn list_runtimes(jvm_dir: &Path) -> Vec<JavaInstall> {

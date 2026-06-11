@@ -851,6 +851,7 @@ export default function Home() {
           onClose={() => setAddOpen(false)}
           onCreated={(inst) => {
             setAddOpen(false);
+            api.getSettings().then(setSettings).catch(() => {});
             refreshInstances().then(() => {
               void selectInstance(inst.id);
               setView("play");

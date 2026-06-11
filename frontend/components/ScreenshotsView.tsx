@@ -48,7 +48,6 @@ function queuedThumb(path: string, large: boolean): Promise<string> {
           pumpThumbs();
         });
     };
-    // The lightbox preview (large) is user-initiated — jump the grid queue.
     if (large) thumbQueue.unshift(job);
     else thumbQueue.push(job);
     pumpThumbs();
