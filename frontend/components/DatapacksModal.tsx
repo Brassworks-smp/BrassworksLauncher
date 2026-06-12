@@ -17,6 +17,7 @@ import { toast } from "@/lib/toast";
 import { useInfiniteSearch, ResultRow, SourceBadge } from "./Browse";
 import { VersionList } from "./VersionList";
 import { SegmentedTabs, BrassSwitch, useClosable } from "./ui";
+import { useT } from "@/lib/i18n";
 import type {
   ContentVersion,
   DatapackInfo,
@@ -67,8 +68,7 @@ function fmtDownloads(n: number): string {
   return `${n}`;
 }
 
-/** Synthesize a SearchHit from a tracked installed datapack so it can re-open
- *  its detail/version page. */
+
 function hitFromInstalled(d: DatapackInfo): SearchHit | null {
   if (!d.source || !d.project_id) return null;
   return {
@@ -85,11 +85,7 @@ function hitFromInstalled(d: DatapackInfo): SearchHit | null {
   };
 }
 
-/**
- * Per-world datapack manager — manage what's installed (with provider/logo +
- * one-click re-open to change version) and browse/install datapacks from
- * Modrinth or CurseForge into that world's `datapacks/` folder.
- */
+
 export function DatapacksModal({
   instanceId,
   world,
@@ -99,6 +95,7 @@ export function DatapacksModal({
   world: WorldInfo;
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   const [tab, setTab] = useState<Tab>("installed");
   const [source, setSource] = useState<Source>("modrinth");
@@ -193,7 +190,7 @@ export function DatapacksModal({
             )}
             <Boxes size={17} className="shrink-0 text-brass-400" />
             <h2 className="truncate font-mc text-base tracking-wide text-gray-100">
-              {selected ? selected.title : "Datapacks"}
+              {selected ? selected.title : t("worlds.datapacks")}
             </h2>
             {selected ? (
               <SourceBadge source={selected.source} />
@@ -210,8 +207,8 @@ export function DatapacksModal({
                 value={tab}
                 onChange={(v) => setTab(v as Tab)}
                 options={[
-                  { id: "installed", label: "Installed" },
-                  { id: "browse", label: "Browse" },
+                  { id: "installed", label: t("datapacks.installed") },
+                  { id: "browse", label: t("datapacks.browse") },
                 ]}
               />
             )}
@@ -238,7 +235,7 @@ export function DatapacksModal({
               installedVersionId={selectedInstalled?.version_id ?? null}
               onInstalled={() => {
                 refresh();
-                toast(`Updated in ${world.name}`, "success");
+                toast(t("datapacks.updatedIn", { world: world.name }), "success");
                 back();
               }}
             />
@@ -262,8 +259,8 @@ export function DatapacksModal({
                   value={source}
                   onChange={(v) => setSource(v as Source)}
                   options={[
-                    { id: "modrinth", label: "Modrinth" },
-                    { id: "curseforge", label: "CurseForge" },
+                    { id: "modrinth", label: t("mods.modrinth") },
+                    { id: "curseforge", label: t("mods.curseforge") },
                   ]}
                 />
                 <div className="relative flex-1">
@@ -275,7 +272,7 @@ export function DatapacksModal({
                     autoFocus
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder={`Search ${api.sourceLabel(source)} datapacks…`}
+                    placeholder={t("datapacks.searchPlaceholder", { source: api.sourceLabel(source) })}
                     className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
                   />
                 </div>
@@ -296,8 +293,8 @@ export function DatapacksModal({
                 ) : hits.length === 0 ? (
                   <div className="grid h-full place-items-center text-center text-sm text-ink-600">
                     {query
-                      ? "No datapacks found - try a different search."
-                      : `Start typing to search ${api.sourceLabel(source)}.`}
+                      ? t("datapacks.noResults")
+                      : t("addContent.startTyping", { source: api.sourceLabel(source) })}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
@@ -343,6 +340,7 @@ function InstalledList({
   onBrowse: () => void;
   onOpen: (d: DatapackInfo) => void;
 }) {
+  const t = useT();
   if (items === null)
     return (
       <div className="grid flex-1 place-items-center text-ink-600">
@@ -354,12 +352,12 @@ function InstalledList({
       <div className="grid flex-1 place-items-center px-6 text-center text-ink-600">
         <div>
           <PackageOpen size={30} className="mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No datapacks in this world yet.</p>
+          <p className="text-sm">{t("datapacks.empty")}</p>
           <button
             onClick={onBrowse}
             className="brass-btn mt-3 inline-flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
           >
-            <Download size={15} /> Browse datapacks
+            <Download size={15} /> {t("datapacks.browseDatapacks")}
           </button>
         </div>
       </div>
@@ -389,7 +387,7 @@ function InstalledList({
             <button
               onClick={() => fromSource && onOpen(d)}
               disabled={!fromSource}
-              title={fromSource ? "View / change version" : undefined}
+              title={fromSource ? t("datapacks.viewChangeVersion") : undefined}
               className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-brass-400 disabled:cursor-default"
             >
               {d.icon_url ? (
@@ -415,13 +413,13 @@ function InstalledList({
                 )}
               </div>
               <div className="truncate text-[11px] text-ink-600">
-                {d.is_dir ? "folder" : api.formatBytes(d.size_bytes)}
-                {!d.enabled && " · disabled"}
+                {d.is_dir ? t("datapacks.folder") : api.formatBytes(d.size_bytes)}
+                {!d.enabled && t("datapacks.disabledSuffix")}
               </div>
             </div>
             <button
               onClick={() => remove(d)}
-              title="Remove"
+              title={t("common.remove")}
               className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-red-500/10 hover:text-red-300"
             >
               <Trash2 size={14} />
@@ -434,7 +432,7 @@ function InstalledList({
         onClick={() => api.openDir(instanceId, `saves/${world}/datapacks`).catch(() => {})}
         className="mt-1 flex items-center justify-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
       >
-        <FolderOpen size={13} /> Open folder
+        <FolderOpen size={13} /> {t("worlds.openFolder")}
       </button>
     </div>
   );
@@ -453,6 +451,7 @@ function DatapackDetail({
   installedVersionId: string | null;
   onInstalled: () => void;
 }) {
+  const t = useT();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -501,7 +500,7 @@ function DatapackDetail({
             {detail?.url && (
               <button
                 onClick={() => api.openExternal(detail.url!).catch(() => {})}
-                title={`View on ${api.sourceLabel(hit.source)}`}
+                title={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
                 className="text-ink-600 hover:text-brass-300"
               >
                 <ExternalLink size={14} />
@@ -513,20 +512,24 @@ function DatapackDetail({
           </p>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-600">
             <Users size={11} />
-            {fmtDownloads(detail?.downloads ?? hit.downloads ?? 0)} downloads
+            {t("addContent.downloads", {
+              count: fmtDownloads(detail?.downloads ?? hit.downloads ?? 0),
+            })}
             {latest && (
-              <span className="ml-1 font-mono">latest {latest.version_number}</span>
+              <span className="ml-1 font-mono">
+                {t("addContent.latestVersion", { version: latest.version_number })}
+              </span>
             )}
           </div>
           <div className="mt-1 flex items-center gap-2 text-[11px]">
             {installedVersionId && (
               <span className="rounded bg-patina-500/15 px-1.5 py-0.5 text-patina-400">
-                Installed
+                {t("datapacks.installedBadge")}
               </span>
             )}
             {updateAvailable && (
               <span className="rounded bg-brass-500/15 px-1.5 py-0.5 text-brass-300">
-                Update available
+                {t("datapacks.updateAvailable")}
               </span>
             )}
           </div>
@@ -539,7 +542,7 @@ function DatapackDetail({
           </div>
         ) : versions.length === 0 ? (
           <div className="py-10 text-center text-sm text-ink-600">
-            No compatible datapack versions.
+            {t("datapacks.noVersions")}
           </div>
         ) : (
           <VersionList
@@ -547,7 +550,7 @@ function DatapackDetail({
             projectId={hit.project_id}
             source={hit.source}
             versions={versions}
-            actionLabel={installedVersionId ? "Switch" : "Add"}
+            actionLabel={installedVersionId ? t("datapacks.switch") : t("common.add")}
             busy={busy}
             currentVersionId={installedVersionId}
             onPick={install}

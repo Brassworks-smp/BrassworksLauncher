@@ -1,5 +1,12 @@
-
 use serde::{Deserialize, Serialize};
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_locale() -> String {
+    "en".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -34,14 +41,28 @@ pub struct LauncherSettings {
     pub discord_rpc: bool,
     pub reduce_motion: bool,
 
+        #[serde(default = "default_locale")]
+    pub locale: String,
+
+            #[serde(default)]
+    pub pseudo_localize: bool,
+
+            #[serde(default)]
+    pub high_contrast: bool,
+
     #[serde(default)]
     pub close_to_tray: bool,
+
+                #[serde(default = "default_true", alias = "show_featured_servers")]
+    pub show_featured: bool,
 
     #[serde(default)]
     pub instance_folders: Vec<InstanceFolder>,
 
     pub auto_update: bool,
     pub last_version: Option<String>,
+
+            pub download_concurrency: usize,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -62,7 +83,7 @@ impl Default for LauncherSettings {
             java_path: None,
             java_policy: "auto".to_string(),
             keep_open: true,
-            theme: "system".to_string(),
+            theme: "brass-grey".to_string(),
             accent_color: None,
             pack_url: None,
             dev_mode: false,
@@ -85,11 +106,16 @@ impl Default for LauncherSettings {
 
             discord_rpc: true,
             reduce_motion: false,
+            locale: default_locale(),
+            pseudo_localize: false,
+            high_contrast: false,
             close_to_tray: false,
+            show_featured: true,
             instance_folders: Vec::new(),
 
             auto_update: true,
             last_version: None,
+            download_concurrency: packwiz::DEFAULT_CONCURRENCY,
         }
     }
 }

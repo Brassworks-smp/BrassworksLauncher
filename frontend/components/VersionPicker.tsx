@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { Loader2, Check, Keyboard, List } from "lucide-react";
 import * as api from "@/lib/api";
 import type { McVersion, LoaderVersionInfo } from "@/lib/types";
+import { Dropdown } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 const baseInputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
-const inputCls = `${baseInputCls} cursor-pointer appearance-none`;
 
 export function VersionPicker({
   loader,
@@ -20,6 +21,7 @@ export function VersionPicker({
   loaderVersion: string;
   setLoaderVersion: (v: string) => void;
 }) {
+  const t = useT();
   const [snapshots, setSnapshots] = useState(false);
   const [manual, setManual] = useState(false);
   const [mcVersions, setMcVersions] = useState<McVersion[]>([]);
@@ -69,7 +71,7 @@ export function VersionPicker({
     <div className="flex flex-col gap-3">
       <div>
         <div className="mb-1.5 flex items-center justify-between text-sm text-ink-600">
-          <span>Minecraft version</span>
+          <span>{t("versionPicker.mcVersion")}</span>
           <div className="flex items-center gap-1.5">
             {!manual && (
               <button
@@ -88,17 +90,17 @@ export function VersionPicker({
                 >
                   {snapshots && <Check size={9} className="text-ink-950" />}
                 </span>
-                Snapshots
+                {t("versionPicker.snapshots")}
               </button>
             )}
             <button
               type="button"
               onClick={() => setManual((v) => !v)}
-              title={manual ? "Pick from the list instead" : "Type a version manually"}
+              title={manual ? t("versionPicker.pickFromListTitle") : t("versionPicker.typeManuallyTitle")}
               className="flex items-center gap-1.5 rounded-full border border-edge px-2 py-0.5 text-[11px] text-ink-600 transition hover:text-brass-300"
             >
               {manual ? <List size={11} /> : <Keyboard size={11} />}
-              {manual ? "Pick from list" : "Type manually"}
+              {manual ? t("versionPicker.pickFromList") : t("versionPicker.typeManually")}
             </button>
           </div>
         </div>
@@ -113,22 +115,19 @@ export function VersionPicker({
           />
         ) : (
           <div className="relative">
-            <select
+            <Dropdown
               value={mc}
-              onChange={(e) => setMc(e.target.value)}
-              className={inputCls}
-            >
-              {mcVersions.map((v) => (
-                <option key={v.id} value={v.id} className="bg-ink-900">
-                  {v.id}
-                  {v.kind !== "release" ? ` (${v.kind})` : ""}
-                </option>
-              ))}
-            </select>
+              onChange={setMc}
+              placeholder={loadingMc ? t("mods.loadingVersions") : t("versionPicker.selectVersion")}
+              options={mcVersions.map((v) => ({
+                value: v.id,
+                label: `${v.id}${v.kind !== "release" ? ` (${v.kind})` : ""}`,
+              }))}
+            />
             {loadingMc && (
               <Loader2
                 size={14}
-                className="absolute right-8 top-2.5 animate-spin text-ink-600"
+                className="absolute right-9 top-2.5 animate-spin text-ink-600"
               />
             )}
           </div>
@@ -137,27 +136,23 @@ export function VersionPicker({
 
       {loader !== "vanilla" && (
         <div>
-          <div className="mb-1.5 text-sm text-ink-600">Loader version</div>
+          <div className="mb-1.5 text-sm text-ink-600">{t("instanceSettings.modpack.loaderVersion")}</div>
           <div className="relative">
-            <select
+            <Dropdown
               value={loaderVersion}
-              onChange={(e) => setLoaderVersion(e.target.value)}
-              className={inputCls}
-            >
-              <option value="stable" className="bg-ink-900">
-                Latest stable (recommended)
-              </option>
-              {loaderVersions.map((v) => (
-                <option key={v.version} value={v.version} className="bg-ink-900">
-                  {v.version}
-                  {!v.stable ? " (beta)" : ""}
-                </option>
-              ))}
-            </select>
+              onChange={setLoaderVersion}
+              options={[
+                { value: "stable", label: t("versionPicker.latestStable") },
+                ...loaderVersions.map((v) => ({
+                  value: v.version,
+                  label: `${v.version}${!v.stable ? t("versionPicker.betaSuffix") : ""}`,
+                })),
+              ]}
+            />
             {loadingLoader && (
               <Loader2
                 size={14}
-                className="absolute right-8 top-2.5 animate-spin text-ink-600"
+                className="absolute right-9 top-2.5 animate-spin text-ink-600"
               />
             )}
           </div>

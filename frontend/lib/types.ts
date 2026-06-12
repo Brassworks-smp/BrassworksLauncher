@@ -1,4 +1,3 @@
-
 export type LoaderKind = "vanilla" | "neo_forge" | "forge" | "fabric" | "quilt";
 
 export type LoaderVersion =
@@ -8,7 +7,7 @@ export type LoaderVersion =
 
 export type PackSource =
   | { kind: "none" }
-  | { kind: "packwiz"; url: string }
+  | { kind: "packwiz"; url: string; unsup: boolean }
   | { kind: "modrinth"; project_id: string | null; version_id: string }
   | { kind: "curseforge"; project_id: string; file_id: string };
 
@@ -43,6 +42,10 @@ export interface Instance {
   notes: string | null;
   tags: string[];
   folder_id: string | null;
+  optional_mods: string[] | null;
+  unsup_flavors: string[] | null;
+  unsup_public_key: string | null;
+  pinned_settings: string[];
 }
 
 export interface InstanceFolder {
@@ -83,8 +86,7 @@ export interface SkinProfile {
   capes: SkinCape[];
 }
 
-/** A skin preset: a complete "locker outfit" — texture + arm model + its own cape.
- *  `id` is a hidden uuid; `name` is unique within the account. */
+
 export interface SavedSkin {
   id: string;
   name: string;
@@ -95,7 +97,7 @@ export interface SavedSkin {
 
 export interface SkinLibraryView {
   skins: SavedSkin[];
-  /** The preset id currently selected (== applied to Mojang), if any. */
+  
   selected: string | null;
 }
 
@@ -128,11 +130,16 @@ export interface LauncherSettings {
 
   discord_rpc: boolean;
   reduce_motion: boolean;
+  locale: string;
+  pseudo_localize: boolean;
+  high_contrast: boolean;
   close_to_tray: boolean;
+  show_featured: boolean;
   instance_folders: InstanceFolder[];
 
   auto_update: boolean;
   last_version: string | null;
+  download_concurrency: number;
 }
 
 export interface UpdateInfo {
@@ -190,6 +197,8 @@ export interface AccountStore {
   accounts: Account[];
   selected: string | null;
 }
+
+export type AccountStatus = "ok" | "needs_relogin" | "offline";
 
 export type LaunchStage =
   | "resolving"
@@ -288,6 +297,43 @@ export interface InstallResult {
   dependencies: string[];
 }
 
+
+export interface FlavorGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  side: string;
+  choices: FlavorChoice[];
+}
+
+export interface FlavorChoice {
+  id: string;
+  name: string;
+  description: string | null;
+  default: boolean;
+}
+
+
+export function isBooleanFlavor(g: FlavorGroup): boolean {
+  if (g.choices.length !== 2) return false;
+  const ids = g.choices.map((c) => c.id);
+  return (
+    ids.includes(`${g.id}_on`) && ids.includes(`${g.id}_off`)
+  );
+}
+
+
+export interface OptionalComponent {
+  
+  id: string;
+  name: string;
+  description: string | null;
+  
+  default: boolean;
+  side: string;
+  category: string;
+}
+
 export interface Screenshot {
   name: string;
   path: string;
@@ -301,12 +347,12 @@ export interface WorldInfo {
   folder: string;
   name: string;
   icon: boolean;
-  /** Epoch milliseconds, 0 if unknown. */
+  
   last_played: number;
-  /** 0 survival, 1 creative, 2 adventure, 3 spectator, -1 unknown. */
+  
   game_mode: number;
   hardcore: boolean;
-  /** 0 peaceful … 3 hard, -1 unknown. */
+  
   difficulty: number;
   version_name: string | null;
   size_bytes: number;
@@ -327,7 +373,7 @@ export interface DatapackInfo {
   enabled: boolean;
   is_dir: boolean;
   size_bytes: number;
-  /** Present when installed from a content source. */
+  
   source: string | null;
   project_id: string | null;
   version_id: string | null;
@@ -336,13 +382,22 @@ export interface DatapackInfo {
   icon_url: string | null;
 }
 
+export interface FeaturedPack {
+  
+  id: string;
+  name: string;
+  icon: string | null;
+  modrinth_ids: string[];
+  curseforge_ids: string[];
+}
+
 export interface ServerEntry {
   name: string;
   ip: string;
-  /** Base64 PNG favicon cached by the vanilla client (data URI body). */
+  
   icon: string | null;
   accept_textures: number | null;
-  /** True for the read-only default server from a featured pack. */
+  
   featured: boolean;
   starred: boolean;
 }
@@ -353,7 +408,7 @@ export interface ServerStatus {
   version: string | null;
   players_online: number;
   players_max: number;
-  /** `data:image/png;base64,…` favicon, when the server advertises one. */
+  
   favicon: string | null;
   ping_ms: number;
   error: string | null;
@@ -365,6 +420,12 @@ export interface LogUpload {
   id: string;
   url: string;
   raw: string;
+}
+
+export interface LogTail {
+  content: string;
+  offset: number;
+  reset: boolean;
 }
 
 export interface ModpackDone {

@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};

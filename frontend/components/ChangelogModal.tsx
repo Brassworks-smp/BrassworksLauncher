@@ -3,6 +3,7 @@ import { Loader2, PartyPopper, ScrollText, X } from "lucide-react";
 import * as api from "@/lib/api";
 import { Markdown } from "@/components/Markdown";
 import { useClosable } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export function ChangelogModal({
   version,
@@ -13,6 +14,7 @@ export function ChangelogModal({
   updated: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const { closing, close } = useClosable(onClose);
@@ -29,7 +31,7 @@ export function ChangelogModal({
     setError(false);
     api
       .releaseChangelog(version)
-      .then((t) => alive && setText(t))
+      .then((md) => alive && setText(md))
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
@@ -51,7 +53,7 @@ export function ChangelogModal({
             ) : (
               <ScrollText size={17} className="text-brass-400" />
             )}
-            {updated ? "Launcher updated" : "What's new"}
+            {updated ? t("changelog.updatedTitle") : t("changelog.whatsNew")}
             {version && (
               <span className="rounded-md bg-brass-500/10 px-2 py-0.5 text-xs text-brass-300">
                 v{version}
@@ -68,18 +70,18 @@ export function ChangelogModal({
 
         {updated && (
           <div className="border-b border-edge bg-brass-500/10 px-5 py-3 text-sm text-brass-200">
-            Updated successfully to v{version}. Here&apos;s what changed:
+            {t("changelog.updatedBanner", { version: version ?? "" })}
           </div>
         )}
 
         <div className="selectable flex-1 overflow-y-auto px-5 py-4">
           {text === null && !error ? (
             <div className="flex items-center gap-2 py-6 text-sm text-ink-600">
-              <Loader2 size={15} className="animate-spin" /> Loading changelog…
+              <Loader2 size={15} className="animate-spin" /> {t("changelog.loading")}
             </div>
           ) : error ? (
             <div className="py-6 text-sm text-ink-600">
-              Couldn&apos;t load the changelog right now. You can read it on{" "}
+              {t("changelog.errorBody1")}
               <button
                 onClick={() =>
                   api
@@ -92,7 +94,7 @@ export function ChangelogModal({
               >
                 GitHub
               </button>
-              .
+              {t("changelog.errorBody2")}
             </div>
           ) : (
             <Markdown className="text-sm">{text ?? ""}</Markdown>
@@ -104,7 +106,7 @@ export function ChangelogModal({
             onClick={close}
             className="rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
           >
-            {updated ? "Let's go" : "Close"}
+            {updated ? t("changelog.letsGo") : t("common.close")}
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
-
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use sha2::{Digest, Sha256, Sha512};
 
@@ -9,7 +9,7 @@ use crate::error::{PackwizError, Result};
 use crate::manifest::{FileRecord, ManagedMod, Manifest};
 use crate::model::{Index, MetaFile, Pack};
 use crate::modrinth::Modrinth;
-use crate::{SyncOptions, SyncProgress, SyncStage};
+use crate::{Side, SyncOptions, SyncProgress, SyncStage};
 
 struct Planned {
     dest: String,
@@ -22,6 +22,7 @@ struct Planned {
 
 pub struct Installer {
     client: reqwest::blocking::Client,
+        concurrency: usize,
 }
 
 impl Default for Installer {
@@ -37,7 +38,15 @@ impl Installer {
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .expect("build reqwest client");
-        Self { client }
+        Self {
+            client,
+            concurrency: crate::DEFAULT_CONCURRENCY,
+        }
+    }
+
+        pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency.max(1);
+        self
     }
 
     pub fn modrinth(&self, cache_dir: impl Into<PathBuf>) -> Modrinth {
@@ -59,6 +68,23 @@ impl Installer {
             return Err(PackwizError::Http(format!("GET {url} -> {}", resp.status())));
         }
         resp.text().map_err(PackwizError::http)
+    }
+
+                    fn fetch_metafiles(&self, base: &str, paths: &[String]) -> Result<Vec<MetaFile>> {
+        crate::parallel_run(
+            paths,
+            self.concurrency,
+            |path| {
+                let url = join_url(base, path);
+                self.get_text(&url).and_then(|t| {
+                    toml::from_str::<MetaFile>(&t)
+                        .map_err(|e| PackwizError::toml(path.clone(), e))
+                })
+            },
+            |_, _, _| {},
+        )
+        .into_iter()
+        .collect()
     }
 
     fn get_bytes(&self, url: &str) -> Result<Vec<u8>> {
@@ -167,11 +193,14 @@ impl Installer {
         let index_text = self.get_text(&index_url)?;
         let index_hash = hex_digest("sha256", index_text.as_bytes());
 
+                                                let selection_matches =
+            flavors_match(&opts.flavors, &old.flavors) && optional_matches(&opts.optional, &old.optional);
         if !force
             && old.complete
             && !old.pack_version.is_empty()
             && old.pack_version == pack.version
             && old.index_hash == index_hash
+            && selection_matches
         {
             emit(progress, SyncStage::Done, 0, 0, "Modpack up to date");
             return Ok(old);
@@ -180,30 +209,79 @@ impl Installer {
         let index: Index =
             toml::from_str(&index_text).map_err(|e| PackwizError::toml("index.toml", e))?;
 
-        let metafile_total = index.files.iter().filter(|f| f.metafile).count() as u64;
-        let mut resolved_meta = 0u64;
+                                let unsup_toml = if opts.unsup {
+            if let Some(spec) = opts.public_key.as_deref().filter(|s| !s.trim().is_empty()) {
+                emit(progress, SyncStage::Fetching, 0, 0, "Verifying signature");
+                let key = crate::unsup::PublicKey::parse(spec)?;
+                let pack_bytes = self.get_bytes(&opts.pack_url)?;
+                let sig = self.get_bytes(&join_url(&base, "unsup.sig"))?;
+                if !key.verify(&pack_bytes, &sig) {
+                    return Err(PackwizError::Other(
+                        "unsup.sig does not match the configured public key — refusing to install"
+                            .to_string(),
+                    ));
+                }
+            }
+            match self.get_text(&join_url(&base, "unsup.toml")) {
+                Ok(text) => {
+                    toml::from_str(&text).map_err(|e| PackwizError::toml("unsup.toml", e))?
+                }
+                Err(_) => crate::unsup::UnsupToml::default(),
+            }
+        } else {
+            crate::unsup::UnsupToml::default()
+        };
+
+                let metafile_paths: Vec<String> = index
+            .files
+            .iter()
+            .filter(|f| f.metafile)
+            .map(|f| f.file.clone())
+            .collect();
+        emit(
+            progress,
+            SyncStage::Resolving,
+            0,
+            metafile_paths.len() as u64,
+            format!("Reading {} mods", metafile_paths.len()),
+        );
+        if cancel() {
+            return Err(PackwizError::Cancelled);
+        }
+        let mut metas: std::collections::HashMap<String, MetaFile> = metafile_paths
+            .iter()
+            .cloned()
+            .zip(self.fetch_metafiles(&base, &metafile_paths)?)
+            .collect();
+
         let mut plan: Vec<Planned> = Vec::with_capacity(index.files.len());
+                        let mut selected_optional: Vec<String> = Vec::new();
 
         for entry in &index.files {
             if cancel() {
                 return Err(PackwizError::Cancelled);
             }
             if entry.metafile {
-                resolved_meta += 1;
-                emit(
-                    progress,
-                    SyncStage::Resolving,
-                    resolved_meta,
-                    metafile_total,
-                    format!("Reading {}", file_stem(&entry.file)),
-                );
-                let meta_url = join_url(&base, &entry.file);
-                let meta_text = self.get_text(&meta_url)?;
-                let meta: MetaFile = toml::from_str(&meta_text)
-                    .map_err(|e| PackwizError::toml(entry.file.clone(), e))?;
+                let Some(meta) = metas.remove(&entry.file) else {
+                    continue;
+                };
 
                 if !opts.side.wants(&meta.side) {
                     continue;
+                }
+
+                if opts.unsup {
+                                                            let is_optional = meta.option.as_ref().map(|o| o.optional).unwrap_or(false);
+                    let flavors =
+                        crate::unsup::metafile_flavors_one(&unsup_toml, &entry.file, is_optional);
+                    if !crate::unsup::keep_metafile(&flavors, &opts.flavors) {
+                        continue;
+                    }
+                } else if let Some(opt) = meta.option.as_ref().filter(|o| o.optional) {
+                                        if !opts.optional.wants(&entry.file, opt.default) {
+                        continue;
+                    }
+                    selected_optional.push(entry.file.clone());
                 }
 
                 let dest = sibling_path(&entry.file, &meta.filename);
@@ -268,40 +346,48 @@ impl Installer {
             }
         }
 
-        let need: Vec<bool> = plan
-            .iter()
-            .map(|p| self.needs_download(opts, &old, p, force))
-            .collect();
-        let total = need.iter().filter(|n| **n).count() as u64;
-        let mut done = 0u64;
-        let mut failed: Vec<String> = Vec::new();
+                        let need: Vec<bool> = crate::parallel_run(
+            &plan,
+            self.concurrency,
+            |p| self.needs_download(opts, &old, p, force),
+            |_, _, _| {},
+        );
 
-        for (p, &needs) in plan.iter().zip(&need) {
-            if !needs {
-                continue;
-            }
-            if cancel() {
-                self.write_manifest(opts, &pack, &index_hash, &plan, &failed)?;
-                return Err(PackwizError::Cancelled);
-            }
-            done += 1;
-            emit(
-                progress,
-                SyncStage::Downloading,
-                done,
-                total,
-                format!("Downloading {}", file_stem(&p.dest)),
-            );
-            if let Err(e) = self.download_one(&opts.game_dir, p) {
-                failed.push(p.dest.clone());
+                let todo: Vec<usize> = (0..plan.len()).filter(|&i| need[i]).collect();
+        let total = todo.len() as u64;
+        let cancelled = AtomicBool::new(false);
+        let outcomes = crate::parallel_run(
+            &todo,
+            self.concurrency,
+            |&i| {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(None);                 }
+                self.download_one(&opts.game_dir, &plan[i])
+                    .map_err(|e| Some(short_error(&e)))
+            },
+            |done, total, j| {
+                if cancel() {
+                    cancelled.store(true, Ordering::Relaxed);
+                }
                 emit(
                     progress,
                     SyncStage::Downloading,
                     done,
                     total,
-                    format!("Skipped {} ({})", file_stem(&p.dest), short_error(&e)),
+                    format!("Downloading {}", file_stem(&plan[todo[j]].dest)),
                 );
+            },
+        );
+
+        let mut failed: Vec<String> = Vec::new();
+        for (j, outcome) in outcomes.iter().enumerate() {
+            if let Err(Some(_)) = outcome {
+                failed.push(plan[todo[j]].dest.clone());
             }
+        }
+        if cancelled.load(Ordering::Relaxed) {
+            self.write_manifest(opts, &pack, &index_hash, &plan, &failed, &selected_optional)?;
+            return Err(PackwizError::Cancelled);
         }
 
         let kept: BTreeSet<&str> = plan.iter().map(|p| p.dest.as_str()).collect();
@@ -325,7 +411,8 @@ impl Installer {
             }
         }
 
-        let manifest = self.write_manifest(opts, &pack, &index_hash, &plan, &failed)?;
+        let manifest =
+            self.write_manifest(opts, &pack, &index_hash, &plan, &failed, &selected_optional)?;
 
         let msg = if failed.is_empty() {
             "Modpack up to date".to_string()
@@ -334,6 +421,89 @@ impl Installer {
         };
         emit(progress, SyncStage::Done, total, total, msg);
         Ok(manifest)
+    }
+
+                pub fn inspect_optional(
+        &self,
+        pack_url: &str,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Vec<OptionalMod>> {
+        let pack = self.fetch_pack(pack_url)?;
+        let base = base_url(pack_url);
+        let index_url = join_url(&base, &pack.index.file);
+        let index_text = self.get_text(&index_url)?;
+        let index: Index =
+            toml::from_str(&index_text).map_err(|e| PackwizError::toml("index.toml", e))?;
+
+        let paths: Vec<String> = index
+            .files
+            .iter()
+            .filter(|f| f.metafile)
+            .map(|f| f.file.clone())
+            .collect();
+        if cancel() {
+            return Err(PackwizError::Cancelled);
+        }
+        let metas = self.fetch_metafiles(&base, &paths)?;
+
+        let mut out = Vec::new();
+        for (path, meta) in paths.iter().zip(metas) {
+            if !Side::Client.wants(&meta.side) {
+                continue;
+            }
+            if let Some(opt) = meta.option.as_ref().filter(|o| o.optional) {
+                out.push(OptionalMod {
+                    path: path.clone(),
+                    name: meta.name.clone(),
+                    description: opt.description.clone().filter(|d| !d.trim().is_empty()),
+                    default: opt.default,
+                    side: meta.side.clone(),
+                    category: top_dir(&sibling_path(path, &meta.filename)),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+                pub fn inspect_unsup(
+        &self,
+        pack_url: &str,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Vec<crate::unsup::FlavorGroup>> {
+        let pack = self.fetch_pack(pack_url)?;
+        let base = base_url(pack_url);
+        let index_url = join_url(&base, &pack.index.file);
+        let index_text = self.get_text(&index_url)?;
+        let index: Index =
+            toml::from_str(&index_text).map_err(|e| PackwizError::toml("index.toml", e))?;
+
+        let unsup_toml = if crate::unsup::detect(&pack).is_some() {
+            match self.get_text(&join_url(&base, "unsup.toml")) {
+                Ok(text) => {
+                    toml::from_str(&text).map_err(|e| PackwizError::toml("unsup.toml", e))?
+                }
+                Err(_) => crate::unsup::UnsupToml::default(),
+            }
+        } else {
+            crate::unsup::UnsupToml::default()
+        };
+
+        let paths: Vec<String> = index
+            .files
+            .iter()
+            .filter(|f| f.metafile)
+            .map(|f| f.file.clone())
+            .collect();
+        if cancel() {
+            return Err(PackwizError::Cancelled);
+        }
+        let metafiles: Vec<crate::unsup::MetafileRef> = paths
+            .iter()
+            .zip(self.fetch_metafiles(&base, &paths)?)
+            .map(|(path, meta)| crate::unsup::MetafileRef::new(path.clone(), &meta))
+            .collect();
+
+        Ok(crate::unsup::resolve(&unsup_toml, &metafiles).groups)
     }
 
     fn download_one(&self, game_dir: &Path, p: &Planned) -> Result<()> {
@@ -365,6 +535,7 @@ impl Installer {
         index_hash: &str,
         plan: &[Planned],
         failed: &[String],
+        optional: &[String],
     ) -> Result<Manifest> {
         let mut manifest = Manifest {
             pack_version: pack.version.clone(),
@@ -372,6 +543,12 @@ impl Installer {
             minecraft_version: pack.versions.minecraft.clone(),
             neoforge_version: pack.versions.neoforge.clone(),
             failed: failed.to_vec(),
+            optional: optional.to_vec(),
+            flavors: {
+                let mut f: Vec<String> = opts.flavors.iter().cloned().collect();
+                f.sort();
+                f
+            },
             ..Default::default()
         };
         let mut present = 0usize;
@@ -415,6 +592,19 @@ impl Installer {
 }
 
 
+fn flavors_match(requested: &std::collections::HashSet<String>, recorded: &[String]) -> bool {
+    requested.len() == recorded.len() && recorded.iter().all(|f| requested.contains(f))
+}
+
+fn optional_matches(requested: &crate::OptionalChoice, recorded: &[String]) -> bool {
+    match requested {
+        crate::OptionalChoice::Default => true,
+        crate::OptionalChoice::Explicit(set) => {
+            set.len() == recorded.len() && recorded.iter().all(|p| set.contains(p))
+        }
+    }
+}
+
 fn emit(
     progress: &mut dyn FnMut(SyncProgress),
     stage: SyncStage,
@@ -434,6 +624,16 @@ fn emit(
 pub struct PackwizBranch {
     pub name: String,
     pub pack_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptionalMod {
+        pub path: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub default: bool,
+    pub side: String,
+    pub category: String,
 }
 
 struct GithubRepo {
@@ -609,5 +809,22 @@ fn verify_hash(file: &str, format: &str, expected: &str, data: &[u8]) -> Result<
             expected: expected.to_string(),
             actual,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+            #[test]
+    #[ignore = "network: inspects the real BlanketCon 25 unsup pack"]
+    fn inspect_unsup_against_real_pack() {
+        let url = "https://raw.githubusercontent.com/ModFest/blanketcon-25/HEAD/pack/pack.toml";
+        let groups = Installer::new().inspect_unsup(url, &|| false).unwrap();
+                assert!(groups.iter().any(|g| g.id == "axiom"));
+        assert!(groups.iter().any(|g| g.id == "worldedit"));
+        let axiom = groups.iter().find(|g| g.id == "axiom").unwrap();
+        assert!(axiom.choices.iter().any(|c| c.id == "axiom_accept"));
+        assert!(!axiom.is_boolean(), "named multi-choice group, not a toggle");
     }
 }

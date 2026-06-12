@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useClosable } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 type Level = "error" | "warn" | "info" | "debug" | "default";
 
@@ -47,33 +48,77 @@ export function LogViewer({
   onUpload: () => void;
   onClose: () => void;
 }) {
-  const [text, setText] = useState<string | null>(null);
+  const t = useT();
+  
+  
+  const MAX_LINES = 5000;
+  const [lines, setLines] = useState<{ id: number; text: string }[]>([]);
+  
+  const [tail, setTail] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [follow, setFollow] = useState(true);
   const [query, setQuery] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef(0);
+  const idRef = useRef(0);
+  const carryRef = useRef("");
   const { closing, close } = useClosable(onClose);
 
+  
+  
+  
   useEffect(() => {
     let alive = true;
-    const tick = () =>
-      api
-        .readLog(instanceId)
-        .then((t) => alive && setText(t))
-        .catch(() => {});
+    offsetRef.current = 0;
+    idRef.current = 0;
+    carryRef.current = "";
+    setLines([]);
+    setTail("");
+    setLoaded(false);
+
+    const tick = async () => {
+      try {
+        const res = await api.tailLog(instanceId, offsetRef.current);
+        if (!alive) return;
+        offsetRef.current = res.offset;
+        const combined = (res.reset ? "" : carryRef.current) + res.content;
+        const parts = combined.split("\n");
+        carryRef.current = parts.pop() ?? "";
+        if (res.reset) idRef.current = 0;
+        if (res.reset || parts.length) {
+          const completed = parts.map((t) => ({ id: idRef.current++, text: t }));
+          setLines((prev) => {
+            const start = res.reset ? [] : prev;
+            const next = completed.length ? start.concat(completed) : start;
+            return next.length > MAX_LINES
+              ? next.slice(next.length - MAX_LINES)
+              : next;
+          });
+        }
+        setTail(carryRef.current);
+        setLoaded(true);
+      } catch {
+        if (alive) setLoaded(true);
+      }
+    };
+
     tick();
-    const h = live ? setInterval(tick, 1500) : undefined;
+    const h = live ? setInterval(tick, 250) : undefined;
     return () => {
       alive = false;
       if (h) clearInterval(h);
     };
   }, [instanceId, live]);
 
-  const lines = useMemo(() => (text ? text.split("\n") : []), [text]);
   const q = query.trim().toLowerCase();
+  const all = useMemo(
+    () => (tail ? [...lines, { id: -1, text: tail }] : lines),
+    [lines, tail],
+  );
   const shown = useMemo(
-    () => (q ? lines.filter((l) => l.toLowerCase().includes(q)) : lines),
-    [lines, q],
+    () => (q ? all.filter((l) => l.text.toLowerCase().includes(q)) : all),
+    [all, q],
   );
 
   useEffect(() => {
@@ -87,8 +132,14 @@ export function LogViewer({
     return () => document.removeEventListener("keydown", onKey);
   }, [close]);
 
-  const copy = () => {
-    if (text) api.copyText(text);
+  const copy = async () => {
+    
+    try {
+      const full = await api.readLog(instanceId);
+      api.copyText(full);
+    } catch {
+      api.copyText(shown.map((l) => l.text).join("\n"));
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -105,12 +156,12 @@ export function LogViewer({
           <div className="flex shrink-0 items-center gap-2">
             <ScrollText size={17} className="text-brass-400" />
             <h2 className="font-mc text-base tracking-wide text-gray-100">
-              {live ? "Live logs" : "Last session log"}
+              {live ? t("logViewer.liveLogs") : t("logViewer.lastSessionLog")}
             </h2>
             {live && (
               <span className="flex items-center gap-1.5 rounded-full bg-patina-500/15 px-2 py-0.5 text-[10px] text-patina-300">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-patina-400" />
-                live
+                {t("logViewer.liveBadge")}
               </span>
             )}
           </div>
@@ -123,13 +174,13 @@ export function LogViewer({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search logs…"
+              placeholder={t("logViewer.searchPlaceholder")}
               className="w-full rounded-md bg-ink-950/60 py-1.5 pl-8 pr-3 text-xs outline-none ring-1 ring-edge focus:ring-brass-500/60"
               spellCheck={false}
             />
             {q && (
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] tabular-nums text-ink-600">
-                {shown.length} match{shown.length === 1 ? "" : "es"}
+                {t("logViewer.matches", { count: shown.length })}
               </span>
             )}
           </div>
@@ -137,17 +188,17 @@ export function LogViewer({
           <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={() => api.openDir(instanceId, "logs").catch(() => {})}
-              title="Open the logs folder"
+              title={t("logViewer.openFolder")}
               className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
-              <FolderOpen size={13} /> Folder
+              <FolderOpen size={13} /> {t("mods.folder")}
             </button>
             <button
               onClick={copy}
               className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
               {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? "Copied" : "Copy"}
+              {copied ? t("screenshots.copiedLabel") : t("screenshots.copy")}
             </button>
             <button
               onClick={onUpload}
@@ -159,7 +210,7 @@ export function LogViewer({
               ) : (
                 <FileUp size={13} />
               )}
-              Upload to mclo.gs
+              {t("logViewer.uploadMclogs")}
             </button>
             <button
               onClick={close}
@@ -178,23 +229,23 @@ export function LogViewer({
           }}
           className="selectable flex-1 overflow-auto bg-ink-950/60 px-4 py-3 font-mono text-[12px] leading-relaxed"
         >
-          {text === null ? (
-            <span className="text-ink-600">Loading…</span>
-          ) : lines.length === 0 || (lines.length === 1 && lines[0] === "") ? (
+          {!loaded ? (
+            <span className="text-ink-600">{t("common.loading")}</span>
+          ) : all.length === 0 ? (
             <span className="text-ink-600">
-              No log found for this session yet.
+              {t("logViewer.noLog")}
             </span>
           ) : shown.length === 0 ? (
-            <span className="text-ink-600">No lines match “{query}”.</span>
+            <span className="text-ink-600">{t("logViewer.noMatch", { query })}</span>
           ) : (
-            shown.map((line, i) => (
+            shown.map((line) => (
               <div
-                key={i}
+                key={line.id}
                 className={`whitespace-pre-wrap break-words ${
-                  LEVEL_CLASS[lineLevel(line)]
+                  LEVEL_CLASS[lineLevel(line.text)]
                 }`}
               >
-                {line || " "}
+                {line.text || " "}
               </div>
             ))
           )}

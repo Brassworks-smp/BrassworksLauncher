@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, CornerDownLeft, Command as CommandIcon } from "lucide-react";
 import { useClosable } from "./ui";
+import { useT } from "@/lib/i18n";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
@@ -33,10 +34,7 @@ function score(query: string, text: string): number {
   return s;
 }
 
-/**
- * ⌘K command palette — fuzzy search over navigation + actions, with slash
- * commands (type `/` to jump straight to an action) and full keyboard control.
- */
+
 export function CommandPalette({
   commands,
   onClose,
@@ -44,6 +42,7 @@ export function CommandPalette({
   commands: Command[];
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose, 140);
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
@@ -119,7 +118,7 @@ export function CommandPalette({
           <Search size={16} className="shrink-0 text-ink-600" />
           {slash && (
             <span className="shrink-0 rounded bg-brass-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brass-300">
-              Actions
+              {t("commandPalette.actions")}
             </span>
           )}
           <input
@@ -127,7 +126,7 @@ export function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Search commands, or type / for actions…"
+            placeholder={t("commandPalette.searchPlaceholder")}
             className="flex-1 bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-600"
             spellCheck={false}
           />
@@ -139,7 +138,7 @@ export function CommandPalette({
         <div ref={listRef} className="flex-1 overflow-y-auto py-2">
           {results.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-ink-600">
-              No commands match “{query}”.
+              {t("commandPalette.noMatch", { query })}
             </div>
           ) : (
             groups.map((g) => (
@@ -188,16 +187,16 @@ export function CommandPalette({
         <div className="flex items-center gap-3 border-t border-edge px-4 py-2 text-[10px] text-ink-600">
           <span className="flex items-center gap-1">
             <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> navigate
+            <Kbd>↓</Kbd> {t("commandPalette.navigate")}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>↵</Kbd> select
+            <Kbd>↵</Kbd> {t("commandPalette.select")}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>esc</Kbd> close
+            <Kbd>esc</Kbd> {t("commandPalette.close")}
           </span>
           <span className="ml-auto flex items-center gap-1">
-            <Kbd>/</Kbd> actions
+            <Kbd>/</Kbd> {t("commandPalette.actionsHint")}
           </span>
         </div>
       </div>

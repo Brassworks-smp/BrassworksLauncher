@@ -1,4 +1,3 @@
-
 #[derive(Debug, thiserror::Error)]
 pub enum PackwizError {
     #[error("network error: {0}")]

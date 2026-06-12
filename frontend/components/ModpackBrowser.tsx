@@ -1,30 +1,58 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Loader2, Download, ChevronLeft, Package, ExternalLink } from "lucide-react";
+import {
+  Search,
+  Loader2,
+  Download,
+  ChevronLeft,
+  Package,
+  ExternalLink,
+  Star,
+} from "lucide-react";
 import * as api from "@/lib/api";
-import type { SearchHit, ContentVersion, ProjectDetail } from "@/lib/types";
+import type {
+  SearchHit,
+  ContentVersion,
+  ProjectDetail,
+  FeaturedPack,
+} from "@/lib/types";
 import { Markdown } from "@/components/Markdown";
 import { VersionList } from "@/components/VersionList";
 import { ResultRow, SourceBadge, useInfiniteSearch, SEARCH_PAGE } from "@/components/Browse";
+import { useT } from "@/lib/i18n";
 
-/**
- * Search + pick a Modrinth / CurseForge modpack, read its README and per-version
- * changelog, and choose a version to install. Installation itself is handled by
- * the parent (`onInstall`), which owns the progress + completion events.
- *
- * Shares the result row + infinite-scroll behaviour with the content browser
- * (see {@link useInfiniteSearch} / {@link ResultRow}).
- */
+
 export function ModpackBrowser({
   source,
   detailInstanceId,
   installing,
   onInstall,
+  featured = [],
+  featuredEnabled = true,
+  onOpenFeatured,
+  onEnableFeatured,
 }: {
   source: "modrinth" | "curseforge";
   detailInstanceId: string | null;
   installing: boolean;
   onInstall: (projectId: string, versionId: string, name: string) => void;
+  
+  featured?: FeaturedPack[];
+  featuredEnabled?: boolean;
+  
+  onOpenFeatured?: (id: string) => void;
+  
+  onEnableFeatured?: () => void;
 }) {
+  const t = useT();
+  const matchFeatured = useCallback(
+    (hit: SearchHit): FeaturedPack | undefined =>
+      featured.find((fp) =>
+        (hit.source === "modrinth" ? fp.modrinth_ids : fp.curseforge_ids).includes(
+          hit.project_id,
+        ),
+      ),
+    [featured],
+  );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SearchHit | null>(null);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
@@ -64,7 +92,7 @@ export function ModpackBrowser({
           onClick={() => setSelected(null)}
           className="flex shrink-0 items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
         >
-          <ChevronLeft size={14} /> Back to results
+          <ChevronLeft size={14} /> {t("modpackBrowser.backToResults")}
         </button>
         <div className="flex items-center gap-3">
           {selected.icon_url ? (
@@ -86,8 +114,10 @@ export function ModpackBrowser({
               <SourceBadge source={selected.source} />
             </div>
             <div className="truncate text-xs text-ink-600">
-              by {selected.author} · {selected.downloads.toLocaleString()}{" "}
-              downloads
+              {t("modpackBrowser.byAuthor", {
+                author: selected.author,
+                downloads: selected.downloads.toLocaleString(),
+              })}
             </div>
           </div>
         </div>
@@ -99,6 +129,37 @@ export function ModpackBrowser({
         <div key={showVersions ? "versions" : "overview"} className="swap-in flex min-h-0 flex-1 flex-col gap-3">
         {!showVersions ? (
           <>
+            {(() => {
+              const fp = matchFeatured(selected);
+              if (!fp || !onOpenFeatured) return null;
+              return (
+                <div className="shrink-0 rounded-lg border border-brass-600/40 bg-brass-500/[0.06] p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-brass-300">
+                    <Star size={12} className="fill-brass-300" /> {t("play.featuredPack")}
+                  </div>
+                  <p className="mt-1 text-[12px] text-ink-500">
+                    {t("modpackBrowser.featuredDesc1")}
+                    <span className="text-gray-200">{fp.name}</span>
+                    {t("modpackBrowser.featuredDesc2")}
+                    {!featuredEnabled && t("modpackBrowser.featuredOff")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        if (!featuredEnabled) onEnableFeatured?.();
+                        onOpenFeatured(fp.id);
+                      }}
+                      className="flex items-center gap-1.5 rounded-md bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400"
+                    >
+                      <Star size={12} />
+                      {featuredEnabled
+                        ? t("modpackBrowser.openFeatured")
+                        : t("modpackBrowser.enableAndOpen")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="flex items-center gap-2">
               <button
                 disabled={!versions || versions.length === 0}
@@ -110,12 +171,12 @@ export function ModpackBrowser({
                 ) : (
                   <Download size={16} />
                 )}
-                Install - choose a version
+                {t("modpackBrowser.installChooseVersion")}
               </button>
               {detail?.url && (
                 <button
                   onClick={() => api.openExternal(detail.url!).catch(() => {})}
-                  title="Open page"
+                  title={t("modpackBrowser.openPage")}
                   className="grid h-10 w-10 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
                 >
                   <ExternalLink size={15} />
@@ -134,7 +195,7 @@ export function ModpackBrowser({
               onClick={() => setShowVersions(false)}
               className="flex shrink-0 items-center gap-1 self-start text-xs text-ink-600 hover:text-brass-300"
             >
-              <ChevronLeft size={14} /> Back to overview
+              <ChevronLeft size={14} /> {t("modpackBrowser.backToOverview")}
             </button>
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <VersionList
@@ -142,7 +203,7 @@ export function ModpackBrowser({
                 projectId={selected.project_id}
                 source={source}
                 versions={versions ?? []}
-                actionLabel={installing ? "Installing…" : "Install"}
+                actionLabel={installing ? t("versionList.installing") : t("mods.install")}
                 busy={installing}
                 onPick={(vid) => onInstall(selected.project_id, vid, selected.title)}
               />
@@ -161,7 +222,7 @@ export function ModpackBrowser({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search ${api.sourceLabel(source)} modpacks…`}
+          placeholder={t("modpackBrowser.searchPlaceholder", { source: api.sourceLabel(source) })}
           className="flex-1 bg-transparent py-2 text-sm outline-none"
         />
         {(loading || loadingMore) && (
@@ -179,6 +240,7 @@ export function ModpackBrowser({
           <ResultRow
             key={`${h.source}:${h.project_id}`}
             hit={h}
+            featured={!!matchFeatured(h)}
             showSource
             onOpen={() => setSelected(h)}
           />
@@ -190,12 +252,12 @@ export function ModpackBrowser({
         )}
         {!loading && hits.length === 0 && (
           <div className="py-6 text-center text-xs text-ink-600">
-            {query ? "No modpacks found." : "Loading popular modpacks…"}
+            {query ? t("modpackBrowser.noResults") : t("modpackBrowser.loadingPopular")}
           </div>
         )}
         {!hasMore && hits.length >= SEARCH_PAGE && (
           <div className="py-3 text-center text-[11px] text-ink-600">
-            End of results
+            {t("addContent.endOfResults")}
           </div>
         )}
       </div>

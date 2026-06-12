@@ -1,4 +1,3 @@
-
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
@@ -41,7 +40,29 @@ pub(crate) fn get_settings(state: State<AppState>) -> CmdResult<LauncherSettings
 
 #[tauri::command]
 pub(crate) fn save_settings(state: State<AppState>, settings: LauncherSettings) -> CmdResult<()> {
-    state.launcher.save_settings(&settings).map_err(err)
+    let was_on = state.launcher.settings().map(|s| s.discord_rpc).unwrap_or(true);
+    state.launcher.save_settings(&settings).map_err(err)?;
+            if was_on != settings.discord_rpc {
+        if settings.discord_rpc {
+            let in_game = state.running.lock().map(|r| !r.is_empty()).unwrap_or(false);
+            if !in_game {
+                state.discord.set_idle();
+            }
+        } else {
+            state.discord.clear();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn default_settings() -> LauncherSettings {
+    LauncherSettings::default()
+}
+
+#[tauri::command]
+pub(crate) fn featured_packs() -> Vec<brassworks_core::FeaturedPack> {
+    brassworks_core::featured_packs()
 }
 
 
@@ -60,12 +81,36 @@ pub(crate) fn remove_account(state: State<AppState>, id: String) -> CmdResult<Ac
     state.launcher.remove_account(&id).map_err(err)
 }
 
+#[tauri::command]
+pub(crate) fn add_offline_account(
+    state: State<AppState>,
+    username: String,
+) -> CmdResult<AccountStore> {
+    state.launcher.add_offline_account(username).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn account_status(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<brassworks_core::AccountStatus> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.account_status(&id)))
+        .await
+        .map_err(err)?
+}
+
 #[derive(Clone, Serialize)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum AuthEvent {
     Code(MicrosoftCode),
     Done { store: AccountStore },
     Error { message: String },
+}
+
+#[tauri::command]
+pub(crate) fn clear_ms_login_cookies(app: AppHandle) -> CmdResult<()> {
+    crate::auth_window::clear_ms_login_cookies(&app).map_err(err)
 }
 
 #[tauri::command]
@@ -576,6 +621,15 @@ pub(crate) fn read_log(state: State<AppState>, instance_id: String) -> CmdResult
 }
 
 #[tauri::command]
+pub(crate) fn tail_log(
+    state: State<AppState>,
+    instance_id: String,
+    offset: u64,
+) -> CmdResult<brassworks_core::LogTail> {
+    Ok(state.launcher.tail_log(&instance_id, offset))
+}
+
+#[tauri::command]
 pub(crate) async fn upload_log(
     state: State<'_, AppState>,
     instance_id: String,
@@ -878,14 +932,99 @@ pub(crate) fn create_custom_instance(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_packwiz_instance(
     state: State<'_, AppState>,
     name: String,
     url: String,
+    optional: Option<Vec<String>>,
+    unsup: Option<bool>,
+    flavors: Option<Vec<String>>,
+    public_key: Option<String>,
 ) -> CmdResult<Instance> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher.create_packwiz_instance(&name, &url).map_err(err)
+        launcher
+            .create_packwiz_instance(
+                &name,
+                &url,
+                optional.unwrap_or_default(),
+                unsup.unwrap_or(false),
+                flavors.unwrap_or_default(),
+                public_key,
+            )
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_packwiz_flavors(
+    state: State<'_, AppState>,
+    url: String,
+) -> CmdResult<Vec<brassworks_core::FlavorGroup>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.inspect_packwiz_flavors(&url, &|| false).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn set_packwiz_flavors(
+    state: State<'_, AppState>,
+    id: String,
+    flavors: Vec<String>,
+) -> CmdResult<Instance> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.set_packwiz_flavors(&id, flavors).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_modpack(
+    state: State<'_, AppState>,
+    source: String,
+    project_id: String,
+    version_id: String,
+) -> CmdResult<Vec<brassworks_core::packs::OptionalComponent>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .inspect_modpack(&source, &project_id, &version_id)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_modpack_file(
+    state: State<'_, AppState>,
+    file_path: String,
+    source: String,
+) -> CmdResult<Vec<brassworks_core::packs::OptionalComponent>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.inspect_modpack_file(&file_path, &source).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_packwiz(
+    state: State<'_, AppState>,
+    url: String,
+) -> CmdResult<Vec<brassworks_core::packs::OptionalComponent>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.inspect_packwiz(&url, &|| false).map_err(err)
     })
     .await
     .map_err(err)?
@@ -1022,6 +1161,7 @@ pub(crate) fn install_modpack(
     project_id: String,
     version_id: String,
     name: String,
+    optional: Option<Vec<String>>,
 ) -> CmdResult<()> {
     let launcher = state.launcher.clone();
     let cancel_flag = state.arm_cancel("__install__");
@@ -1044,6 +1184,7 @@ pub(crate) fn install_modpack(
             &project_id,
             &version_id,
             &name,
+            optional.unwrap_or_default(),
             &cancel,
             &mut on_created,
             &mut sink,
@@ -1080,6 +1221,7 @@ pub(crate) fn install_modpack_file(
     file_path: String,
     source: String,
     name: String,
+    optional: Option<Vec<String>>,
 ) -> CmdResult<()> {
     let launcher = state.launcher.clone();
     let cancel_flag = state.arm_cancel("__install__");
@@ -1097,59 +1239,15 @@ pub(crate) fn install_modpack_file(
         let mut on_created = move |inst: &Instance| {
             let _ = started_app.emit("pack://started", inst);
         };
-        let result = launcher
-            .install_modpack_file(&file_path, &source, &name, &cancel, &mut on_created, &mut sink);
-        if let Ok(mut map) = cancels.lock() {
-            map.remove("__install__");
-        }
-        let done = match result {
-            Ok(instance) => PackDone {
-                instance: Some(instance),
-                error: None,
-                cancelled: false,
-            },
-            Err(e) if e.is_cancelled() => PackDone {
-                instance: None,
-                error: None,
-                cancelled: true,
-            },
-            Err(e) => PackDone {
-                instance: None,
-                error: Some(e.to_string()),
-                cancelled: false,
-            },
-        };
-        let _ = app.emit("pack://done", done);
-    });
-    Ok(())
-}
-
-#[tauri::command]
-pub(crate) fn install_modpack_bytes(
-    app: AppHandle,
-    state: State<AppState>,
-    data: Vec<u8>,
-    source: String,
-    name: String,
-) -> CmdResult<()> {
-    let launcher = state.launcher.clone();
-    let cancel_flag = state.arm_cancel("__install__");
-    let cancels = state.cancels.clone();
-    std::thread::spawn(move || {
-        let progress_app = app.clone();
-        let mut sink = move |sp: SyncProgress| {
-            emit_pack_progress(&progress_app, "pack://progress", "__install__", sp)
-        };
-        let cancel = {
-            let flag = cancel_flag.clone();
-            move || flag.load(Ordering::Relaxed)
-        };
-        let started_app = app.clone();
-        let mut on_created = move |inst: &Instance| {
-            let _ = started_app.emit("pack://started", inst);
-        };
-        let result =
-            launcher.install_modpack_data(data, &source, &name, &cancel, &mut on_created, &mut sink);
+        let result = launcher.install_modpack_file(
+            &file_path,
+            &source,
+            &name,
+            optional.unwrap_or_default(),
+            &cancel,
+            &mut on_created,
+            &mut sink,
+        );
         if let Ok(mut map) = cancels.lock() {
             map.remove("__install__");
         }
@@ -1222,10 +1320,13 @@ pub(crate) fn delete_java_runtime(state: State<AppState>, path: String) -> CmdRe
 }
 
 #[tauri::command]
-pub(crate) fn list_java_runtimes(
-    state: State<AppState>,
+pub(crate) async fn list_java_runtimes(
+    state: State<'_, AppState>,
 ) -> CmdResult<Vec<brassworks_core::JavaInstall>> {
-    Ok(state.launcher.java_runtimes())
+                let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.java_runtimes()))
+        .await
+        .map_err(err)?
 }
 
 #[tauri::command]

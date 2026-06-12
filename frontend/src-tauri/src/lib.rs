@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use brassworks_core::Launcher;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 use discord::Discord;
 use state::AppState;
@@ -62,9 +62,90 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Build the native application menu (macOS menu bar / Linux window menu). The
+/// "About" item and the Go-menu navigation entries emit `menu://action` events to
+/// the webview so the frontend can react (open About, switch tab, etc.). Edit and
+/// Window menus use predefined items so standard shortcuts (copy/paste/minimise)
+/// behave natively.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{MenuBuilder, SubmenuBuilder};
+
+    let app_menu = SubmenuBuilder::new(app, "Brassworks")
+        .text("about", "About Brassworks Launcher")
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let go_menu = SubmenuBuilder::new(app, "Go")
+        .text("nav-play", "Play")
+        .text("nav-instances", "Instances")
+        .text("nav-mods", "Content")
+        .text("nav-worlds", "Worlds")
+        .text("nav-servers", "Servers")
+        .text("nav-skin", "Skins")
+        .text("nav-screenshots", "Screenshots")
+        .text("nav-settings", "Settings")
+        .separator()
+        .text("palette", "Command Palette…")
+        .text("add-instance", "Add Instance…")
+        .text("view-log", "View Last Log")
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .maximize()
+        .separator()
+        .fullscreen()
+        .build()?;
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&app_menu, &edit_menu, &go_menu, &window_menu])
+        .build()?;
+
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        let id = event.id().as_ref();
+        if matches!(
+            id,
+            "about"
+                | "palette"
+                | "add-instance"
+                | "view-log"
+                | "nav-play"
+                | "nav-instances"
+                | "nav-mods"
+                | "nav-worlds"
+                | "nav-servers"
+                | "nav-skin"
+                | "nav-screenshots"
+                | "nav-settings"
+        ) {
+            let _ = app.emit("menu://action", id.to_string());
+        }
+    });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init());
 
     #[cfg(desktop)]
     {
@@ -93,6 +174,9 @@ pub fn run() {
 
             setup_tray(app.handle())?;
 
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            setup_menu(app.handle())?;
+
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
                 window.on_window_event(move |event| {
@@ -120,9 +204,14 @@ pub fn run() {
             commands::update_instance,
             commands::get_settings,
             commands::save_settings,
+            commands::default_settings,
+            commands::featured_packs,
             commands::get_accounts,
             commands::select_account,
             commands::remove_account,
+            commands::account_status,
+            commands::add_offline_account,
+            commands::clear_ms_login_cookies,
             commands::start_microsoft_login,
             commands::get_running,
             commands::launch,
@@ -152,6 +241,7 @@ pub fn run() {
             commands::open_file,
             commands::set_modpack_locked,
             commands::read_log,
+            commands::tail_log,
             commands::upload_log,
             commands::open_dir,
             commands::java_info,
@@ -167,6 +257,8 @@ pub fn run() {
             commands::set_active_instance,
             commands::create_custom_instance,
             commands::create_packwiz_instance,
+            commands::inspect_packwiz_flavors,
+            commands::set_packwiz_flavors,
             commands::list_packwiz_branches,
             commands::switch_packwiz_branch,
             commands::scan_importable,
@@ -177,7 +269,9 @@ pub fn run() {
             commands::modpack_versions,
             commands::install_modpack,
             commands::install_modpack_file,
-            commands::install_modpack_bytes,
+            commands::inspect_modpack,
+            commands::inspect_modpack_file,
+            commands::inspect_packwiz,
             commands::update_modpack,
             commands::open_instance_dir,
             commands::reveal_path,

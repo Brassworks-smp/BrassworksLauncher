@@ -91,6 +91,28 @@
     overflow: hidden;
   }
 
+  /* ---- Accessibility: every interactive control shows the hand cursor on
+     hover. Native <button>/<a>/<summary> plus anything tagged with an
+     interactive role or onClick-driven role=button. Disabled controls get the
+     not-allowed cursor so the disabled state reads clearly. */
+  button,
+  a[href],
+  summary,
+  label[for],
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="switch"],
+  [role="link"] {
+    cursor: pointer;
+  }
+  button:disabled,
+  button[disabled],
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   /* ---- Light mode: remap the dark ink scale to light surfaces. Every
      `bg-ink-*` / `text-ink-*` utility resolves through these vars, so flipping
      them here recolors the whole app while keeping the brass/patina accents. */
@@ -135,6 +157,54 @@
     background: #4a4f56;
   }
 
+  /* ---- Ocean: a cool blue-grey dark theme. */
+  :root.theme-ocean {
+    --color-fg: #e6edf3;
+    --color-ink-950: #0d1117;
+    --color-ink-900: #11161d; /* body background */
+    --color-ink-850: #161d26;
+    --color-ink-800: #1c2530;
+    --color-ink-700: #2a3340;
+    --color-ink-600: #8b97a6; /* muted text */
+    --color-edge: rgba(120, 165, 215, 0.13);
+  }
+  :root.theme-ocean body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Mocha: a warm brown-grey dark theme. */
+  :root.theme-mocha {
+    --color-fg: #ede3da;
+    --color-ink-950: #1a1411;
+    --color-ink-900: #211a15; /* body background */
+    --color-ink-850: #29201a;
+    --color-ink-800: #322820;
+    --color-ink-700: #40342a;
+    --color-ink-600: #a8998b; /* muted text */
+    --color-edge: rgba(255, 225, 200, 0.11);
+  }
+  :root.theme-mocha body {
+    color: var(--color-fg);
+  }
+
+  /* ---- High-contrast mode: an accessibility *overlay* applied on top of any
+     theme (it comes after the theme blocks so its edge/fg wins). Pumps border
+     visibility and text brightness. The light variant has higher specificity so
+     it correctly flips to dark-on-light regardless of source order. */
+  :root.theme-contrast {
+    --color-fg: #ffffff;
+    --color-ink-600: #cfcfcf;
+    --color-edge: rgba(255, 255, 255, 0.45);
+  }
+  :root.theme-contrast body {
+    color: var(--color-fg);
+  }
+  :root.theme-light.theme-contrast {
+    --color-fg: #000000;
+    --color-ink-600: #262626;
+    --color-edge: rgba(0, 0, 0, 0.5);
+  }
+
   /* ---- Reduced motion: drop decorative animations/transitions, keep spinners. */
   :root.reduce-motion *:not(.animate-spin),
   :root.reduce-motion *:not(.animate-spin)::before,
@@ -149,6 +219,13 @@
     -webkit-user-select: none;
     user-select: none;
     -webkit-user-drag: none;
+  }
+  /* …but elements that explicitly opt into HTML5 drag-and-drop must be allowed
+     to drag. On WebKit the `*` rule above otherwise vetoes `draggable="true"`,
+     which silently breaks all in-app drag-and-drop (e.g. dragging instance
+     cards into folders). `element` makes the node drag as a single unit. */
+  [draggable="true"] {
+    -webkit-user-drag: element;
   }
   input,
   textarea,
@@ -175,6 +252,16 @@
 }
 
 @layer utilities {
+  /* Global tooltip bubble entrance (see components/Tooltip.tsx) */
+  .tip-fade {
+    animation: tip-fade 110ms ease-out;
+  }
+  @keyframes tip-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
   .drag {
     -webkit-app-region: drag;
   }
@@ -434,6 +521,24 @@
    the stagger delays too so reduced-motion users don't see items held hidden. */
 :root.reduce-motion .stagger > * {
   animation-delay: 0s !important;
+}
+
+/* Density swap: a quick, snappy scale+fade for the whole instance grid when
+   toggling between comfortable and compact cards. Kept short so it's smooth but
+   never in the way. The grids are keyed on the density so this replays on each
+   toggle; their `.stagger` children cascade in underneath for a layered feel. */
+@keyframes density-swap {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.density-swap {
+  animation: density-swap 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Hover-lift: a gentle float for clickable cards/tiles. Pairs with the existing

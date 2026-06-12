@@ -85,6 +85,12 @@ impl Installer {
         } = *self;
 
         let version = match version {
+            Version::Name(name) if loader == Loader::Forge => {
+                Repo::request(loader)
+                    .ok()
+                    .and_then(|repo| repo.resolve_forge_name(name))
+                    .unwrap_or_else(|| name.clone())
+            }
             Version::Name(name) => name.clone(),
             Version::Stable(game_version) |
             Version::Unstable(game_version) => {
@@ -466,6 +472,28 @@ impl Repo {
 
     pub fn find_by_name(&self, name: &str) -> Option<RepoVersion<'_>> {
         self.iter().find(|v| v.name() == name)
+    }
+
+    pub fn resolve_forge_name(&self, name: &str) -> Option<String> {
+        if self.neoforge {
+            return None;
+        }
+        if self.find_by_name(name).is_some() {
+            return Some(name.to_string());
+        }
+        let with_dash = format!("{name}-");
+        for v in self.iter() {
+            let full = v.name();
+            if full.starts_with(&with_dash) {
+                return Some(full.to_string());
+            }
+            if let Some((_, rest)) = full.split_once('-') {
+                if rest == name || rest.starts_with(&with_dash) {
+                    return Some(full.to_string());
+                }
+            }
+        }
+        None
     }
 
     pub fn find_latest(&self, game_version: &str, stable: bool) -> Option<RepoVersion<'_>> {

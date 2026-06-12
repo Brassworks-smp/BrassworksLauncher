@@ -1,12 +1,14 @@
-
 use std::collections::HashMap;
 
 use packwiz::{sha512_hex, FileRecord, Manifest, Modrinth};
 use serde::Deserialize;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use super::{
-    already_current, cleanup_stale, extract_overrides, note, open_zip, read_entry_string,
-    record_content, write_tracked, PackResult, Progress, SyncProgress, SyncStage,
+    already_current, cleanup_stale, extract_overrides, note, open_zip, prettify_name,
+    read_entry_string, record_content, side_label, write_bytes, FileOutcome, OptionalComponent,
+    OptionalSet, PackResult, Progress, SyncProgress, SyncStage,
 };
 use crate::error::{CoreError, Result};
 use crate::instance::LoaderKind;
@@ -39,10 +41,24 @@ struct Hashes {
     sha512: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Env {
     #[serde(default)]
     client: String,
+    #[serde(default)]
+    server: String,
+}
+
+impl IndexFile {
+        fn is_optional(&self) -> bool {
+        self.env
+            .as_ref()
+            .is_some_and(|e| e.client == "optional" || e.server == "optional")
+    }
+
+        fn unsupported_on_client(&self) -> bool {
+        self.env.as_ref().is_some_and(|e| e.client == "unsupported")
+    }
 }
 
 fn detect_loader(deps: &HashMap<String, String>) -> (LoaderKind, Option<String>) {
@@ -59,25 +75,56 @@ fn detect_loader(deps: &HashMap<String, String>) -> (LoaderKind, Option<String>)
     (LoaderKind::Vanilla, None)
 }
 
+pub fn inspect_bytes(bytes: Vec<u8>) -> Result<Vec<OptionalComponent>> {
+    let mut archive = open_zip(bytes)?;
+    let index: Index = serde_json::from_str(&read_entry_string(&mut archive, "modrinth.index.json")?)
+        .map_err(|e| CoreError::Modpack(format!("parse modrinth.index.json: {e}")))?;
+    Ok(index
+        .files
+        .iter()
+        .filter(|f| f.is_optional())
+        .map(|f| {
+            let env = f.env.as_ref();
+            OptionalComponent {
+                id: f.path.clone(),
+                name: prettify_name(&f.path),
+                description: None,
+                default: false,
+                side: side_label(
+                    env.map(|e| e.client.as_str()).unwrap_or(""),
+                    env.map(|e| e.server.as_str()).unwrap_or(""),
+                ),
+                category: f.path.split('/').next().unwrap_or("mods").to_string(),
+            }
+        })
+        .collect())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn sync(
     paths: &Paths,
     instance_id: &str,
     mrpack_url: &str,
     version_id: &str,
+    optional: &OptionalSet,
+    concurrency: usize,
     modrinth: &Modrinth,
     cancel: &dyn Fn() -> bool,
     progress: Progress,
 ) -> Result<PackResult> {
     note(progress, SyncStage::Fetching, "Downloading modpack");
     let bytes = modrinth.download(mrpack_url)?;
-    install_bytes(paths, instance_id, version_id, bytes, modrinth, cancel, progress)
+    install_bytes(paths, instance_id, version_id, bytes, optional, concurrency, modrinth, cancel, progress)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn install_bytes(
     paths: &Paths,
     instance_id: &str,
     version_id: &str,
     bytes: Vec<u8>,
+    optional: &OptionalSet,
+    concurrency: usize,
     modrinth: &Modrinth,
     cancel: &dyn Fn() -> bool,
     progress: Progress,
@@ -116,57 +163,93 @@ pub fn install_bytes(
         record_content(manifest, path, source, mr, None);
     };
 
-    let total = index.files.len() as u64;
-    let mut failed = Vec::new();
-    for (i, f) in index.files.iter().enumerate() {
-        if cancel() {
-            return Err(CoreError::Cancelled);
+        let mut selected_optional = Vec::new();
+    let mut todo: Vec<&IndexFile> = Vec::new();
+    for f in &index.files {
+        if f.unsupported_on_client() {
+            continue;
         }
-        if let Some(env) = &f.env {
-            if env.client == "unsupported" {
+        if f.is_optional() {
+            if !optional.contains(&f.path) {
                 continue;
             }
+            selected_optional.push(f.path.clone());
         }
-        progress(SyncProgress {
-            stage: SyncStage::Downloading,
-            current: i as u64,
-            total,
-            message: f.path.clone(),
-        });
+        todo.push(f);
+    }
 
+    let cancelled = AtomicBool::new(false);
+    let outcomes = packwiz::parallel_run(
+        &todo,
+        concurrency,
+        |f| {
+            if cancelled.load(Ordering::Relaxed) {
+                return FileOutcome::Failed;
+            }
+            let expected = f.hashes.sha512.as_deref();
+            if already_current(&game_dir, &f.path, expected) {
+                return FileOutcome::AlreadyCurrent;
+            }
+            let Some(url) = f.downloads.first() else {
+                return FileOutcome::Failed;
+            };
+            let data = match modrinth.download(url) {
+                Ok(d) => d,
+                Err(_) => return FileOutcome::Failed,
+            };
+            if let Some(exp) = expected {
+                if !sha512_hex(&data).eq_ignore_ascii_case(exp) {
+                    return FileOutcome::Failed;
+                }
+            }
+            match write_bytes(&game_dir, &f.path, &data) {
+                Ok(()) => FileOutcome::Installed(sha512_hex(&data)),
+                Err(_) => FileOutcome::Failed,
+            }
+        },
+        |done, total, j| {
+            if cancel() {
+                cancelled.store(true, Ordering::Relaxed);
+            }
+            progress(SyncProgress {
+                stage: SyncStage::Downloading,
+                current: done,
+                total,
+                message: todo[j].path.clone(),
+            });
+        },
+    );
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(CoreError::Cancelled);
+    }
+
+        let mut failed = Vec::new();
+    for (f, outcome) in todo.iter().zip(&outcomes) {
         let expected = f.hashes.sha512.as_deref();
-        if already_current(&game_dir, &f.path, expected) {
-            if let Some(hash) = expected {
+        match outcome {
+            FileOutcome::AlreadyCurrent => {
+                if let Some(hash) = expected {
+                    manifest.files.insert(
+                        f.path.clone(),
+                        FileRecord {
+                            hash: hash.to_string(),
+                            hash_format: "sha512".to_string(),
+                        },
+                    );
+                }
+                record(&mut manifest, &f.path, expected);
+            }
+            FileOutcome::Installed(hash) => {
                 manifest.files.insert(
                     f.path.clone(),
                     FileRecord {
-                        hash: hash.to_string(),
+                        hash: hash.clone(),
                         hash_format: "sha512".to_string(),
                     },
                 );
+                record(&mut manifest, &f.path, expected);
             }
-            record(&mut manifest, &f.path, expected);
-            continue;
-        }
-
-        let Some(url) = f.downloads.first() else {
-            failed.push(f.path.clone());
-            continue;
-        };
-        match modrinth.download(url) {
-            Ok(data) => {
-                if let Some(exp) = expected {
-                    if !sha512_hex(&data).eq_ignore_ascii_case(exp) {
-                        failed.push(f.path.clone());
-                        continue;
-                    }
-                }
-                match write_tracked(&game_dir, &f.path, &data, &mut manifest) {
-                    Ok(()) => record(&mut manifest, &f.path, expected),
-                    Err(_) => failed.push(f.path.clone()),
-                }
-            }
-            Err(_) => failed.push(f.path.clone()),
+            FileOutcome::Failed => failed.push(f.path.clone()),
         }
     }
 
@@ -178,6 +261,7 @@ pub fn install_bytes(
     cleanup_stale(&game_dir, &old, &manifest);
 
     manifest.failed = failed;
+    manifest.optional = selected_optional;
     manifest.complete = manifest.failed.is_empty();
     manifest.save(&manifest_path)?;
 
@@ -199,6 +283,37 @@ pub fn install_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+        fn mrpack_with(index: &str) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        zip.start_file("modrinth.index.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(index.as_bytes()).unwrap();
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn inspect_finds_optional_mods() {
+        let index = r#"{
+            "name": "Test Pack",
+            "dependencies": { "minecraft": "1.20.1", "fabric-loader": "0.15.0" },
+            "files": [
+                { "path": "mods/required.jar", "downloads": ["http://x"],
+                  "env": { "client": "required", "server": "required" } },
+                { "path": "mods/iris-1.7.6+mc1.20.1.jar", "downloads": ["http://x"],
+                  "env": { "client": "optional", "server": "unsupported" } },
+                { "path": "mods/server-only.jar", "downloads": ["http://x"],
+                  "env": { "client": "unsupported", "server": "required" } }
+            ]
+        }"#;
+        let comps = inspect_bytes(mrpack_with(index)).unwrap();
+        assert_eq!(comps.len(), 1);
+        assert_eq!(comps[0].id, "mods/iris-1.7.6+mc1.20.1.jar");
+        assert_eq!(comps[0].name, "Iris");
+        assert_eq!(comps[0].side, "client");
+        assert!(!comps[0].default, "mrpack optionals are opt-in");
+    }
 
     #[test]
     fn detects_loader_from_dependencies() {

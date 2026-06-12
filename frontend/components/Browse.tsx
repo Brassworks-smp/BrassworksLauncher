@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Users } from "lucide-react";
+import { Box, Users, Star } from "lucide-react";
 import * as api from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import type { SearchHit } from "@/lib/types";
 
-/**
- * Shared search widgets for the content browser and the modpack browser, so both
- * use the exact same result row + infinite-scroll behaviour (one place to
- * restyle, no duplicated paging logic).
- */
+
 
 export const SEARCH_PAGE = 20;
 
@@ -20,13 +17,7 @@ function fmtDownloads(n: number): string {
   return `${n}`;
 }
 
-/**
- * Debounced, paginated search backed by any `(query, offset) => hits` fetcher.
- *
- * Results stream in page-by-page as you scroll (no waiting for everything), and
- * changing `query` or `resetKey` clears the previous results immediately instead
- * of leaving the old tab's content on screen until the new search resolves.
- */
+
 export function useInfiniteSearch(
   fetchPage: (query: string, offset: number) => Promise<SearchHit[]>,
   query: string,
@@ -100,7 +91,7 @@ export function useInfiniteSearch(
   return { hits, loading, loadingMore, hasMore, error, handleScroll };
 }
 
-/** A "Modrinth" / "CurseForge" pill. */
+
 export function SourceBadge({ source }: { source: string }) {
   return (
     <span
@@ -113,18 +104,21 @@ export function SourceBadge({ source }: { source: string }) {
   );
 }
 
-/** A single search result row, shared by the content + modpack browsers. */
+
 export function ResultRow({
   hit,
   installed,
+  featured,
   showSource,
   onOpen,
 }: {
   hit: SearchHit;
   installed?: boolean;
+  featured?: boolean;
   showSource?: boolean;
   onOpen: () => void;
 }) {
+  const t = useT();
   const [iconFailed, setIconFailed] = useState(false);
   return (
     <button
@@ -151,12 +145,17 @@ export function ResultRow({
           {showSource && <SourceBadge source={hit.source} />}
           {hit.author && (
             <span className="shrink-0 text-[11px] text-ink-600">
-              by {hit.author}
+              {t("browse.byAuthor", { author: hit.author })}
             </span>
           )}
           {installed && (
             <span className="shrink-0 rounded bg-patina-500/15 px-1.5 text-[9px] font-medium text-patina-400">
-              Installed
+              {t("versionList.installed")}
+            </span>
+          )}
+          {featured && (
+            <span className="flex shrink-0 items-center gap-0.5 rounded bg-brass-500/15 px-1.5 text-[9px] font-medium text-brass-300">
+              <Star size={8} className="fill-brass-300" /> {t("instances.featured")}
             </span>
           )}
         </div>
@@ -164,11 +163,11 @@ export function ResultRow({
           {hit.description}
         </div>
         <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-600">
-          <Users size={11} /> {fmtDownloads(hit.downloads)} downloads
+          <Users size={11} /> {t("addContent.downloads", { count: fmtDownloads(hit.downloads) })}
         </div>
       </div>
       <span className="shrink-0 text-[11px] text-ink-600 opacity-0 transition group-hover:opacity-100">
-        Details →
+        {t("browse.details")}
       </span>
     </button>
   );

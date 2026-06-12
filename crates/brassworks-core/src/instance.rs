@@ -1,4 +1,3 @@
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +87,8 @@ pub enum PackSource {
     None,
     Packwiz {
         url: String,
+                        #[serde(default)]
+        unsup: bool,
     },
     Modrinth {
         #[serde(default)]
@@ -178,6 +179,14 @@ pub struct Instance {
     pub tags: Vec<String>,
     #[serde(default)]
     pub folder_id: Option<String>,
+            #[serde(default)]
+    pub optional_mods: Option<Vec<String>>,
+        #[serde(default)]
+    pub unsup_flavors: Option<Vec<String>>,
+            #[serde(default)]
+    pub unsup_public_key: Option<String>,
+            #[serde(default)]
+    pub pinned_settings: Vec<String>,
 }
 
 impl Instance {
@@ -198,6 +207,7 @@ impl Instance {
             post_exit_command: None,
             pack: PackSource::Packwiz {
                 url: fp.pack_url.clone(),
+                unsup: fp.unsup,
             },
             featured: true,
             pinned: false,
@@ -215,6 +225,10 @@ impl Instance {
             notes: None,
             tags: Vec::new(),
             folder_id: None,
+            optional_mods: None,
+            unsup_flavors: None,
+            unsup_public_key: fp.unsup_public_key.clone(),
+            pinned_settings: Vec::new(),
         }
     }
 
@@ -258,6 +272,10 @@ impl Instance {
             notes: None,
             tags: Vec::new(),
             folder_id: None,
+            optional_mods: None,
+            unsup_flavors: None,
+            unsup_public_key: None,
+            pinned_settings: Vec::new(),
         }
     }
 
@@ -354,36 +372,42 @@ impl InstanceManager {
     }
 
     pub fn ensure_featured(&self) -> Result<()> {
-        for fp in crate::featured::featured_packs() {
+        let featured = crate::featured::featured_packs();
+        let featured_ids: std::collections::HashSet<&str> =
+            featured.iter().map(|fp| fp.id.as_str()).collect();
+
+        for fp in &featured {
             match self.get(&fp.id) {
                 Ok(mut inst) => {
                     inst.featured = true;
-                    if !matches!(inst.pack, PackSource::Packwiz { .. }) {
-                        inst.pack = PackSource::Packwiz {
-                            url: fp.pack_url.clone(),
-                        };
+                                                                                                    match &mut inst.pack {
+                        PackSource::Packwiz { unsup, .. } => *unsup = fp.unsup,
+                        _ => {
+                            inst.pack = PackSource::Packwiz {
+                                url: fp.pack_url.clone(),
+                                unsup: fp.unsup,
+                            }
+                        }
                     }
-                    if inst.icon.is_none() {
-                        inst.icon = fp.icon.clone();
-                    }
-                    if inst.banner.is_none() {
-                        inst.banner = fp.banner.clone();
-                    }
-                    if inst.logo.is_none() {
-                        inst.logo = fp.logo.clone();
-                    }
-                    if inst.news_url.is_none() {
-                        inst.news_url = fp.news_url.clone();
-                    }
-                    if inst.playercount_url.is_none() {
-                        inst.playercount_url = fp.playercount_url.clone();
-                    }
+                    inst.unsup_public_key = fp.unsup_public_key.clone();
+                    inst.icon = fp.icon.clone();
+                    inst.banner = fp.banner.clone();
+                    inst.logo = fp.logo.clone();
+                    inst.news_url = fp.news_url.clone();
+                    inst.playercount_url = fp.playercount_url.clone();
                     self.update(&inst)?;
                 }
                 Err(CoreError::InstanceNotFound(_)) => {
-                    self.create(Instance::from_featured(&fp))?;
+                    self.create(Instance::from_featured(fp))?;
                 }
                 Err(e) => return Err(e),
+            }
+        }
+
+                                for mut inst in self.list()? {
+            if inst.featured && !featured_ids.contains(inst.id.as_str()) {
+                inst.featured = false;
+                self.update(&inst)?;
             }
         }
         Ok(())
@@ -497,10 +521,14 @@ mod tests {
     fn pack_source_serde_tagged() {
         let p = PackSource::Packwiz {
             url: "u".to_string(),
+            unsup: true,
         };
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains("\"kind\":\"packwiz\""));
         let none: PackSource = serde_json::from_str(r#"{"kind":"none"}"#).unwrap();
         assert_eq!(none, PackSource::None);
+                let legacy: PackSource =
+            serde_json::from_str(r#"{"kind":"packwiz","url":"u"}"#).unwrap();
+        assert_eq!(legacy, PackSource::Packwiz { url: "u".into(), unsup: false });
     }
 }

@@ -17,17 +17,18 @@ import {
   AlertTriangle,
   ArrowUpCircle,
   Check,
-  ChevronDown,
   X,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { Changelog } from "./Markdown";
+import { useT } from "@/lib/i18n";
 import { SegmentedTabs, Collapse, Skeleton } from "./ui";
+import { VersionList } from "./VersionList";
 import { getCachedInfo, setCachedInfo } from "@/lib/modcache";
 import type {
   ContentVersion,
   InstalledMod,
+  LoaderKind,
   ModInfo,
   SearchHit,
 } from "@/lib/types";
@@ -35,11 +36,11 @@ import { AddContentModal } from "./AddContentModal";
 
 type CategoryId = "all" | "mods" | "resourcepacks" | "shaderpacks";
 
-const CATEGORIES: { id: CategoryId; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "mods", label: "Mods" },
-  { id: "resourcepacks", label: "Resource Packs" },
-  { id: "shaderpacks", label: "Shaders" },
+const CATEGORIES: { id: CategoryId; tkey: string }[] = [
+  { id: "all", tkey: "mods.all" },
+  { id: "mods", tkey: "mods.catMods" },
+  { id: "resourcepacks", tkey: "mods.catResourcePacks" },
+  { id: "shaderpacks", tkey: "mods.catShaders" },
 ];
 
 function categoryIcon(category: string, size = 16) {
@@ -56,13 +57,10 @@ function projectTypeOf(category: string): string {
 
 const ENRICH_CONCURRENCY = 8;
 
-/** Module-level cache of the loaded content list, keyed by instance id. Survives
- *  unmounting the Content view so re-opening it for the same instance shows the
- *  list instantly (a silent refresh still runs in the background). */
+
 const modsCache = new Map<string, InstalledMod[]>();
 
-/** Fold any cached per-mod metadata (title/icon/description) into a freshly
- *  listed set so reused entries render fully without re-fetching. */
+
 function mergeCached(list: InstalledMod[]): InstalledMod[] {
   return list.map((m) => {
     if (m.project_id) {
@@ -80,8 +78,7 @@ function mergeCached(list: InstalledMod[]): InstalledMod[] {
   });
 }
 
-/** Remember (per instance, in localStorage) which duplicate-mod set the user
- *  dismissed, so the warning doesn't keep reappearing for the same conflicts. */
+
 const dupKey = (id: string) => `bw:dupDismissed:${id}`;
 function getDupDismissed(id: string): string | null {
   try {
@@ -103,7 +100,7 @@ function ContentSkeleton() {
       {Array.from({ length: 9 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 rounded-lg border border-edge bg-ink-800/50 p-2.5"
+          className="flex items-center gap-3 rounded-lg border border-edge bg-ink-900/50 p-2.5"
         >
           <Skeleton className="h-11 w-11 shrink-0" />
           <div className="flex-1 space-y-2">
@@ -119,13 +116,18 @@ function ContentSkeleton() {
 
 export function ModsView({
   instanceId,
+  mc,
+  loader,
   locked,
   onToggleLock,
 }: {
   instanceId: string;
+  mc: string;
+  loader: LoaderKind;
   locked: boolean;
   onToggleLock: () => void;
 }) {
+  const t = useT();
   const [mods, setMods] = useState<InstalledMod[] | null>(
     () => modsCache.get(instanceId) ?? null,
   );
@@ -371,24 +373,24 @@ export function ModsView({
     closeUpdateAll();
     if (keys.length === 0) return;
     setUpdatingAll(true);
-    toast(
-      `Checking ${keys.length} mod${keys.length === 1 ? "" : "s"} for updates…`,
-      "info",
-    );
+    toast(t("mods.checkingUpdates", { count: keys.length }), "info");
     api
       .updateSelectedContent(instanceId, keys)
       .then((names) => {
-        if (names.length === 0) toast("Everything is already up to date", "info");
+        if (names.length === 0) toast(t("mods.upToDate"), "info");
         else
           toast(
-            `Updated ${names.length} mod${names.length === 1 ? "" : "s"}: ${names.join(", ")}`,
+            t("mods.updatedMods", {
+              count: names.length,
+              names: names.join(", "),
+            }),
             "success",
           );
         load();
       })
       .catch((e) => {
         setError(String(e));
-        toast("Update failed", "error");
+        toast(t("mods.updateFailed"), "error");
       })
       .finally(() => setUpdatingAll(false));
   };
@@ -418,27 +420,23 @@ export function ModsView({
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
       <div className="flex items-center justify-between pb-4">
         <div>
           <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-            Content
+            {t("mods.title")}
           </h1>
           <p className="text-sm text-ink-600">
-            {mods ? `${mods.length} installed` : "Loading…"}
+            {mods ? t("mods.installed", { count: mods.length }) : t("common.loading")}
             {!locked && (
-              <span className="ml-2 text-amber-400/80">· unlocked</span>
+              <span className="ml-2 text-amber-400/80">{t("mods.unlocked")}</span>
             )}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => (locked ? setConfirmUnlock(true) : onToggleLock())}
-            title={
-              locked
-                ? "Unlock to disable / re-version modpack content (pauses auto-updates)"
-                : "Lock to restore managed modpack content and auto-updates"
-            }
+            title={locked ? t("mods.unlockTitle") : t("mods.lockedTitle")}
             className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
               locked
                 ? "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
@@ -446,12 +444,12 @@ export function ModsView({
             }`}
           >
             {locked ? <Lock size={15} /> : <Unlock size={15} />}
-            {locked ? "Locked" : "Unlocked"}
+            {locked ? t("mods.locked") : t("mods.unlockedBtn")}
           </button>
           <button
             onClick={openUpdatePicker}
             disabled={updatingAll || userContentCount === 0}
-            title="Update all your added mods to their latest compatible version (modpack-locked mods are untouched)"
+            title={t("mods.updateAllTitle")}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {updatingAll ? (
@@ -459,24 +457,24 @@ export function ModsView({
             ) : (
               <ArrowUpCircle size={15} />
             )}
-            Update all
+            {t("mods.updateAll")}
           </button>
           <button
             onClick={() => setAdding(true)}
             className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 shadow-[0_3px_0_var(--color-brass-700)] transition hover:bg-brass-400 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-700)]"
           >
-            <Plus size={16} /> Add content
+            <Plus size={16} /> {t("mods.addContent")}
           </button>
           <button
             onClick={() => openFolder("mods")}
-            title="Open mods folder"
+            title={t("mods.openFolderTitle")}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <FolderOpen size={15} /> Folder
+            <FolderOpen size={15} /> {t("mods.folder")}
           </button>
           <button
             onClick={load}
-            title="Refresh"
+            title={t("common.refresh")}
             className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -499,7 +497,7 @@ export function ModsView({
                     : "text-ink-600 hover:text-brass-300/80"
                 }`}
               >
-                {c.label}
+                {t(c.tkey)}
                 <span className="ml-1.5 tabular-nums text-ink-600">{n}</span>
               </button>
             );
@@ -513,7 +511,7 @@ export function ModsView({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search content…"
+            placeholder={t("mods.searchPlaceholder")}
             className="w-full rounded-lg bg-ink-900/50 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
           />
         </div>
@@ -521,34 +519,34 @@ export function ModsView({
 
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
         <Segmented
-          label="Source"
+          label={t("mods.sourceLabel")}
           value={sourceFilter}
           onChange={(v) => setSourceFilter(v as typeof sourceFilter)}
           options={[
-            { id: "all", label: "All" },
-            { id: "modrinth", label: "Modrinth" },
-            { id: "curseforge", label: "CurseForge" },
-            { id: "local", label: "Local" },
+            { id: "all", label: t("mods.all") },
+            { id: "modrinth", label: t("mods.modrinth") },
+            { id: "curseforge", label: t("mods.curseforge") },
+            { id: "local", label: t("mods.local") },
           ]}
         />
         <Segmented
-          label="Status"
+          label={t("mods.statusLabel")}
           value={statusFilter}
           onChange={(v) => setStatusFilter(v as typeof statusFilter)}
           options={[
-            { id: "all", label: "All" },
-            { id: "enabled", label: "Enabled" },
-            { id: "disabled", label: "Disabled" },
+            { id: "all", label: t("mods.all") },
+            { id: "enabled", label: t("mods.enabled") },
+            { id: "disabled", label: t("mods.disabled") },
           ]}
         />
         <Segmented
-          label="Origin"
+          label={t("mods.originLabel")}
           value={originFilter}
           onChange={(v) => setOriginFilter(v as typeof originFilter)}
           options={[
-            { id: "all", label: "All" },
-            { id: "modpack", label: "Modpack" },
-            { id: "user", label: "Added by you" },
+            { id: "all", label: t("mods.all") },
+            { id: "modpack", label: t("mods.modpack") },
+            { id: "user", label: t("mods.addedByYou") },
           ]}
         />
       </div>
@@ -556,13 +554,13 @@ export function ModsView({
       {showDup && (
         <div className="dup-warn mb-3 rounded-lg border px-3 py-2 text-xs">
           <div className="flex items-center gap-1.5 font-medium">
-            <AlertTriangle size={13} /> Possible duplicate mods detected
+            <AlertTriangle size={13} /> {t("mods.dupDetected")}
             <button
               onClick={() => {
                 setDupDismissed(conflictKey);
                 storeDupDismissed(instanceId, conflictKey);
               }}
-              title="Dismiss"
+              title={t("mods.dismiss")}
               className="ml-auto -mr-1 grid h-5 w-5 place-items-center rounded transition hover:bg-amber-500/20"
             >
               <X size={13} />
@@ -613,8 +611,8 @@ export function ModsView({
             <div>
               <Package size={28} className="mx-auto mb-2 opacity-50" />
               {mods.length === 0
-                ? "Nothing installed yet - press Play to install the modpack."
-                : "No content matches your search."}
+                ? t("mods.emptyInstall")
+                : t("mods.emptySearch")}
             </div>
           </div>
         )}
@@ -625,6 +623,8 @@ export function ModsView({
       {(adding || detail) && (
         <AddContentModal
           instanceId={instanceId}
+          mc={mc}
+          loader={loader}
           installed={installedMap}
           lockedIds={lockedIds}
           initial={detail}
@@ -633,6 +633,15 @@ export function ModsView({
             setDetail(null);
           }}
           onInstalled={() => load()}
+          onUnlock={
+            locked
+              ? () => {
+                  setAdding(false);
+                  setDetail(null);
+                  setConfirmUnlock(true);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -646,23 +655,23 @@ export function ModsView({
           <div className="rise w-[440px] max-w-full rounded-xl border border-amber-500/30 bg-ink-900 p-6 shadow-2xl">
             <div className="mb-3 flex items-center gap-2 text-amber-300">
               <AlertTriangle size={20} />
-              <h2 className="font-mc text-lg tracking-wide">Unlock the modpack?</h2>
+              <h2 className="font-mc text-lg tracking-wide">{t("mods.unlockTitleModal")}</h2>
             </div>
             <p className="text-sm leading-relaxed text-ink-600">
-              Unlocking lets you disable and change modpack mods, and{" "}
-              <span className="text-amber-300/90">pauses automatic updates</span>.
-              This may break your modpack and{" "}
+              {t("mods.unlockBody1")}
+              <span className="text-amber-300/90">{t("mods.unlockPauses")}</span>
+              {t("mods.unlockBody2")}
               <span className="text-amber-300/90">
-                prevent you from joining Brassworks
+                {t("mods.unlockPrevent")}
               </span>
-              . Lock it again to restore the modpack and updates.
+              {t("mods.unlockBody3")}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={closeUnlock}
                 className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => {
@@ -671,7 +680,7 @@ export function ModsView({
                 }}
                 className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-amber-400"
               >
-                <Unlock size={15} /> Unlock anyway
+                <Unlock size={15} /> {t("mods.unlockAnyway")}
               </button>
             </div>
           </div>
@@ -692,7 +701,7 @@ export function ModsView({
               <div className="flex items-center gap-2 text-brass-300">
                 <ArrowUpCircle size={18} />
                 <h2 className="font-mc text-base tracking-wide">
-                  Update mods
+                  {t("mods.updateModsTitle")}
                 </h2>
               </div>
               <div className="flex items-center gap-2 text-[11px] text-ink-600">
@@ -704,20 +713,19 @@ export function ModsView({
                   }
                   className="hover:text-brass-300"
                 >
-                  Select all
+                  {t("mods.selectAll")}
                 </button>
                 <span>·</span>
                 <button
                   onClick={() => setUpdateSel(new Set())}
                   className="hover:text-brass-300"
                 >
-                  None
+                  {t("mods.none")}
                 </button>
               </div>
             </div>
             <p className="px-5 pt-3 text-xs text-ink-600">
-              Pick which of your added mods to update to the latest compatible
-              version. Modpack-managed mods are never touched.
+              {t("mods.updatePickDesc")}
             </p>
             <div className="flex-1 overflow-y-auto px-3 py-2">
               {userMods.map((m) => {
@@ -765,14 +773,14 @@ export function ModsView({
                 onClick={closeUpdateAll}
                 className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={runUpdate}
                 disabled={updateSel.size === 0}
                 className="flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-40"
               >
-                <ArrowUpCircle size={15} /> Update {updateSel.size || ""}
+                <ArrowUpCircle size={15} /> {t("mods.updateN", { n: updateSel.size || "" })}
               </button>
             </div>
           </div>
@@ -820,6 +828,7 @@ function ModRow({
   onError: (e: string) => void;
   onOpenDetail: () => void;
 }) {
+  const t = useT();
   const [iconFailed, setIconFailed] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const title = mod.title ?? mod.name;
@@ -831,19 +840,26 @@ function ModRow({
 
   return (
     <div
-      className={`cv-auto rounded-lg border transition ${
+      onClick={open}
+      role={hasSource ? "button" : undefined}
+      tabIndex={hasSource ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (hasSource && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          open();
+        }
+      }}
+      title={hasSource ? t("mods.viewOn", { source: sourceLabel }) : undefined}
+      className={`cv-auto group/row rounded-lg border transition ${
+        hasSource ? "cursor-pointer" : ""
+      } ${
         mod.enabled
-          ? "border-edge bg-ink-800 hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
-          : "border-edge/60 bg-ink-900/40 opacity-60 hover:opacity-100"
+          ? "border-edge bg-ink-900/50 hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
+          : "border-edge/60 bg-ink-900/30 opacity-60 hover:opacity-100"
       }`}
     >
       <div className="flex items-center gap-3 p-2.5">
-        <button
-          onClick={open}
-          disabled={!hasSource}
-          title={hasSource ? `View on ${sourceLabel}` : undefined}
-          className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600 disabled:cursor-default"
-        >
+        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
           {mod.icon_url && !iconFailed ? (
             <img
               src={mod.icon_url}
@@ -854,19 +870,17 @@ function ModRow({
           ) : (
             categoryIcon(mod.category)
           )}
-        </button>
+        </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={open}
-              disabled={!hasSource}
+            <span
               className={`truncate text-sm font-medium text-gray-100 ${
-                hasSource ? "hover:text-brass-300" : "cursor-default"
+                hasSource ? "group-hover/row:text-brass-300" : ""
               }`}
             >
               {title}
-            </button>
+            </span>
             {mod.version && (
               <span className="shrink-0 font-mono text-[11px] text-ink-600/80">
                 {mod.version}
@@ -897,18 +911,21 @@ function ModRow({
             <span
               title={
                 unlocked
-                  ? "Modpack content (unlocked)"
-                  : "Part of the modpack - managed automatically"
+                  ? t("mods.managedUnlocked")
+                  : t("mods.managedLocked")
               }
               className="rounded-md border border-edge bg-ink-900/60 px-2 py-1 text-[10px] uppercase tracking-wide text-ink-600"
             >
-              Modpack
+              {t("mods.modpack")}
             </span>
           )}
           {canVersion && (
             <button
-              onClick={() => setShowVersions((v) => !v)}
-              title="Change version"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowVersions((v) => !v);
+              }}
+              title={t("mods.changeVersion")}
               className={`grid h-8 w-8 place-items-center rounded-md transition ${
                 showVersions
                   ? "bg-brass-500/15 text-brass-300"
@@ -920,17 +937,25 @@ function ModRow({
           )}
           {!mod.managed && (
             <button
-              onClick={onRemove}
-              title="Remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              title={t("common.remove")}
               className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-red-500/10 hover:text-red-300"
             >
               <Trash2 size={14} />
             </button>
           )}
-          {controllable && <RowToggle checked={mod.enabled} onChange={onToggle} />}
+          {controllable && (
+            <span onClick={(e) => e.stopPropagation()}>
+              <RowToggle checked={mod.enabled} onChange={onToggle} />
+            </span>
+          )}
         </div>
       </div>
 
+      <div onClick={(e) => e.stopPropagation()}>
       <Collapse open={showVersions && canVersion}>
         {showVersions && canVersion && (
           <RowVersions
@@ -944,6 +969,7 @@ function ModRow({
           />
         )}
       </Collapse>
+      </div>
     </div>
   );
 }
@@ -959,9 +985,9 @@ function RowVersions({
   onError: (e: string) => void;
   onPicked: () => void;
 }) {
+  const t = useT();
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [openLog, setOpenLog] = useState<string | null>(null);
   const projectType = projectTypeOf(mod.category);
 
   useEffect(() => {
@@ -987,10 +1013,11 @@ function RowVersions({
       )
       .then((res) => {
         const n = res.dependencies.length;
+        const name = mod.title ?? mod.name;
         toast(
-          `${mod.title ?? mod.name} updated${
-            n ? ` (+${n} ${n === 1 ? "dependency" : "dependencies"})` : ""
-          }`,
+          n
+            ? t("mods.contentUpdatedDeps", { name, n })
+            : t("mods.contentUpdated", { name }),
           "success",
         );
         onPicked();
@@ -1005,66 +1032,22 @@ function RowVersions({
     <div className="border-t border-edge/60 px-3 py-2">
       {!versions ? (
         <div className="flex items-center gap-2 py-2 text-xs text-ink-600">
-          <Loader2 size={13} className="animate-spin" /> Loading versions…
+          <Loader2 size={13} className="animate-spin" /> {t("mods.loadingVersions")}
         </div>
       ) : versions.length === 0 ? (
-        <div className="py-2 text-xs text-ink-600">No compatible versions.</div>
+        <div className="py-2 text-xs text-ink-600">{t("mods.noVersions")}</div>
       ) : (
-        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-          {versions.map((v, i) => {
-            const isCurrent = mod.version_id === v.version_id;
-            const expanded = openLog === v.version_id;
-            return (
-              <div key={v.version_id} className="rounded">
-                <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-ink-700/40">
-                  <button
-                    onClick={() => setOpenLog(expanded ? null : v.version_id)}
-                    title="Show changelog"
-                    className={`grid h-5 w-5 shrink-0 place-items-center rounded ${
-                      expanded
-                        ? "text-brass-300"
-                        : "text-ink-600 hover:text-brass-300"
-                    }`}
-                  >
-                    <ChevronDown
-                      size={13}
-                      className={`transition-transform ${expanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  <span className="flex-1 truncate font-mono text-[12px] text-gray-200">
-                    {v.version_number}
-                  </span>
-                  {i === 0 && (
-                    <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
-                      latest
-                    </span>
-                  )}
-                  <button
-                    disabled={!!busy || isCurrent}
-                    onClick={() => pick(v.version_id)}
-                    className="rounded bg-brass-500/15 px-2.5 py-1 text-[11px] font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
-                  >
-                    {busy === v.version_id ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : isCurrent ? (
-                      "Current"
-                    ) : (
-                      "Install"
-                    )}
-                  </button>
-                </div>
-                <Collapse open={expanded}>
-                  <Changelog
-                    instanceId={instanceId}
-                    projectId={mod.project_id!}
-                    versionId={v.version_id}
-                    source={mod.source}
-                    enabled={expanded}
-                  />
-                </Collapse>
-              </div>
-            );
-          })}
+        <div className="max-h-72 overflow-y-auto pr-0.5">
+          <VersionList
+            instanceId={instanceId}
+            projectId={mod.project_id!}
+            source={mod.source}
+            versions={versions}
+            actionLabel={t("mods.install")}
+            busy={busy !== null}
+            currentVersionId={mod.version_id}
+            onPick={pick}
+          />
         </div>
       )}
     </div>
@@ -1078,22 +1061,31 @@ function RowToggle({
   checked: boolean;
   onChange: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
       onClick={onChange}
       role="switch"
       aria-checked={checked}
-      title={checked ? "Disable" : "Enable"}
+      title={checked ? t("mods.disable") : t("mods.enable")}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[4px] border transition-colors ${
-        checked ? "border-brass-600 bg-brass-500" : "border-edge bg-ink-700"
+        checked
+          ? "border-brass-600/70 bg-gradient-to-b from-brass-400 to-brass-500"
+          : "border-edge bg-ink-700"
       }`}
     >
       <span
-        className={`h-[16px] w-[16px] rounded-[2px] transition-transform duration-150 ${
-          checked ? "translate-x-[25px] bg-white" : "translate-x-[3px] bg-ink-600"
+        className={`flex h-[16px] w-[16px] items-center justify-center transition-transform duration-150 ${
+          checked ? "translate-x-[25px]" : "translate-x-[3px]"
         }`}
-      />
+      >
+        <span
+          className={`h-[14px] w-[4px] rounded-full transition-colors ${
+            checked ? "bg-white shadow-[0_0_2px_rgba(0,0,0,0.25)]" : "bg-ink-600"
+          }`}
+        />
+      </span>
     </button>
   );
 }

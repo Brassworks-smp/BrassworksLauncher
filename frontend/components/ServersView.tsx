@@ -20,6 +20,7 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { parseMotd } from "@/lib/motd";
+import { useT } from "@/lib/i18n";
 import { SegmentedTabs, StarButton, useClosable } from "./ui";
 import { AddServerModal } from "./AddServerModal";
 import type { ServerEntry, ServerStatus } from "@/lib/types";
@@ -65,6 +66,7 @@ export function ServersView({
   canPlay: boolean;
   onQuickPlay: (qp: api.QuickPlay) => void;
 }) {
+  const t = useT();
   const [servers, setServers] = useState<ServerEntry[] | null>(
     () => serversCache.get(instanceId) ?? null,
   );
@@ -179,20 +181,20 @@ export function ServersView({
   const canReorder = !query.trim() && filter !== "online";
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
       <div className="flex items-center justify-between pb-4">
         <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">Servers</h1>
+          <h1 className="font-mc text-2xl tracking-wide text-gray-100">{t("servers.title")}</h1>
           <p className="text-sm text-ink-600">
             {servers
-              ? `${servers.length} server${servers.length === 1 ? "" : "s"}`
-              : "Loading…"}
+              ? t("servers.count", { count: servers.length })
+              : t("common.loading")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={load}
-            title="Refresh status"
+            title={t("servers.refreshStatus")}
             className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <RefreshCw size={15} />
@@ -204,7 +206,7 @@ export function ServersView({
             }}
             className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
           >
-            <Plus size={16} /> Add server
+            <Plus size={16} /> {t("servers.addServer")}
           </button>
         </div>
       </div>
@@ -218,7 +220,7 @@ export function ServersView({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search servers…"
+            placeholder={t("servers.searchPlaceholder")}
             className="w-56 rounded-lg bg-ink-900/50 py-2 pl-8 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
           />
         </div>
@@ -227,8 +229,8 @@ export function ServersView({
           value={filter}
           onChange={setFilter}
           options={[
-            { id: "all", label: "All" },
-            { id: "online", label: "Online" },
+            { id: "all", label: t("servers.all") },
+            { id: "online", label: t("servers.online") },
           ]}
         />
         {starredCount > 0 && (
@@ -241,7 +243,7 @@ export function ServersView({
             }`}
           >
             <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={12} />
-            Starred
+            {t("servers.starred")}
           </button>
         )}
       </div>
@@ -252,8 +254,8 @@ export function ServersView({
             <div>
               <Server size={28} className="mx-auto mb-2 opacity-50" />
               {(servers?.length ?? 0) === 0
-                ? "No servers saved - add one to get started."
-                : "No servers match your filters."}
+                ? t("servers.emptyNone")
+                : t("servers.emptyFilter")}
             </div>
           </div>
         ) : (
@@ -262,7 +264,7 @@ export function ServersView({
               <>
                 {restList.length > 0 && (
                   <div className="flex items-center gap-1.5 px-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-brass-400/80">
-                    <Star size={11} className="fill-current" /> Starred
+                    <Star size={11} className="fill-current" /> {t("servers.starred")}
                   </div>
                 )}
                 {starredList.map((s, i) => (
@@ -292,7 +294,7 @@ export function ServersView({
               <>
                 {starredList.length > 0 && (
                   <div className="mt-2 flex items-center gap-1.5 border-t border-edge px-1 pb-0.5 pt-3 text-[11px] font-semibold uppercase tracking-wider text-ink-600">
-                    All servers
+                    {t("servers.allServers")}
                   </div>
                 )}
                 {restList.map((s, i) => (
@@ -380,11 +382,24 @@ function ServerRow({
   onMoveDown: () => void;
   onOpen: () => void;
 }) {
+  const t = useT();
   const live = status && status !== "loading" ? status : null;
   const favicon = dataIcon(live?.favicon ?? server.icon);
 
   return (
-    <div className="group flex items-center gap-3 rounded-lg border border-edge bg-ink-800/60 p-3 transition hover:border-brass-600/40">
+    <div
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      title={t("servers.viewServer", { name: server.name })}
+      className="group flex cursor-pointer items-center gap-3 rounded-lg border border-edge bg-ink-900/50 p-3 transition hover:border-brass-600/40"
+    >
       <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
         {favicon ? (
           <img src={favicon} alt="" className="pixelated h-full w-full object-cover" />
@@ -398,14 +413,14 @@ function ServerRow({
         />
       </div>
 
-      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <div className="min-w-0 flex-1 text-left">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-gray-100">
             {server.name}
           </span>
           {server.featured && (
             <span className="shrink-0 rounded bg-brass-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-brass-300">
-              Featured
+              {t("servers.featured")}
             </span>
           )}
           <PingBars status={status} />
@@ -418,27 +433,33 @@ function ServerRow({
         <div className="truncate font-mono text-[11px] text-ink-600">{server.ip}</div>
         <div className="truncate font-mc text-[12px] text-ink-600">
           {status === "loading"
-            ? "Pinging…"
+            ? t("servers.pinging")
             : live?.online
               ? live.motd
                 ? parseMotd(live.motd.split("\n")[0])
                 : live.version || ""
-              : "Offline or unreachable"}
+              : t("servers.offline")}
         </div>
-      </button>
+      </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
         {(canMoveUp || canMoveDown) && (
           <div className="mr-1 flex flex-col opacity-0 transition group-hover:opacity-100">
             <button
-              onClick={onMoveUp}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
               disabled={!canMoveUp}
               className="text-ink-600 transition hover:text-brass-300 disabled:opacity-30"
             >
               <ChevronUp size={14} />
             </button>
             <button
-              onClick={onMoveDown}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
               disabled={!canMoveDown}
               className="text-ink-600 transition hover:text-brass-300 disabled:opacity-30"
             >
@@ -447,12 +468,15 @@ function ServerRow({
           </div>
         )}
         <button
-          onClick={onJoin}
+          onClick={(e) => {
+            e.stopPropagation();
+            onJoin();
+          }}
           disabled={!canPlay}
-          title="Launch & join this server"
+          title={t("servers.joinTitle")}
           className="brass-btn mr-0.5 flex items-center gap-1.5 rounded-md bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Play size={12} className="fill-current" /> Join
+          <Play size={12} className="fill-current" /> {t("servers.join")}
         </button>
         {!server.featured && (
           <StarButton starred={server.starred} onClick={onStar} className="h-8 w-8" />
@@ -460,15 +484,21 @@ function ServerRow({
         {!server.featured && (
           <>
             <button
-              onClick={onEdit}
-              title="Edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              title={t("common.edit")}
               className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-700 hover:text-brass-300"
             >
               <Pencil size={14} />
             </button>
             <button
-              onClick={onDelete}
-              title="Remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title={t("common.remove")}
               className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-red-500/10 hover:text-red-300"
             >
               <Trash2 size={14} />
@@ -495,6 +525,7 @@ function ServerDetailModal({
   onEdit: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   const live = status && status !== "loading" ? status : null;
   const favicon = dataIcon(live?.favicon ?? server.icon);
@@ -509,18 +540,20 @@ function ServerDetailModal({
   if (live) {
     stats.push({
       icon: Signal,
-      label: "Status",
-      value: live.online ? `Online · ${live.ping_ms} ms` : "Offline",
+      label: t("servers.statStatus"),
+      value: live.online
+        ? t("servers.onlinePing", { ms: live.ping_ms })
+        : t("servers.statusOffline"),
     });
     if (live.online) {
       stats.push({
         icon: Users,
-        label: "Players",
+        label: t("servers.statPlayers"),
         value: `${live.players_online} / ${live.players_max}`,
       });
     }
     if (live.version)
-      stats.push({ icon: Globe, label: "Version", value: live.version });
+      stats.push({ icon: Globe, label: t("servers.statVersion"), value: live.version });
   }
 
   return (
@@ -552,7 +585,7 @@ function ServerDetailModal({
                 </h2>
                 {server.featured && (
                   <span className="shrink-0 rounded bg-brass-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-brass-300">
-                    Featured
+                    {t("servers.featured")}
                   </span>
                 )}
               </div>
@@ -572,11 +605,11 @@ function ServerDetailModal({
         <div className="flex-1 overflow-y-auto p-5">
           <div className="mb-4 rounded-lg border border-edge bg-ink-950/50 p-4">
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-600">
-              Message of the day
+              {t("servers.motd")}
             </div>
             {status === "loading" ? (
               <div className="flex items-center gap-2 text-sm text-ink-600">
-                <Loader2 size={14} className="animate-spin" /> Pinging…
+                <Loader2 size={14} className="animate-spin" /> {t("servers.pinging")}
               </div>
             ) : live?.online ? (
               <div className="whitespace-pre-line break-words font-mc text-[13px] leading-relaxed text-gray-200">
@@ -584,7 +617,7 @@ function ServerDetailModal({
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-red-300/80">
-                <WifiOff size={14} /> Offline or unreachable
+                <WifiOff size={14} /> {t("servers.offline")}
               </div>
             )}
           </div>
@@ -612,7 +645,7 @@ function ServerDetailModal({
               onClick={onEdit}
               className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
-              <Pencil size={13} /> Edit
+              <Pencil size={13} /> {t("common.edit")}
             </button>
           ) : (
             <span />
@@ -622,7 +655,7 @@ function ServerDetailModal({
             disabled={!canPlay}
             className="flex items-center gap-2 rounded-md bg-brass-500/90 px-4 py-1.5 text-sm font-medium text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Play size={14} /> Join server
+            <Play size={14} /> {t("servers.joinServer")}
           </button>
         </div>
       </div>

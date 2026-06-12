@@ -1,4 +1,3 @@
-
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -136,7 +135,6 @@ fn parse_mod_index(text: &str) -> Option<serde_json::Value> {
     }))
 }
 
-/// Recursively copy `src` into `dst`, skipping logs and OS cruft.
 pub fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -159,12 +157,10 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Encode an icon file as a `data:` URI (size-guarded so instance JSON stays small).
 pub fn icon_data_uri(path: &str) -> Option<String> {
     let p = Path::new(path);
     let bytes = std::fs::read(p).ok()?;
-    // Keep instance.json small — skip oversized icons (fall back to the default).
-    if bytes.is_empty() || bytes.len() > 300_000 {
+        if bytes.is_empty() || bytes.len() > 300_000 {
         return None;
     }
     let mime = match p
@@ -205,7 +201,6 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
-// ---- Prism -----------------------------------------------------------------
 
 fn scan_prism(base: &Path) -> Vec<ImportCandidate> {
     let instances_dir = base.join("instances");
@@ -266,7 +261,6 @@ fn scan_prism(base: &Path) -> Vec<ImportCandidate> {
     out
 }
 
-/// Map of instance dir → group name from `instgroups.json`.
 fn prism_groups(instances_dir: &Path) -> std::collections::HashMap<String, String> {
     let mut map = std::collections::HashMap::new();
     let text = match std::fs::read_to_string(instances_dir.join("instgroups.json")) {
@@ -288,9 +282,6 @@ fn prism_groups(instances_dir: &Path) -> std::collections::HashMap<String, Strin
     map
 }
 
-/// Read Prism's `ManagedPack*` keys → (provider, project id, version id). Prism
-/// labels CurseForge packs `flame` and Modrinth packs `modrinth`; we only treat a
-/// pack as managed when both ids are present so it can actually be updated.
 fn prism_managed_pack(
     general: &[(String, String)],
 ) -> (Option<String>, Option<String>, Option<String>) {
@@ -319,8 +310,7 @@ fn prism_managed_pack(
 }
 
 fn resolve_prism_icon(base: &Path, instance_dir: &Path, key: &str) -> Option<String> {
-    // Built-in icon keys (shipped with Prism) have no file we can copy.
-    if key.is_empty() || key == "default" {
+        if key.is_empty() || key == "default" {
         return None;
     }
     let exts = ["png", "jpg", "jpeg", "webp"];
@@ -335,7 +325,6 @@ fn resolve_prism_icon(base: &Path, instance_dir: &Path, key: &str) -> Option<Str
     None
 }
 
-/// Extract (minecraft, loader, loader_version) from an `mmc-pack.json`.
 fn parse_mmc_pack(text: &str) -> (String, String, Option<String>) {
     let Ok(json) = serde_json::from_str::<serde_json::Value>(text) else {
         return ("1.21.1".into(), "vanilla".into(), None);
@@ -386,10 +375,7 @@ fn parse_ini_section(text: &str) -> Vec<(String, String)> {
     out
 }
 
-// ---- Modrinth App ----------------------------------------------------------
 
-/// Scan the Modrinth App's `app.db` (sqlite) for installed profiles. Each
-/// profile's game files live under `profiles/<path>/`.
 fn scan_modrinth(base: &Path) -> Vec<ImportCandidate> {
     let db = base.join("app.db");
     if !db.is_file() {
@@ -402,10 +388,7 @@ fn scan_modrinth(base: &Path) -> Vec<ImportCandidate> {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    // `groups` is stored as JSONB (a binary blob), which rusqlite can't read as a
-    // String — doing so errors the whole row and `flatten()` silently drops it, so
-    // nothing imports. Convert it to JSON text in SQL with `json()` instead.
-    let mut stmt = match conn.prepare(
+                let mut stmt = match conn.prepare(
         "SELECT path, name, icon_path, game_version, mod_loader, mod_loader_version, json(groups), \
                 linked_project_id, linked_version_id FROM profiles",
     ) {
@@ -414,16 +397,7 @@ fn scan_modrinth(base: &Path) -> Vec<ImportCandidate> {
     };
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,         // path
-            row.get::<_, String>(1)?,         // name
-            row.get::<_, Option<String>>(2)?, // icon_path
-            row.get::<_, String>(3)?,         // game_version
-            row.get::<_, String>(4)?,         // mod_loader
-            row.get::<_, Option<String>>(5)?, // mod_loader_version
-            row.get::<_, Option<String>>(6)?, // groups (JSON array)
-            row.get::<_, Option<String>>(7)?, // linked_project_id (modpack)
-            row.get::<_, Option<String>>(8)?, // linked_version_id (modpack)
-        ))
+            row.get::<_, String>(0)?,                     row.get::<_, String>(1)?,                     row.get::<_, Option<String>>(2)?,             row.get::<_, String>(3)?,                     row.get::<_, String>(4)?,                     row.get::<_, Option<String>>(5)?,             row.get::<_, Option<String>>(6)?,             row.get::<_, Option<String>>(7)?,             row.get::<_, Option<String>>(8)?,         ))
     });
     let Ok(rows) = rows else {
         return Vec::new();
@@ -442,9 +416,7 @@ fn scan_modrinth(base: &Path) -> Vec<ImportCandidate> {
             linked_project_id,
             linked_version_id,
         ) = row;
-        // A linked project + version means this profile is a Modrinth modpack that
-        // can be updated, rather than a one-off custom install.
-        let (pack_provider, pack_id, pack_version) = match (
+                        let (pack_provider, pack_id, pack_version) = match (
             linked_project_id.filter(|s| !s.is_empty()),
             linked_version_id.filter(|s| !s.is_empty()),
         ) {
@@ -479,9 +451,6 @@ fn scan_modrinth(base: &Path) -> Vec<ImportCandidate> {
     out
 }
 
-/// Resolve a profile's `icon_path` to an existing file. Modern Modrinth stores an
-/// absolute path (under `caches/icons/…`); older versions stored it relative to
-/// the app data dir or the profile folder, so fall back to those.
 fn resolve_modrinth_icon(base: &Path, profile_path: &str, icon_path: &str) -> Option<String> {
     let raw = Path::new(icon_path);
     if raw.is_absolute() {
@@ -498,18 +467,8 @@ fn resolve_modrinth_icon(base: &Path, profile_path: &str, icon_path: &str) -> Op
     None
 }
 
-/// Build `user_content.json` items for an imported Modrinth profile so its mods
-/// keep their Modrinth source metadata — giving them icons and per-mod updates in
-/// the content browser, the same way [`prism_mod_items`] does for Prism.
-///
-/// Modrinth doesn't keep a packwiz index; instead it caches a `file_hash` row per
-/// profile file (path → sha1) and a `file` row per hash (sha1 → project/version)
-/// in `app.db`. We join the two and keep the entries that fall under this
-/// profile's `mods`/`resourcepacks`/`shaderpacks` folders.
 pub fn modrinth_mod_items(c: &ImportCandidate) -> Vec<serde_json::Value> {
-    // `c.path` is `<base>/profiles/<key>`, and `c.key` is the profile path used as
-    // the prefix of every cached file path.
-    let Some(base) = Path::new(&c.path).parent().and_then(|p| p.parent()) else {
+            let Some(base) = Path::new(&c.path).parent().and_then(|p| p.parent()) else {
         return Vec::new();
     };
     let db = base.join("app.db");
@@ -536,10 +495,7 @@ pub fn modrinth_mod_items(c: &ImportCandidate) -> Vec<serde_json::Value> {
     };
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, Option<String>>(0)?, // profile-relative path
-            row.get::<_, Option<String>>(1)?, // modrinth project id
-            row.get::<_, Option<String>>(2)?, // modrinth version id
-        ))
+            row.get::<_, Option<String>>(0)?,             row.get::<_, Option<String>>(1)?,             row.get::<_, Option<String>>(2)?,         ))
     });
     let Ok(rows) = rows else {
         return Vec::new();
@@ -582,7 +538,6 @@ pub fn modrinth_mod_items(c: &ImportCandidate) -> Vec<serde_json::Value> {
     items
 }
 
-/// Map of cached Modrinth `project_id` → display title, for nicer mod names.
 fn modrinth_project_titles(
     conn: &rusqlite::Connection,
 ) -> std::collections::HashMap<String, String> {

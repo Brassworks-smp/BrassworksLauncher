@@ -1,7 +1,47 @@
-
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub(crate) const MS_LOGIN_LABEL: &str = "ms-login";
+const MS_CLEAR_LABEL: &str = "ms-login-clear";
+
+const MS_STORE_ID: [u8; 16] = *b"bw-ms-login-stre";
+
+fn ms_login_data_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|d| d.join("ms-login-webview"))
+}
+
+fn with_isolated_store<'a, R: tauri::Runtime, M: tauri::Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
+    app: &AppHandle,
+) -> WebviewWindowBuilder<'a, R, M> {
+    let mut b = builder.data_store_identifier(MS_STORE_ID);
+    if let Some(dir) = ms_login_data_dir(app) {
+        b = b.data_directory(dir);
+    }
+    b
+}
+
+pub(crate) fn clear_ms_login_cookies(app: &AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(MS_LOGIN_LABEL) {
+        return win.clear_all_browsing_data().map_err(|e| e.to_string());
+    }
+    if let Some(existing) = app.get_webview_window(MS_CLEAR_LABEL) {
+        let _ = existing.close();
+    }
+    let url = "about:blank".parse().map_err(|_| "bad url".to_string())?;
+    let win = with_isolated_store(
+        WebviewWindowBuilder::new(app, MS_CLEAR_LABEL, WebviewUrl::External(url)),
+        app,
+    )
+    .visible(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+    let res = win.clear_all_browsing_data().map_err(|e| e.to_string());
+    let _ = win.close();
+    res
+}
 
 pub(crate) fn open_ms_login_window(
     app: &AppHandle,
@@ -54,12 +94,15 @@ pub(crate) fn open_ms_login_window(
         }})();"#
     );
 
-    let _ = WebviewWindowBuilder::new(app, MS_LOGIN_LABEL, WebviewUrl::External(parsed))
-        .title("Sign in to Microsoft")
-        .inner_size(480.0, 720.0)
-        .min_inner_size(380.0, 560.0)
-        .center()
-        .focused(true)
-        .initialization_script(script.as_str())
-        .build();
+    let builder = with_isolated_store(
+        WebviewWindowBuilder::new(app, MS_LOGIN_LABEL, WebviewUrl::External(parsed)),
+        app,
+    )
+    .title("Sign in to Microsoft")
+    .inner_size(480.0, 720.0)
+    .min_inner_size(380.0, 560.0)
+    .center()
+    .focused(true)
+    .initialization_script(script.as_str());
+    let _ = builder.build();
 }

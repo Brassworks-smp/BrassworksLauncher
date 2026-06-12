@@ -1,4 +1,3 @@
-
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -24,6 +23,10 @@ pub struct Manifest {
     pub files: BTreeMap<String, FileRecord>,
     #[serde(default)]
     pub mods: Vec<ManagedMod>,
+                #[serde(default)]
+    pub optional: Vec<String>,
+                #[serde(default)]
+    pub flavors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -14,10 +14,11 @@ import {
   ScrollText,
   FolderOpen,
   SunMoon,
+  Loader2,
 } from "lucide-react";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 
-import { Sidebar, type View } from "@/components/Sidebar";
+import { Sidebar, INSTANCE_VIEWS, type View } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { AccountMenu } from "@/components/AccountMenu";
 import { PlayView } from "@/components/PlayView";
@@ -26,6 +27,7 @@ import { WorldsView } from "@/components/WorldsView";
 import { ServersView } from "@/components/ServersView";
 import { ScreenshotsView } from "@/components/ScreenshotsView";
 import { SkinView } from "@/components/SkinView";
+import { TooltipLayer } from "@/components/Tooltip";
 import { SettingsView } from "@/components/SettingsView";
 import { InstancesView } from "@/components/InstancesView";
 import { InstanceSettingsView } from "@/components/InstanceSettingsView";
@@ -34,13 +36,26 @@ import { MicrosoftModal, type MsAuthState } from "@/components/MicrosoftModal";
 import { LogUploadModal } from "@/components/LogUploadModal";
 import { LogViewer } from "@/components/LogViewer";
 import { ChangelogModal } from "@/components/ChangelogModal";
+import { AboutModal } from "@/components/AboutModal";
+import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
+import {
+  TabIntro,
+  hasTabIntro,
+  tabIntroSeen,
+  markTabIntroSeen,
+  markAllTabIntrosSeen,
+  resetTabIntros,
+} from "@/components/TabIntro";
 import { RestartPrompt } from "@/components/RestartPrompt";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
+import { I18nProvider, translate } from "@/lib/i18n";
 import { applyAccent } from "@/lib/colors";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
   AccountStore,
+  FeaturedPack,
+  FlavorGroup,
   Instance,
   LaunchProgress,
   LauncherSettings,
@@ -49,6 +64,7 @@ import type {
   NewsItem,
   PlayerCount,
 } from "@/lib/types";
+import { FlavorPicker } from "@/components/FlavorPicker";
 
 const PLAYERCOUNT_INTERVAL = 30_000;
 const NEWS_INTERVAL = 300_000;
@@ -65,12 +81,22 @@ const withoutId = (set: Set<string>, id: string) => {
   return next;
 };
 
+
+const defaultInstanceId = (
+  list: Instance[],
+  showFeatured: boolean,
+): string | null => {
+  const pool = showFeatured ? list : list.filter((i) => !i.featured);
+  return pool.find((i) => i.featured)?.id ?? pool[0]?.id ?? null;
+};
+
 export default function Home() {
   const [view, setView] = useState<View>("play");
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [gearId, setGearId] = useState<string | null>(null);
   const [settings, setSettings] = useState<LauncherSettings | null>(null);
+  const [featuredPacks, setFeaturedPacks] = useState<FeaturedPack[]>([]);
   const [accounts, setAccounts] = useState<AccountStore>({
     accounts: [],
     selected: null,
@@ -84,6 +110,7 @@ export default function Home() {
   >({});
   const [error, setError] = useState<string | null>(null);
   const [msAuth, setMsAuth] = useState<MsAuthState | null>(null);
+  const [accountsRecheck, setAccountsRecheck] = useState(0);
 
   const [logUpload, setLogUpload] = useState<LogUpload | null>(null);
   const [uploadingLog, setUploadingLog] = useState(false);
@@ -100,12 +127,23 @@ export default function Home() {
     updated: boolean;
   } | null>(null);
   const [restartVersion, setRestartVersion] = useState<string | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  
+  const [importFromOnboarding, setImportFromOnboarding] = useState(false);
+  const [tabIntro, setTabIntro] = useState<View | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installingInstanceId, setInstallingInstanceId] = useState<string | null>(
     null,
   );
+  
+  const [flavorPrompt, setFlavorPrompt] = useState<{
+    instanceId: string;
+    quickPlay?: api.QuickPlay;
+    groups: FlavorGroup[] | "loading";
+  } | null>(null);
   const [avatarVersion, setAvatarVersion] = useState(0);
 
   const instance = instances.find((i) => i.id === selectedId) ?? null;
@@ -116,7 +154,34 @@ export default function Home() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  
+  
+  
+  const tr = useCallback(
+    (key: string, vars?: Record<string, string | number>) =>
+      translate(key, {
+        locale: settingsRef.current?.locale ?? "en",
+        pseudo: !!settingsRef.current?.pseudo_localize,
+        vars,
+      }),
+    [],
+  );
+
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  
+  
+  const anyOverlayOpen =
+    addOpen ||
+    !!flavorPrompt ||
+    !!msAuth ||
+    logView !== null ||
+    !!logUpload ||
+    !!changelog ||
+    !!restartVersion ||
+    aboutOpen ||
+    onboardingOpen ||
+    paletteOpen;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -125,29 +190,41 @@ export default function Home() {
         setPaletteOpen((o) => !o);
         return;
       }
-      if (e.key === "Escape" && view === "play") setView("instances");
+      if (e.key === "Escape" && view === "play" && !anyOverlayOpen)
+        setView("instances");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view]);
+  }, [view, anyOverlayOpen]);
 
   const theme = settings?.theme ?? "system";
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
     root.classList.toggle("reduce-motion", !!settings?.reduce_motion);
+    root.classList.toggle("theme-contrast", !!settings?.high_contrast);
     const mq = window.matchMedia("(prefers-color-scheme: light)");
+    
+    const THEME_CLASS: Record<string, string> = {
+      "brass-light": "theme-light",
+      "brass-grey": "theme-grey",
+      "brass-ocean": "theme-ocean",
+      "brass-mocha": "theme-mocha",
+    };
+    const allClasses = Object.values(THEME_CLASS);
     const apply = () => {
-      const light = theme === "brass-light" || (theme === "system" && mq.matches);
-      root.classList.toggle("theme-light", light);
-      root.classList.toggle("theme-grey", !light && theme === "brass-grey");
+      const resolved =
+        theme === "system" ? (mq.matches ? "brass-light" : "brass-dark") : theme;
+      root.classList.remove(...allClasses);
+      const cls = THEME_CLASS[resolved];
+      if (cls) root.classList.add(cls);
     };
     apply();
     if (theme === "system") {
       mq.addEventListener("change", apply);
       return () => mq.removeEventListener("change", apply);
     }
-  }, [theme, settings?.reduce_motion]);
+  }, [theme, settings?.reduce_motion, settings?.high_contrast]);
 
   useEffect(() => {
     applyAccent(settings?.accent_color ?? null);
@@ -174,23 +251,24 @@ export default function Home() {
     if (!api.isTauri()) return;
     (async () => {
       try {
-        const [list, s, acc, running, ver] = await Promise.all([
+        const [list, s, acc, running, ver, feat] = await Promise.all([
           api.getInstances(),
           api.getSettings(),
           api.getAccounts(),
           api.getRunning(),
           api.appVersion().catch(() => null),
+          api.featuredPacks().catch(() => []),
         ]);
         setInstances(list);
         setAccounts(acc);
         setAppVer(ver);
+        setFeaturedPacks(feat);
 
+        const pool = s.show_featured ? list : list.filter((i) => !i.featured);
         const sel =
           (s.selected_instance &&
-            list.find((i) => i.id === s.selected_instance)?.id) ||
-          list.find((i) => i.featured)?.id ||
-          list[0]?.id ||
-          null;
+            pool.find((i) => i.id === s.selected_instance)?.id) ||
+          defaultInstanceId(list, s.show_featured);
         setSelectedId(sel);
         if (running.length) setRunningIds(new Set(running));
 
@@ -202,13 +280,20 @@ export default function Home() {
         }
         setSettings(next);
 
+        
+        
+        try {
+          if (!localStorage.getItem(ONBOARDED_KEY) && acc.accounts.length === 0)
+            setOnboardingOpen(true);
+        } catch {}
+
         if (next.auto_update) {
           try {
             const info = await api.checkForUpdate();
             if (info.available) {
-              toast(`Update v${info.version} found - downloading…`, "info");
+              toast(tr("page.updateFound", { version: info.version }), "info");
               await api.installUpdate();
-              toast(`Update v${info.version} installed`, "success");
+              toast(tr("settings.updates.installedToast", { version: info.version }), "success");
               setRestartVersion(info.version);
             }
           } catch {
@@ -256,16 +341,80 @@ export default function Home() {
       .catch(() => {});
   }, [accounts]);
 
+  
+  
+  useEffect(() => {
+    if (!api.isTauri()) return;
+    let un: (() => void) | undefined;
+    const NAV: Record<string, View> = {
+      "nav-play": "play",
+      "nav-instances": "instances",
+      "nav-mods": "mods",
+      "nav-worlds": "worlds",
+      "nav-servers": "servers",
+      "nav-skin": "skin",
+      "nav-screenshots": "screenshots",
+      "nav-settings": "settings",
+    };
+    api
+      .onMenuAction((action) => {
+        if (action === "about") setAboutOpen(true);
+        else if (action === "palette") setPaletteOpen(true);
+        else if (action === "add-instance") setAddOpen(true);
+        else if (action === "view-log") setLogView(false);
+        else if (NAV[action]) setView(NAV[action]);
+      })
+      .then((u) => (un = u));
+    return () => un?.();
+  }, []);
+
+  const featuredEnabled = settings?.show_featured ?? true;
   const showNews = !!(
+    featuredEnabled &&
     instance?.featured &&
     instance.show_news &&
     instance.news_url
   );
   const showPlayers = !!(
+    featuredEnabled &&
     instance?.featured &&
     instance.show_playercount &&
     instance.playercount_url
   );
+
+  
+  
+  useEffect(() => {
+    if (featuredEnabled || !instance?.featured) return;
+    const next = instances.find((i) => !i.featured);
+    if (next) void selectInstance(next.id);
+    else setSelectedId(null);
+  }, [featuredEnabled, instance?.featured, instances, selectInstance]);
+
+  
+  
+  
+  
+  useEffect(() => {
+    if (!settings) return;
+    if (!selectedId && INSTANCE_VIEWS.includes(view)) setView("instances");
+    
+    const acc =
+      accounts.accounts.find((a) => a.id === accounts.selected) ??
+      accounts.accounts[0];
+    if (view === "skin" && acc?.kind !== "microsoft")
+      setView(selectedId ? "play" : "instances");
+  }, [settings, selectedId, view, accounts]);
+
+  
+  
+  useEffect(() => {
+    if (!settings || onboardingOpen) return;
+    if (!hasTabIntro(view) || tabIntroSeen(view)) return;
+    if (INSTANCE_VIEWS.includes(view) && !selectedId) return;
+    markTabIntroSeen(view);
+    setTabIntro(view);
+  }, [settings, onboardingOpen, view, selectedId]);
 
   const refreshPlayers = useCallback(async () => {
     if (!api.isTauri() || !selectedId || !showPlayers) return;
@@ -379,9 +528,9 @@ export default function Home() {
         });
         if (d.error) {
           if (id === selectedRef.current) setError(d.error);
-          toast("Modpack update failed", "error");
+          toast(tr("page.modpackUpdateFailed"), "error");
         } else if (!d.cancelled) {
-          toast("Modpack is up to date", "success");
+          toast(tr("page.modpackUpToDate"), "success");
         }
         if (id === selectedRef.current) refreshModStatus();
       }),
@@ -403,7 +552,7 @@ export default function Home() {
       api.onPackProgress((p) => {
         const pct =
           p.total > 0 ? Math.min(100, Math.round((p.current / p.total) * 100)) : null;
-        toastProgress("install", p.message || "Installing modpack…", pct);
+        toastProgress("install", p.message || tr("page.installingModpack"), pct);
       }),
       api.onPackDone((d) => {
         setInstalling(false);
@@ -411,14 +560,14 @@ export default function Home() {
         dismissToast("install");
         if (d.error) {
           setError(d.error);
-          toast("Modpack install failed", "error");
+          toast(tr("page.modpackInstallFailed"), "error");
           refreshInstances().catch(() => {});
         } else if (d.cancelled) {
-          toast("Install cancelled", "info");
+          toast(tr("page.installCancelled"), "info");
           refreshInstances().catch(() => {});
         } else if (d.instance) {
           const created = d.instance;
-          toast(`Installed ${created.name}`, "success");
+          toast(tr("page.installedInstance", { name: created.name }), "success");
           setAddOpen(false);
           refreshInstances().then(() => {
             void selectInstance(created.id);
@@ -445,6 +594,9 @@ export default function Home() {
       } else if (e.phase === "done") {
         setAccounts(e.store);
         setMsAuth(null);
+        
+        
+        setAccountsRecheck((n) => n + 1);
       } else {
         setMsAuth({ status: "error", message: e.message });
       }
@@ -454,10 +606,8 @@ export default function Home() {
     };
   }, []);
 
-  const onPlay = useCallback(
-    async (id?: string, quickPlay?: api.QuickPlay) => {
-      const target = id ?? selectedId;
-      if (!target) return;
+  const launchNow = useCallback(
+    async (target: string, quickPlay?: api.QuickPlay) => {
       if (target !== selectedId) await selectInstance(target);
       setError(null);
       setProgressById((m) => {
@@ -476,6 +626,46 @@ export default function Home() {
       }
     },
     [selectedId, selectInstance],
+  );
+
+  const onPlay = useCallback(
+    async (id?: string, quickPlay?: api.QuickPlay) => {
+      const target = id ?? selectedId;
+      if (!target) return;
+      
+      
+      const inst = instances.find((i) => i.id === target);
+      if (
+        inst &&
+        inst.pack.kind === "packwiz" &&
+        inst.pack.unsup &&
+        inst.unsup_flavors === null
+      ) {
+        if (target !== selectedId) await selectInstance(target);
+        setView("play");
+        setFlavorPrompt({ instanceId: target, quickPlay, groups: "loading" });
+        try {
+          const groups = await api.inspectPackwizFlavors(inst.pack.url);
+          if (groups.length === 0) {
+            
+            setFlavorPrompt(null);
+            const updated = await api.setPackwizFlavors(target, []);
+            setInstances((list) =>
+              list.map((x) => (x.id === updated.id ? updated : x)),
+            );
+            await launchNow(target, quickPlay);
+          } else {
+            setFlavorPrompt({ instanceId: target, quickPlay, groups });
+          }
+        } catch (e) {
+          setFlavorPrompt(null);
+          setError(String(e));
+        }
+        return;
+      }
+      await launchNow(target, quickPlay);
+    },
+    [selectedId, selectInstance, instances, launchNow],
   );
 
   const onStop = useCallback(async () => {
@@ -524,10 +714,29 @@ export default function Home() {
       projectId: string,
       versionId: string,
       name: string,
+      optional: string[],
     ) => {
       setInstalling(true);
       toastProgress("install", "Starting install…", null);
-      api.installModpack(source, projectId, versionId, name).catch((e) => {
+      api.installModpack(source, projectId, versionId, name, optional).catch((e) => {
+        setInstalling(false);
+        dismissToast("install");
+        setError(String(e));
+      });
+    },
+    [],
+  );
+
+  const onInstallModpackFile = useCallback(
+    (
+      source: "modrinth" | "curseforge",
+      path: string,
+      name: string,
+      optional: string[],
+    ) => {
+      setInstalling(true);
+      toastProgress("install", "Reading file…", null);
+      api.installModpackFile(path, source, name, optional).catch((e) => {
         setInstalling(false);
         dismissToast("install");
         setError(String(e));
@@ -542,6 +751,11 @@ export default function Home() {
   }, []);
 
   const refreshAccounts = (s: AccountStore) => setAccounts(s);
+  const activeAccount =
+    accounts.accounts.find((a) => a.id === accounts.selected) ??
+    accounts.accounts[0];
+  
+  const skinsAvailable = activeAccount?.kind === "microsoft";
   const canPlay = accounts.accounts.length > 0;
   const running = !!selectedId && runningIds.has(selectedId);
   const working = !!selectedId && workingIds.has(selectedId);
@@ -556,26 +770,26 @@ export default function Home() {
     const go = (id: string, label: string, v: View, icon: React.ReactNode): Command => ({
       id,
       label,
-      group: "Navigate",
+      group: tr("commands.groupNavigate"),
       icon,
       keywords: "open go to tab",
       run: () => setView(v),
     });
     const cmds: Command[] = [
-      go("nav-play", "Play", "play", <Play size={14} />),
-      go("nav-instances", "Instances", "instances", <LayoutGrid size={14} />),
-      go("nav-content", "Content", "mods", <Package size={14} />),
-      go("nav-worlds", "Worlds", "worlds", <Globe2 size={14} />),
-      go("nav-servers", "Servers", "servers", <Server size={14} />),
-      go("nav-skins", "Skins", "skin", <Shirt size={14} />),
-      go("nav-screenshots", "Screenshots", "screenshots", <ImageIcon size={14} />),
-      go("nav-settings", "Settings", "settings", <SettingsIcon size={14} />),
+      go("nav-play", tr("sidebar.play"), "play", <Play size={14} />),
+      go("nav-instances", tr("sidebar.instances"), "instances", <LayoutGrid size={14} />),
+      go("nav-content", tr("sidebar.content"), "mods", <Package size={14} />),
+      go("nav-worlds", tr("sidebar.worlds"), "worlds", <Globe2 size={14} />),
+      go("nav-servers", tr("sidebar.servers"), "servers", <Server size={14} />),
+      go("nav-skins", tr("sidebar.skins"), "skin", <Shirt size={14} />),
+      go("nav-screenshots", tr("sidebar.screenshots"), "screenshots", <ImageIcon size={14} />),
+      go("nav-settings", tr("sidebar.settings"), "settings", <SettingsIcon size={14} />),
     ];
     if (canPlay && !running)
       cmds.push({
         id: "play-launch",
-        label: "Launch game",
-        group: "Actions",
+        label: tr("commands.launchGame"),
+        group: tr("commands.groupActions"),
         icon: <Play size={14} className="fill-current" />,
         keywords: "start run play",
         hint: instance?.name,
@@ -584,37 +798,44 @@ export default function Home() {
     cmds.push(
       {
         id: "add-instance",
-        label: "Add instance…",
-        group: "Actions",
+        label: tr("commands.addInstance"),
+        group: tr("commands.groupActions"),
         icon: <Plus size={14} />,
         keywords: "new create modpack",
         run: () => setAddOpen(true),
       },
       {
         id: "view-log",
-        label: "View last log",
-        group: "Actions",
+        label: tr("sidebar.viewLastLog"),
+        group: tr("commands.groupActions"),
         icon: <ScrollText size={14} />,
         keywords: "console output crash",
         run: () => setLogView(false),
       },
       {
         id: "open-folder",
-        label: "Open game folder",
-        group: "Actions",
+        label: tr("instances.openGameFolder"),
+        group: tr("commands.groupActions"),
         icon: <FolderOpen size={14} />,
         keywords: "files directory explorer finder",
         run: () => selectedId && api.openDir(selectedId).catch(() => {}),
       },
       {
         id: "cycle-theme",
-        label: "Switch theme (system / light / dark / grey)",
-        group: "Actions",
+        label: tr("commands.switchTheme"),
+        group: tr("commands.groupActions"),
         icon: <SunMoon size={14} />,
-        keywords: "appearance dark light grey gray mode",
+        keywords: "appearance dark light grey gray oled ocean mocha mode",
         run: () => {
           if (!settings) return;
-          const order = ["system", "brass-light", "brass-dark", "brass-grey"];
+          const order = [
+            "system",
+            "brass-grey",
+            "brass-dark",
+            "brass-ocean",
+            "brass-mocha",
+            "brass-light",
+          ];
           const next = order[(order.indexOf(settings.theme) + 1) % order.length];
           const s = { ...settings, theme: next };
           setSettings(s);
@@ -624,10 +845,11 @@ export default function Home() {
     );
     for (const i of instances) {
       if (i.id === selectedId) continue;
+      if (i.featured && !featuredEnabled) continue;
       cmds.push({
         id: `switch-${i.id}`,
-        label: `Switch to ${i.name}`,
-        group: "Instances",
+        label: tr("commands.switchTo", { name: i.name }),
+        group: tr("sidebar.instances"),
         icon: <LayoutGrid size={14} />,
         keywords: "instance select pack",
         run: () => {
@@ -637,9 +859,13 @@ export default function Home() {
       });
     }
     return cmds;
-  }, [instances, selectedId, canPlay, running, instance?.name, settings, onPlay, selectInstance]);
+  }, [instances, selectedId, canPlay, running, instance?.name, settings, featuredEnabled, onPlay, selectInstance, tr]);
 
   return (
+    <I18nProvider
+      locale={settings?.locale ?? "en"}
+      pseudo={!!settings?.pseudo_localize}
+    >
     <div className="flex h-screen w-screen flex-col bg-ink-950">
       <TitleBar />
       <div className="flex min-h-0 flex-1">
@@ -650,6 +876,9 @@ export default function Home() {
           onStop={onStop}
           onViewLogs={setLogView}
           onOpenPalette={() => setPaletteOpen(true)}
+          onShowAbout={() => setAboutOpen(true)}
+          hasInstance={!!selectedId}
+          skinsAvailable={skinsAvailable}
           activeName={instance?.name}
           onActiveClick={() => {
             if (selectedId) {
@@ -664,6 +893,13 @@ export default function Home() {
               onSelect={(id) => api.selectAccount(id).then(refreshAccounts)}
               onRemove={(id) => api.removeAccount(id).then(refreshAccounts)}
               onMicrosoftLogin={onMicrosoftLogin}
+              recheckSignal={accountsRecheck}
+              onAddOffline={(username) =>
+                api
+                  .addOfflineAccount(username)
+                  .then(refreshAccounts)
+                  .catch((e) => setError(String(e)))
+              }
             />
           }
         />
@@ -683,10 +919,22 @@ export default function Home() {
             key={view}
             className="view-anim flex min-h-0 flex-1 flex-col"
           >
+          {tabIntro === view && (
+            <TabIntro
+              view={tabIntro}
+              onClose={() => setTabIntro(null)}
+              onSkipAll={() => {
+                markAllTabIntrosSeen();
+                setTabIntro(null);
+              }}
+            />
+          )}
           {view === "instances" && (
             <InstancesView
               instances={instances}
+              showFeatured={featuredEnabled}
               folders={settings?.instance_folders ?? []}
+              settingsAccent={settings?.accent_color ?? null}
               onSaveFolders={(f) => {
                 setSettings((s) => {
                   if (!s) return s;
@@ -727,6 +975,7 @@ export default function Home() {
               notInstalled={managed && !!modStatus && !modStatus.installed_version}
               showPlaytime={settings?.show_playtime ?? true}
               playtimeHours={settings?.playtime_in_hours ?? false}
+              featuredEnabled={featuredEnabled}
               players={players}
               playersError={playersError}
               news={news}
@@ -737,12 +986,16 @@ export default function Home() {
               onUpdate={() => onPlay()}
               onStop={onStop}
               onCancel={onCancel}
+              onSaveInstance={onSaveInstance}
+              launcherSettings={settings}
             />
           )}
 
           {view === "mods" && selectedId && (
             <ModsView
               instanceId={selectedId}
+              mc={instance?.minecraft_version ?? ""}
+              loader={instance?.loader ?? "vanilla"}
               locked={locked}
               onToggleLock={() => {
                 if (!instance) return;
@@ -802,8 +1055,7 @@ export default function Home() {
               onDeleted={(id) => {
                 refreshInstances().then((list) => {
                   if (selectedId === id) {
-                    const next =
-                      list.find((i) => i.featured)?.id ?? list[0]?.id ?? null;
+                    const next = defaultInstanceId(list, featuredEnabled);
                     if (next) void selectInstance(next);
                     else setSelectedId(null);
                   }
@@ -837,6 +1089,14 @@ export default function Home() {
                 setSettings(s);
                 api.saveSettings(s).catch((e) => setError(String(e)));
               }}
+              onReplayOnboarding={() => {
+                try {
+                  localStorage.removeItem(ONBOARDED_KEY);
+                } catch {}
+                resetTabIntros();
+                setView("play");
+                setOnboardingOpen(true);
+              }}
               onError={(e) => setError(e)}
             />
           )}
@@ -848,9 +1108,14 @@ export default function Home() {
         <AddInstanceModal
           installing={installing}
           detailInstanceId={selectedId}
-          onClose={() => setAddOpen(false)}
+          importOnly={importFromOnboarding}
+          onClose={() => {
+            setAddOpen(false);
+            setImportFromOnboarding(false);
+          }}
           onCreated={(inst) => {
             setAddOpen(false);
+            setImportFromOnboarding(false);
             api.getSettings().then(setSettings).catch(() => {});
             refreshInstances().then(() => {
               void selectInstance(inst.id);
@@ -858,17 +1123,66 @@ export default function Home() {
             });
           }}
           onInstallModpack={onInstallModpack}
-          onUploadModpack={(source, data, name) => {
-            setInstalling(true);
-            toastProgress("install", "Reading file…", null);
-            api.installModpackBytes(data, source, name).catch((e) => {
-              setInstalling(false);
-              dismissToast("install");
-              setError(String(e));
+          onInstallModpackFile={onInstallModpackFile}
+          onError={setError}
+          featured={featuredPacks}
+          featuredEnabled={featuredEnabled}
+          onEnableFeatured={() => {
+            setSettings((s) => {
+              if (!s || s.show_featured) return s;
+              const next = { ...s, show_featured: true };
+              api.saveSettings(next).catch((e) => setError(String(e)));
+              return next;
             });
           }}
-          onError={setError}
+          onOpenFeatured={(id) => {
+            setAddOpen(false);
+            void selectInstance(id);
+            setView("play");
+          }}
         />
+      )}
+
+      {flavorPrompt && (
+        <div
+          className="modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+          onMouseDown={(e) =>
+            e.target === e.currentTarget && setFlavorPrompt(null)
+          }
+        >
+          <div className="rise flex h-[70vh] w-[560px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 p-5 shadow-2xl">
+            {flavorPrompt.groups === "loading" ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-ink-600">
+                <Loader2 size={22} className="animate-spin text-brass-400" />
+                <span className="text-sm">{tr("addInstance.checkingOptional")}</span>
+              </div>
+            ) : (
+              <FlavorPicker
+                title={
+                  instances.find((i) => i.id === flavorPrompt.instanceId)?.name ??
+                  tr("addInstance.modpackFallback")
+                }
+                groups={flavorPrompt.groups}
+                busy={false}
+                confirmLabel={tr("page.installAndPlay")}
+                onBack={() => setFlavorPrompt(null)}
+                onConfirm={(ids) => {
+                  const p = flavorPrompt;
+                  setFlavorPrompt(null);
+                  api
+                    .setPackwizFlavors(p.instanceId, ids)
+                    .then((updated) => {
+                      setInstances((list) =>
+                        list.map((x) => (x.id === updated.id ? updated : x)),
+                      );
+                      return launchNow(p.instanceId, p.quickPlay);
+                    })
+                    .catch((e) => setError(String(e)));
+                }}
+              />
+            )}
+          </div>
+        </div>
       )}
 
       {msAuth && (
@@ -899,10 +1213,47 @@ export default function Home() {
           onDismiss={() => setRestartVersion(null)}
         />
       )}
+      {aboutOpen && (
+        <AboutModal
+          appVersion={appVer}
+          onShowChangelog={() => setChangelog({ version: appVer, updated: false })}
+          onUpdateInstalled={(v) => setRestartVersion(v)}
+          onError={setError}
+          onClose={() => setAboutOpen(false)}
+        />
+      )}
+      {onboardingOpen && settings && (
+        <OnboardingWizard
+          settings={settings}
+          onPatch={(p) => {
+            setSettings((s) => {
+              if (!s) return s;
+              const next = { ...s, ...p };
+              api.saveSettings(next).catch((e) => setError(String(e)));
+              return next;
+            });
+          }}
+          accounts={accounts}
+          onMicrosoftLogin={onMicrosoftLogin}
+          onAddOffline={(username) =>
+            api
+              .addOfflineAccount(username)
+              .then(refreshAccounts)
+              .catch((e) => setError(String(e)))
+          }
+          onOpenImport={() => {
+            setImportFromOnboarding(true);
+            setAddOpen(true);
+          }}
+          onFinish={() => setOnboardingOpen(false)}
+        />
+      )}
       {paletteOpen && (
         <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
       )}
       <ToastHost />
+      <TooltipLayer />
     </div>
+    </I18nProvider>
   );
 }

@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 
 const FEATURED_JSON: &str = include_str!("../featured.json");
@@ -26,6 +25,14 @@ pub struct FeaturedPack {
     pub loader: String,
     #[serde(default)]
     pub loader_version: String,
+        #[serde(default)]
+    pub unsup: bool,
+        #[serde(default)]
+    pub unsup_public_key: Option<String>,
+                #[serde(default)]
+    pub modrinth_ids: Vec<String>,
+        #[serde(default)]
+    pub curseforge_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

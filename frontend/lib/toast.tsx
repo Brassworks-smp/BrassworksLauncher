@@ -8,7 +8,7 @@ interface Toast {
   key?: string;
   kind: ToastKind;
   message: string;
-  /** 0–100 for a determinate progress bar, null for indeterminate. */
+  
   progress?: number | null;
   sticky?: boolean;
 }
@@ -22,16 +22,12 @@ let counter = 0;
 const listeners = new Set<(a: Action) => void>();
 const emit = (a: Action) => listeners.forEach((l) => l(a));
 
-/** Fire a transient toast from anywhere (no provider/context needed). */
+
 export function toast(message: string, kind: ToastKind = "info") {
   emit({ type: "add", toast: { id: ++counter, kind, message } });
 }
 
-/**
- * Show or update a sticky progress toast identified by `key` — the download
- * overlay and toasts are the same thing. `progress` is 0–100, or null for an
- * indeterminate bar. Call {@link dismissToast} when finished.
- */
+
 export function toastProgress(
   key: string,
   message: string,

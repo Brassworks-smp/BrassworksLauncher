@@ -670,14 +670,20 @@ async fn download_single(
 
 }
 
+fn is_retryable_status(status: StatusCode) -> bool {
+    matches!(status.as_u16(), 408 | 425 | 429 | 500 | 502 | 503 | 504)
+}
+
+fn retry_backoff(attempt: u8) -> std::time::Duration {
+    std::time::Duration::from_millis(250u64 << (attempt.min(4).saturating_sub(1) as u32))
+}
+
 async fn download_entry(
-    client: Client, 
+    client: Client,
     entry: &Entry,
     mut progress_sender: impl EntryProgressSender,
 ) -> Result<EntrySuccessInner, EntryErrorKind> {
 
-    let mut req = client.get(&*entry.core.url);
-    
     let cache_file = entry.use_cache.then(|| {
         entry.core.file.to_path_buf().appended(".cache")
     });
@@ -688,27 +694,42 @@ async fn download_entry(
             .map_err(EntryErrorKind::new_io)?;
     }
 
-    if let Some((_, cache_meta)) = &cache {
-        if let Some(etag) = cache_meta.etag.as_deref() {
-            req = req.header(header::IF_NONE_MATCH, etag);
-        }
-        if let Some(last_modified) = cache_meta.last_modified.as_deref() {
-            req = req.header(header::IF_MODIFIED_SINCE, last_modified);
-        }
-    }
+    let mut send_try = 0u8;
+    let mut res = loop {
 
-    let mut res = match req.send().await {
-        Ok(res) => res,
-        Err(e) if cache.is_some() && (e.is_timeout() || e.is_request() || e.is_connect()) => {
-            let (handle, cache_meta) = cache.unwrap();
-            return Ok(EntrySuccessInner { 
-                size: cache_meta.size, 
-                sha1: cache_meta.sha1.0,
-                handle: entry.keep_open.then_some(handle),
-            });
+        let mut req = client.get(&*entry.core.url);
+        if let Some((_, cache_meta)) = &cache {
+            if let Some(etag) = cache_meta.etag.as_deref() {
+                req = req.header(header::IF_NONE_MATCH, etag);
+            }
+            if let Some(last_modified) = cache_meta.last_modified.as_deref() {
+                req = req.header(header::IF_MODIFIED_SINCE, last_modified);
+            }
         }
-        Err(e) => {
-            return Err(EntryErrorKind::new_reqwest(e));
+
+        match req.send().await {
+            Ok(res) if is_retryable_status(res.status()) && send_try < entry.max_retry => {
+                send_try += 1;
+                tokio::time::sleep(retry_backoff(send_try)).await;
+                continue;
+            }
+            Ok(res) => break res,
+            Err(e) if cache.is_some() && (e.is_timeout() || e.is_request() || e.is_connect()) => {
+                let (handle, cache_meta) = cache.unwrap();
+                return Ok(EntrySuccessInner {
+                    size: cache_meta.size,
+                    sha1: cache_meta.sha1.0,
+                    handle: entry.keep_open.then_some(handle),
+                });
+            }
+            Err(e) if (e.is_timeout() || e.is_request() || e.is_connect())
+                && send_try < entry.max_retry =>
+            {
+                send_try += 1;
+                tokio::time::sleep(retry_backoff(send_try)).await;
+                continue;
+            }
+            Err(e) => return Err(EntryErrorKind::new_reqwest(e)),
         }
     };
 
@@ -747,7 +768,10 @@ async fn download_entry(
 
             let chunk = match res.chunk().await {
                 Ok(chunk) => chunk,
-                Err(e) => break (e.is_timeout() || e.is_decode(), EntryErrorKind::new_reqwest(e)),
+                Err(e) => break (
+                    e.is_timeout() || e.is_decode() || e.is_body() || e.is_request(),
+                    EntryErrorKind::new_reqwest(e),
+                ),
             };
 
             let Some(chunk) = chunk else {

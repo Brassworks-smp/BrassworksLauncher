@@ -31,7 +31,7 @@ pub mod versions;
 
 use std::process::Child;
 
-pub use account::{Account, AccountKind, AccountStore};
+pub use account::{Account, AccountKind, AccountStatus, AccountStore};
 pub use auth::MicrosoftCode;
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
@@ -41,7 +41,7 @@ pub use launch::{launch_instance, LaunchRequest, QuickPlay};
 pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
-pub use packwiz::{PackwizBranch, SearchHit};
+pub use packwiz::{FlavorChoice, FlavorGroup, PackwizBranch, SearchHit};
 pub use paths::Paths;
 pub use ping::ServerStatus;
 pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
@@ -154,6 +154,32 @@ impl Launcher {
         Ok(store)
     }
 
+                        pub fn account_status(&self, account_id: &str) -> AccountStatus {
+        let Ok(store) = self.accounts() else {
+            return AccountStatus::NeedsRelogin;
+        };
+        let Some(account) = store.accounts.iter().find(|a| a.id == account_id) else {
+            return AccountStatus::NeedsRelogin;
+        };
+        if !account.is_microsoft() {
+            return AccountStatus::Offline;
+        }
+        let db = msa::Database::new(self.paths.msa_db_file());
+        let Ok(uuid) = uuid::Uuid::parse_str(&account.uuid) else {
+            return AccountStatus::NeedsRelogin;
+        };
+        match db.load_from_uuid(uuid) {
+            Ok(Some(mut acc)) => match acc.request_refresh() {
+                Ok(()) => {
+                    let _ = db.store(acc);
+                    AccountStatus::Ok
+                }
+                Err(_) => AccountStatus::NeedsRelogin,
+            },
+            _ => AccountStatus::NeedsRelogin,
+        }
+    }
+
     pub fn microsoft_login(
         &self,
         on_code: impl FnOnce(MicrosoftCode),
@@ -196,6 +222,7 @@ impl Launcher {
         cancel: &dyn Fn() -> bool,
         on_progress: &mut ProgressSink,
     ) -> Result<Child> {
+                        self.reconcile_packwiz_loader(instance_id);
         let instance = self.instances().get(instance_id)?;
         let accounts = self.accounts()?;
         let account = accounts.active().ok_or(CoreError::NoAccount)?.clone();
@@ -223,15 +250,25 @@ impl Launcher {
 
     fn modpack_for(&self, instance_id: &str) -> Modpack<'_> {
         let cf_key = self.cf_key();
+        let concurrency = self.concurrency();
         match self.instances().get(instance_id) {
-            Ok(instance) => Modpack::for_instance(&self.paths, &instance, Some(cf_key)),
+            Ok(instance) => Modpack::for_instance(&self.paths, &instance, Some(cf_key))
+                .with_concurrency(concurrency),
             Err(_) => Modpack::with_url(
                 &self.paths,
                 instance_id,
                 modpack::PACK_URL.to_string(),
             )
-            .with_curseforge_key(Some(cf_key)),
+            .with_curseforge_key(Some(cf_key))
+            .with_concurrency(concurrency),
         }
+    }
+
+        fn concurrency(&self) -> usize {
+        self.settings()
+            .ok()
+            .map(|s| s.download_concurrency.max(1))
+            .unwrap_or(packwiz::DEFAULT_CONCURRENCY)
     }
 
     pub fn modpack_status(&self, instance_id: &str) -> Result<ModpackStatus> {
@@ -247,7 +284,44 @@ impl Launcher {
     ) -> Result<()> {
         self.modpack_for(instance_id)
             .sync(force, cancel, &mut Self::modpack_sink(instance_id, on_progress))?;
+        self.reconcile_packwiz_loader(instance_id);
         Ok(())
+    }
+
+                            fn reconcile_packwiz_loader(&self, instance_id: &str) {
+        let mgr = self.instances();
+        let Ok(mut inst) = mgr.get(instance_id) else {
+            return;
+        };
+        let url = match &inst.pack {
+            PackSource::Packwiz { url, .. } => url.clone(),
+            _ => return,
+        };
+        let Ok(pack) = packwiz::Installer::new().fetch_pack(&url) else {
+            return;
+        };
+        let (loader, loader_version) = loader_from_pack(&pack);
+        let mut changed = false;
+        if inst.loader != loader {
+            inst.loader = loader;
+                        inst.loader_version = loader_version.clone();
+            changed = true;
+        }
+        if inst.modpack_locked {
+            if let Some(mc) = &pack.versions.minecraft {
+                if &inst.minecraft_version != mc {
+                    inst.minecraft_version = mc.clone();
+                    changed = true;
+                }
+            }
+            if inst.loader_version != loader_version {
+                inst.loader_version = loader_version;
+                changed = true;
+            }
+        }
+        if changed {
+            let _ = mgr.update(&inst);
+        }
     }
 
     pub fn reinstall_modpack(
@@ -302,20 +376,15 @@ impl Launcher {
         mgr.create(inst)
     }
 
-    /// Scan other launchers (Prism, Modrinth App) for importable instances.
-    pub fn scan_importable(&self) -> Vec<ImportCandidate> {
+        pub fn scan_importable(&self) -> Vec<ImportCandidate> {
         import::scan()
     }
 
-    /// Import the selected external instances (keyed `"{source}:{key}"`): create
-    /// a Brassworks instance for each, copy its game files + icon, and map Prism
-    /// groups onto folders. Returns the instances created.
-    pub fn import_external(&self, keys: Vec<String>) -> Result<Vec<Instance>> {
+                pub fn import_external(&self, keys: Vec<String>) -> Result<Vec<Instance>> {
         let candidates = import::scan();
         let mgr = self.instances();
         let mut settings = self.settings()?;
-        // Reuse an existing folder when a group of the same name already exists.
-        let mut group_folder: std::collections::HashMap<String, String> = settings
+                let mut group_folder: std::collections::HashMap<String, String> = settings
             .instance_folders
             .iter()
             .map(|f| (f.name.clone(), f.id.clone()))
@@ -341,9 +410,7 @@ impl Launcher {
                 Some(v) if !v.is_empty() => LoaderVersion::Exact(v.clone()),
                 _ => LoaderVersion::Stable,
             };
-            // Preserve a managed modpack link so the instance updates as a Modrinth/
-            // CurseForge pack instead of importing as a plain custom instance.
-            let pack = match (c.pack_provider.as_deref(), &c.pack_id, &c.pack_version) {
+                                    let pack = match (c.pack_provider.as_deref(), &c.pack_id, &c.pack_version) {
                 (Some("modrinth"), Some(pid), Some(vid)) => PackSource::Modrinth {
                     project_id: Some(pid.clone()),
                     version_id: vid.clone(),
@@ -382,17 +449,14 @@ impl Launcher {
                 };
                 inst.folder_id = Some(fid);
             }
-            // `c.icon` is already a data: URI built during the scan.
-            inst.icon = c.icon.clone();
+                        inst.icon = c.icon.clone();
 
             let src_game = import::game_dir_for(c);
             if src_game.is_dir() {
                 let dst_game = self.paths.instance_game_dir(&id);
                 import::copy_dir_all(&src_game, &dst_game)
                     .map_err(|e| CoreError::Io { path: dst_game, source: e })?;
-                // Carry over per-mod Modrinth/CurseForge source metadata so imported
-                // mods keep their icons and per-mod updates in the content browser.
-                let items = match c.source.as_str() {
+                                                let items = match c.source.as_str() {
                     "modrinth" => import::modrinth_mod_items(c),
                     _ => import::prism_mod_items(&src_game),
                 };
@@ -413,12 +477,19 @@ impl Launcher {
         Ok(created)
     }
 
-    /// List the branches of a GitHub repo that ship a packwiz `pack.toml`.
-    pub fn list_packwiz_branches(&self, repo: &str) -> Result<Vec<packwiz::PackwizBranch>> {
+        pub fn list_packwiz_branches(&self, repo: &str) -> Result<Vec<packwiz::PackwizBranch>> {
         Ok(packwiz::Installer::new().github_pack_branches(repo)?)
     }
 
-    pub fn create_packwiz_instance(&self, name: &str, url: &str) -> Result<Instance> {
+    pub fn create_packwiz_instance(
+        &self,
+        name: &str,
+        url: &str,
+        optional: Vec<String>,
+        unsup: bool,
+        flavors: Vec<String>,
+        public_key: Option<String>,
+    ) -> Result<Instance> {
         let installer = packwiz::Installer::new();
         let pack = installer.fetch_pack(url)?;
         let mc = pack
@@ -426,17 +497,7 @@ impl Launcher {
             .minecraft
             .clone()
             .unwrap_or_else(|| "1.21.1".to_string());
-        let (loader, loader_version) = if let Some(v) = &pack.versions.neoforge {
-            (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.forge {
-            (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.fabric {
-            (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.quilt {
-            (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
-        } else {
-            (LoaderKind::Vanilla, LoaderVersion::Stable)
-        };
+        let (loader, loader_version) = loader_from_pack(&pack);
         let mgr = self.instances();
         let display = if name.trim().is_empty() {
             pack.name.clone()
@@ -452,19 +513,18 @@ impl Launcher {
             loader_version,
             PackSource::Packwiz {
                 url: url.to_string(),
+                unsup,
             },
         );
-        // Adopt the pack's root icon.png (next to pack.toml) as the instance icon,
-        // if it ships one. Best-effort — falls back to the default icon otherwise.
-        inst.icon = installer.find_pack_icon(url);
+        inst.optional_mods = Some(optional);
+        inst.unsup_flavors = Some(flavors);
+        inst.unsup_public_key = public_key.filter(|k| !k.trim().is_empty());
+                        inst.icon = installer.find_pack_icon(url);
         mgr.create(inst)
     }
 
 
-    /// Re-point a packwiz instance at a different branch's `pack.toml`,
-    /// re-detecting its Minecraft version + loader from the new pack. The caller
-    /// should then reinstall/sync so files match. Returns the updated instance.
-    pub fn switch_packwiz_branch(&self, instance_id: &str, url: &str) -> Result<Instance> {
+                pub fn switch_packwiz_branch(&self, instance_id: &str, url: &str) -> Result<Instance> {
         let installer = packwiz::Installer::new();
         let pack = installer.fetch_pack(url)?;
         let mc = pack
@@ -472,33 +532,85 @@ impl Launcher {
             .minecraft
             .clone()
             .unwrap_or_else(|| "1.21.1".to_string());
-        let (loader, loader_version) = if let Some(v) = &pack.versions.neoforge {
-            (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.forge {
-            (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.fabric {
-            (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
-        } else if let Some(v) = &pack.versions.quilt {
-            (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
-        } else {
-            (LoaderKind::Vanilla, LoaderVersion::Stable)
-        };
+        let (loader, loader_version) = loader_from_pack(&pack);
         let mgr = self.instances();
         let mut inst = mgr.get(instance_id)?;
-        if !matches!(inst.pack, PackSource::Packwiz { .. }) {
-            return Err(CoreError::Modpack(
-                "instance is not a packwiz pack".to_string(),
-            ));
-        }
+        let unsup = match inst.pack {
+            PackSource::Packwiz { unsup, .. } => unsup,
+            _ => {
+                return Err(CoreError::Modpack(
+                    "instance is not a packwiz pack".to_string(),
+                ))
+            }
+        };
         inst.minecraft_version = mc;
         inst.loader = loader;
         inst.loader_version = loader_version;
         inst.pack = PackSource::Packwiz {
             url: url.to_string(),
+            unsup,
         };
         if let Some(icon) = installer.find_pack_icon(url) {
             inst.icon = Some(icon);
         }
+        mgr.update(&inst)?;
+        Ok(inst)
+    }
+
+            pub fn inspect_modpack(
+        &self,
+        source: &str,
+        project_id: &str,
+        version_id: &str,
+    ) -> Result<Vec<packs::OptionalComponent>> {
+        let modrinth = self.modrinth_client();
+        let cf = self.cf_client();
+        packs::inspect_remote(source, project_id, version_id, &modrinth, Some(&cf))
+    }
+
+        pub fn inspect_modpack_file(
+        &self,
+        file_path: &str,
+        source: &str,
+    ) -> Result<Vec<packs::OptionalComponent>> {
+        let path = std::path::Path::new(file_path);
+        let bytes = std::fs::read(path).map_err(|e| CoreError::io(path, e))?;
+        let cf = self.cf_client();
+        packs::inspect_bytes(source, bytes, Some(&cf))
+    }
+
+        pub fn inspect_packwiz(
+        &self,
+        url: &str,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Vec<packs::OptionalComponent>> {
+        modpack::Modpack::with_url(&self.paths, "__inspect__", url.to_string())
+            .with_concurrency(self.concurrency())
+            .optional_components(cancel)
+    }
+
+            pub fn inspect_packwiz_flavors(
+        &self,
+        url: &str,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Vec<packwiz::FlavorGroup>> {
+        modpack::Modpack::with_url(&self.paths, "__inspect__", url.to_string())
+            .with_concurrency(self.concurrency())
+            .flavor_groups(cancel)
+    }
+
+            pub fn set_packwiz_flavors(&self, instance_id: &str, flavors: Vec<String>) -> Result<Instance> {
+        let mgr = self.instances();
+        let mut inst = mgr.get(instance_id)?;
+        match &mut inst.pack {
+            PackSource::Packwiz { unsup, .. } => *unsup = true,
+            _ => {
+                return Err(CoreError::Modpack(
+                    "instance is not a packwiz pack".to_string(),
+                ))
+            }
+        }
+        inst.unsup_flavors = Some(flavors);
         mgr.update(&inst)?;
         Ok(inst)
     }
@@ -559,6 +671,7 @@ impl Launcher {
         project_id: &str,
         version_id: &str,
         name: &str,
+        optional: Vec<String>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -584,12 +697,14 @@ impl Launcher {
             LoaderVersion::Stable,
             pack.clone(),
         );
+        instance.optional_mods = Some(optional.clone());
         mgr.create(instance.clone())?;
         on_created(&instance);
 
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
-        match packs::sync_pack(&self.paths, &id, &pack, &modrinth, Some(&cf), cancel, progress) {
+        let optional = packs::optional_set(&Some(optional));
+        match packs::sync_pack(&self.paths, &id, &pack, &optional, self.concurrency(), &modrinth, Some(&cf), cancel, progress) {
             Ok(res) => {
                 instance.minecraft_version = res.minecraft_version;
                 instance.loader = res.loader;
@@ -620,6 +735,7 @@ impl Launcher {
         file_path: &str,
         source: &str,
         name: &str,
+        optional: Vec<String>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -631,7 +747,7 @@ impl Launcher {
             .and_then(|s| s.to_str())
             .unwrap_or("modpack");
         let name = if name.trim().is_empty() { fallback } else { name };
-        self.install_modpack_data(bytes, source, name, cancel, on_created, progress)
+        self.install_modpack_data(bytes, source, name, optional, cancel, on_created, progress)
     }
 
     pub fn install_modpack_data(
@@ -639,6 +755,7 @@ impl Launcher {
         bytes: Vec<u8>,
         source: &str,
         name: &str,
+        optional: Vec<String>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -660,12 +777,14 @@ impl Launcher {
             PackSource::None,
         );
         instance.modpack_locked = true;
+        instance.optional_mods = Some(optional.clone());
         mgr.create(instance.clone())?;
         on_created(&instance);
 
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
-        match packs::install_file(&self.paths, &id, source, bytes, &modrinth, Some(&cf), cancel, progress)
+        let optional = packs::optional_set(&Some(optional));
+        match packs::install_file(&self.paths, &id, source, bytes, &optional, self.concurrency(), &modrinth, Some(&cf), cancel, progress)
         {
             Ok(res) => {
                 instance.minecraft_version = res.minecraft_version;
@@ -740,11 +859,7 @@ impl Launcher {
         self.with_token(account_id, |t| skins::get_profile(t))
     }
 
-    /// On first Skins load, seed the library from the account's currently-applied
-    /// Mojang skin so "Edit skin" starts with a real texture instead of being
-    /// cape-only. No-op once the account has any saved skin; network failures are
-    /// swallowed so the (possibly empty) library still loads. Returns the view.
-    pub fn seed_current_skin(&self, account_id: &str) -> skins::SkinLibraryView {
+                    pub fn seed_current_skin(&self, account_id: &str) -> skins::SkinLibraryView {
         let has_skins = self
             .skin_library()
             .accounts
@@ -786,10 +901,7 @@ impl Launcher {
         write_json(&self.paths.skins_index(), lib, "skins")
     }
 
-    /// `account_id`'s presets + selected id. Folds any legacy global skins into
-    /// this account on first access and repairs the model's invariants (unique
-    /// names, a valid selection); persisted best-effort when anything changed.
-    pub fn list_skins(&self, account_id: &str) -> skins::SkinLibraryView {
+                pub fn list_skins(&self, account_id: &str) -> skins::SkinLibraryView {
         let mut lib = self.skin_library();
         let had_legacy = !lib.skins.is_empty();
         let acct = lib.account_mut(account_id);
@@ -804,8 +916,7 @@ impl Launcher {
         }
     }
 
-    /// Write a new texture file under the skins dir and return its path.
-    fn write_skin_file(&self, bytes: &[u8]) -> Result<(String, String)> {
+        fn write_skin_file(&self, bytes: &[u8]) -> Result<(String, String)> {
         let dir = self.paths.skins_dir();
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
         let id = uuid::Uuid::new_v4().to_string();
@@ -818,11 +929,7 @@ impl Launcher {
         if model == "slim" { "slim" } else { "classic" }.to_string()
     }
 
-    /// Create a new preset (locker outfit) from a texture — either raw `bytes` or a
-    /// `url` to download. Does NOT push to Mojang and does NOT change the selection;
-    /// the name is made unique within the account. Used for imports, blueprints
-    /// (default skins), and the "save without applying" path.
-    pub fn create_preset(
+                    pub fn create_preset(
         &self,
         account_id: &str,
         name: &str,
@@ -854,10 +961,7 @@ impl Launcher {
         Ok(saved)
     }
 
-    /// Edit an existing preset in place: optionally replace its texture (`bytes`),
-    /// and set name (made unique, excluding itself), model, and cape. Does NOT push
-    /// to Mojang. Returns the updated preset.
-    pub fn update_preset(
+                pub fn update_preset(
         &self,
         account_id: &str,
         skin_id: &str,
@@ -866,9 +970,7 @@ impl Launcher {
         cape_id: Option<&str>,
         bytes: Option<Vec<u8>>,
     ) -> Result<skins::SavedSkin> {
-        // Write the replacement texture first (if any) so a failure leaves the
-        // library untouched.
-        let new_file = match &bytes {
+                        let new_file = match &bytes {
             Some(b) => Some(self.write_skin_file(b)?),
             None => None,
         };
@@ -896,10 +998,7 @@ impl Launcher {
         Ok(saved)
     }
 
-    /// Copy a preset into a new one (own texture file, same model + cape) under
-    /// `name` (made unique). Does NOT apply/select. The caller supplies the desired
-    /// name (e.g. "Skin (1)"); `unique_name` is the safety net.
-    pub fn duplicate_skin(
+                pub fn duplicate_skin(
         &self,
         account_id: &str,
         skin_id: &str,
@@ -919,9 +1018,7 @@ impl Launcher {
         self.create_preset(account_id, name, &model, cape.as_deref(), Some(bytes), None)
     }
 
-    /// Delete a preset. Refuses to delete the currently-selected one (the model
-    /// keeps the selected preset == what's applied to Mojang).
-    pub fn delete_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
+            pub fn delete_skin(&self, account_id: &str, skin_id: &str) -> Result<()> {
         let mut lib = self.skin_library();
         let acct = lib.account_mut(account_id);
         if acct.selected.as_deref() == Some(skin_id) {
@@ -984,10 +1081,13 @@ impl Launcher {
         }
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
+        let optional = packs::optional_set(&instance.optional_mods);
         let res = packs::sync_pack(
             &self.paths,
             instance_id,
             &instance.pack,
+            &optional,
+            self.concurrency(),
             &modrinth,
             Some(&cf),
             cancel,
@@ -1109,9 +1209,7 @@ impl Launcher {
         self.modpack_for(instance_id).uninstall()
     }
 
-    /// Export an instance's content as a Modrinth `.mrpack` or CurseForge `.zip`,
-    /// written to the Downloads folder. Returns the saved path.
-    pub fn export_modpack(&self, instance_id: &str, format: &str) -> Result<String> {
+            pub fn export_modpack(&self, instance_id: &str, format: &str) -> Result<String> {
         let instance = self.instances().get(instance_id)?;
         let mp = self.modpack_for(instance_id);
         let loader = instance.loader.as_str();
@@ -1260,25 +1358,27 @@ impl Launcher {
     pub fn list_servers(&self, instance_id: &str) -> Vec<ServerEntry> {
         let stars = stars::load(&self.paths, instance_id);
         let mut servers = saves::read_servers(&self.paths.instance_servers_file(instance_id));
-        if self.instances().get(instance_id).map(|i| i.featured).unwrap_or(false) {
+        let featured_enabled = self.settings().map(|s| s.show_featured).unwrap_or(true);
+        if featured_enabled
+            && self.instances().get(instance_id).map(|i| i.featured).unwrap_or(false)
+        {
             if let Some(fs) = featured::featured_packs()
                 .into_iter()
                 .find(|f| f.id == instance_id)
                 .and_then(|f| f.server)
             {
-                if !servers.iter().any(|s| s.ip == fs.ip) {
-                    servers.insert(
-                        0,
-                        ServerEntry {
-                            name: fs.name,
-                            ip: fs.ip,
-                            icon: None,
-                            accept_textures: None,
-                            featured: true,
-                            starred: false,
-                        },
-                    );
-                }
+                                                                                servers.retain(|s| !server_ip_eq(&s.ip, &fs.ip));
+                servers.insert(
+                    0,
+                    ServerEntry {
+                        name: fs.name,
+                        ip: fs.ip,
+                        icon: None,
+                        accept_textures: None,
+                        featured: true,
+                        starred: false,
+                    },
+                );
             }
         }
         for s in servers.iter_mut() {
@@ -1338,6 +1438,15 @@ impl Launcher {
             .join("logs")
             .join("latest.log");
         std::fs::read_to_string(&log).unwrap_or_default()
+    }
+
+                        pub fn tail_log(&self, instance_id: &str, offset: u64) -> LogTail {
+        let log = self
+            .paths
+            .instance_game_dir(instance_id)
+            .join("logs")
+            .join("latest.log");
+        tail_file(&log, offset)
     }
 
     pub fn upload_log(&self, instance_id: &str) -> Result<LogUpload> {
@@ -1412,6 +1521,28 @@ impl Launcher {
     }
 }
 
+fn loader_from_pack(pack: &packwiz::Pack) -> (LoaderKind, LoaderVersion) {
+    if let Some(v) = &pack.versions.neoforge {
+        (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
+    } else if let Some(v) = &pack.versions.forge {
+        (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
+    } else if let Some(v) = &pack.versions.fabric {
+        (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
+    } else if let Some(v) = &pack.versions.quilt {
+        (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
+    } else {
+        (LoaderKind::Vanilla, LoaderVersion::Stable)
+    }
+}
+
+fn server_ip_eq(a: &str, b: &str) -> bool {
+    fn norm(s: &str) -> String {
+        let s = s.trim().to_ascii_lowercase();
+        s.strip_suffix(":25565").unwrap_or(&s).to_string()
+    }
+    norm(a) == norm(b)
+}
+
 fn dir_size(path: &std::path::Path) -> u64 {
     let mut total = 0;
     if let Ok(read) = std::fs::read_dir(path) {
@@ -1453,7 +1584,32 @@ fn write_json<T: serde::Serialize>(
     std::fs::write(path, json).map_err(|e| CoreError::io(path, e))
 }
 
-/// A folder id unique among existing folders, derived from a group name.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct LogTail {
+        pub content: String,
+        pub offset: u64,
+            pub reset: bool,
+}
+
+fn tail_file(path: &std::path::Path, offset: u64) -> LogTail {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut f) = std::fs::File::open(path) else {
+                        return LogTail { content: String::new(), offset: 0, reset: offset != 0 };
+    };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let (start, reset) = if offset > len { (0, true) } else { (offset, false) };
+    if f.seek(SeekFrom::Start(start)).is_err() {
+        return LogTail { content: String::new(), offset: len, reset: true };
+    }
+    let mut buf = Vec::new();
+    let n = f.read_to_end(&mut buf).unwrap_or(0);
+    LogTail {
+        content: String::from_utf8_lossy(&buf).into_owned(),
+        offset: start + n as u64,
+        reset,
+    }
+}
+
 fn unique_folder_id(settings: &LauncherSettings, name: &str) -> String {
     let slug: String = name
         .chars()

@@ -1,22 +1,27 @@
-
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import type {
   Account,
+  AccountStatus,
   AccountStore,
   AuthEvent,
   ContentVersion,
+  FlavorGroup,
+  OptionalComponent,
   ExitInfo,
   InstallResult,
   InstalledMod,
   Instance,
   JavaInstall,
+  FeaturedPack,
   JavaReport,
   LaunchProgress,
   LauncherSettings,
   LogUpload,
+  LogTail,
   ModInfo,
   ModpackDone,
   ModpackStatus,
@@ -56,6 +61,10 @@ export const getSettings = (): Promise<LauncherSettings> =>
   invoke("get_settings");
 export const saveSettings = (settings: LauncherSettings): Promise<void> =>
   invoke("save_settings", { settings });
+export const defaultSettings = (): Promise<LauncherSettings> =>
+  invoke("default_settings");
+export const featuredPacks = (): Promise<FeaturedPack[]> =>
+  invoke("featured_packs");
 
 
 export const getAccounts = (): Promise<AccountStore> => invoke("get_accounts");
@@ -63,6 +72,12 @@ export const selectAccount = (id: string): Promise<AccountStore> =>
   invoke("select_account", { id });
 export const removeAccount = (id: string): Promise<AccountStore> =>
   invoke("remove_account", { id });
+export const accountStatus = (id: string): Promise<AccountStatus> =>
+  invoke("account_status", { id });
+export const addOfflineAccount = (username: string): Promise<AccountStore> =>
+  invoke("add_offline_account", { username });
+export const clearMsLoginCookies = (): Promise<void> =>
+  invoke("clear_ms_login_cookies");
 export const startMicrosoftLogin = (): Promise<void> =>
   invoke("start_microsoft_login");
 
@@ -219,6 +234,10 @@ export const setModpackLocked = (
 ): Promise<void> => invoke("set_modpack_locked", { instanceId, locked });
 export const readLog = (instanceId: string): Promise<string> =>
   invoke("read_log", { instanceId });
+export const tailLog = (
+  instanceId: string,
+  offset: number,
+): Promise<LogTail> => invoke("tail_log", { instanceId, offset });
 export const uploadLog = (instanceId: string): Promise<LogUpload> =>
   invoke("upload_log", { instanceId });
 
@@ -362,7 +381,30 @@ export const createCustomInstance = (
 export const createPackwizInstance = (
   name: string,
   url: string,
-): Promise<Instance> => invoke("create_packwiz_instance", { name, url });
+  optional: string[] = [],
+  unsup = false,
+  flavors: string[] = [],
+  publicKey: string | null = null,
+): Promise<Instance> =>
+  invoke("create_packwiz_instance", {
+    name,
+    url,
+    optional,
+    unsup,
+    flavors,
+    publicKey,
+  });
+
+
+export const inspectPackwizFlavors = (
+  url: string,
+): Promise<FlavorGroup[]> => invoke("inspect_packwiz_flavors", { url });
+
+
+export const setPackwizFlavors = (
+  id: string,
+  flavors: string[],
+): Promise<Instance> => invoke("set_packwiz_flavors", { id, flavors });
 
 export interface ImportCandidate {
   source: "prism" | "modrinth";
@@ -421,17 +463,56 @@ export const installModpack = (
   projectId: string,
   versionId: string,
   name: string,
+  optional: string[] = [],
 ): Promise<void> =>
-  invoke("install_modpack", { source, projectId, versionId, name });
+  invoke("install_modpack", { source, projectId, versionId, name, optional });
 export const updateModpack = (
   instanceId: string,
   versionId: string | null,
 ): Promise<void> => invoke("update_modpack", { instanceId, versionId });
-export const installModpackBytes = (
-  data: number[],
+
+
+export const installModpackFile = (
+  filePath: string,
   source: string,
   name: string,
-): Promise<void> => invoke("install_modpack_bytes", { data, source, name });
+  optional: string[] = [],
+): Promise<void> =>
+  invoke("install_modpack_file", { filePath, source, name, optional });
+
+
+export const inspectModpack = (
+  source: string,
+  projectId: string,
+  versionId: string,
+): Promise<OptionalComponent[]> =>
+  invoke("inspect_modpack", { source, projectId, versionId });
+
+export const inspectModpackFile = (
+  filePath: string,
+  source: string,
+): Promise<OptionalComponent[]> =>
+  invoke("inspect_modpack_file", { filePath, source });
+
+export const inspectPackwiz = (url: string): Promise<OptionalComponent[]> =>
+  invoke("inspect_packwiz", { url });
+
+
+export const pickModpackFile = async (): Promise<{
+  path: string;
+  source: "modrinth" | "curseforge";
+} | null> => {
+  const picked = await openFileDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Modpack", extensions: ["mrpack", "zip"] }],
+  });
+  if (typeof picked !== "string") return null;
+  const source = picked.toLowerCase().endsWith(".mrpack")
+    ? "modrinth"
+    : "curseforge";
+  return { path: picked, source };
+};
 
 export const openInstanceDir = (instanceId: string): Promise<void> =>
   invoke("open_instance_dir", { instanceId });
@@ -452,21 +533,19 @@ export const setCape = (
 ): Promise<void> => invoke("set_cape", { accountId, capeId });
 export const listSkins = (accountId: string): Promise<SkinLibraryView> =>
   invoke("list_skins", { accountId });
-/** Like listSkins, but on first load seeds the library from the account's
- *  currently-applied Mojang skin so Edit Skin isn't cape-only. */
+
 export const seedCurrentSkin = (
   accountId: string,
 ): Promise<SkinLibraryView> => invoke("seed_current_skin", { accountId });
 export const deleteSkin = (accountId: string, skinId: string): Promise<void> =>
   invoke("delete_skin", { accountId, skinId });
-/** Apply a preset to Mojang (texture + cape + model) and mark it selected. */
+
 export const applySavedSkin = (
   accountId: string,
   skinId: string,
 ): Promise<void> => invoke("apply_saved_skin", { accountId, skinId });
 
-/** Create a preset from a texture — `data` bytes OR a `url` to download. Does NOT
- *  push to Mojang and does NOT change the selection. */
+
 export const createPreset = (
   accountId: string,
   name: string,
@@ -483,8 +562,7 @@ export const createPreset = (
     url: "url" in texture ? texture.url : null,
   });
 
-/** Duplicate a preset (own texture copy, same model + cape) under `name`. Does
- *  NOT push to Mojang. */
+
 export const duplicateSkin = (
   accountId: string,
   skinId: string,
@@ -492,8 +570,7 @@ export const duplicateSkin = (
 ): Promise<SavedSkin> =>
   invoke("duplicate_skin", { accountId, skinId, name });
 
-/** Edit a preset in place: optional texture replace + name/model/cape. Does NOT
- *  push to Mojang. */
+
 export const updatePreset = (
   accountId: string,
   skinId: string,
@@ -538,8 +615,17 @@ export const onUpdaterProgress = (
   listen<UpdateProgress>("updater://progress", (e) => cb(e.payload));
 
 
+export const onMenuAction = (
+  cb: (action: string) => void,
+): Promise<UnlistenFn> =>
+  listen<string>("menu://action", (e) => cb(e.payload));
+
+
 export const BRASSWORKS_WEBSITE = "https://brassworks.opnsoc.org";
 export const BRASSWORKS_GITHUB = "https://github.com/Brassworks-smp";
+export const BRASSWORKS_KOFI = "https://ko-fi.com/brassworks";
+export const BRASSWORKS_DISCORD = "https://brassworks.opnsoc.org/discord";
+export const BRASSWORKS_MODRINTH = "https://modrinth.com/organization/brassworks";
 
 export const openExternal = (url: string): Promise<void> => openUrl(url);
 

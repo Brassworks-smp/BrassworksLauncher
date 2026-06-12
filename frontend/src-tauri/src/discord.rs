@@ -1,4 +1,3 @@
-
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -42,6 +41,17 @@ impl Discord {
             if f(client).is_err() {
                 *guard = None;
             }
+        }
+    }
+
+            pub(crate) fn clear(&self) {
+        let mut guard = match self.client.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        if let Some(mut client) = guard.take() {
+            let _ = client.clear_activity();
+            let _ = client.close();
         }
     }
 

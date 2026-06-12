@@ -1,12 +1,14 @@
-
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use packwiz::{
-    Curseforge, Installer, Manifest, ResolvedVersion, SearchHit, Side, SyncOptions, SyncProgress,
+    Curseforge, FlavorGroup, Installer, Manifest, OptionalChoice, ResolvedVersion, SearchHit, Side,
+    SyncOptions, SyncProgress,
 };
+
+use crate::packs::OptionalComponent;
 
 use crate::error::{CoreError, Result};
 use crate::instance::{Instance, PackSource};
@@ -165,6 +167,18 @@ pub struct Modpack<'a> {
     cf_api_key: Option<String>,
     mod_loader: Option<String>,
     mc_override: Option<String>,
+    optional: OptionalChoice,
+    unsup: bool,
+    flavors: HashSet<String>,
+    public_key: Option<String>,
+    concurrency: usize,
+}
+
+pub fn optional_choice(selection: &Option<Vec<String>>) -> OptionalChoice {
+    match selection {
+        Some(ids) => OptionalChoice::Explicit(ids.iter().cloned().collect()),
+        None => OptionalChoice::Default,
+    }
 }
 
 impl<'a> Modpack<'a> {
@@ -184,13 +198,18 @@ impl<'a> Modpack<'a> {
             cf_api_key: None,
             mod_loader: Some(LOADER.to_string()),
             mc_override: None,
+            optional: OptionalChoice::Default,
+            unsup: false,
+            flavors: HashSet::new(),
+            public_key: None,
+            concurrency: packwiz::DEFAULT_CONCURRENCY,
         }
     }
 
     pub fn for_instance(paths: &'a Paths, instance: &Instance, cf_key: Option<String>) -> Self {
-        let pack_url = match &instance.pack {
-            PackSource::Packwiz { url } => url.clone(),
-            _ => String::new(),
+        let (pack_url, unsup) = match &instance.pack {
+            PackSource::Packwiz { url, unsup } => (url.clone(), *unsup),
+            _ => (String::new(), false),
         };
         Self {
             paths,
@@ -199,7 +218,52 @@ impl<'a> Modpack<'a> {
             cf_api_key: cf_key.filter(|k| !k.trim().is_empty()),
             mod_loader: instance.loader.content_loader().map(|s| s.to_string()),
             mc_override: Some(instance.minecraft_version.clone()),
+            optional: optional_choice(&instance.optional_mods),
+            unsup,
+            flavors: instance.unsup_flavors.iter().flatten().cloned().collect(),
+            public_key: instance.unsup_public_key.clone().filter(|k| !k.trim().is_empty()),
+            concurrency: packwiz::DEFAULT_CONCURRENCY,
         }
+    }
+
+        pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency.max(1);
+        self
+    }
+
+        fn installer(&self) -> Installer {
+        Installer::new().with_concurrency(self.concurrency)
+    }
+
+            pub fn with_optional(mut self, choice: OptionalChoice) -> Self {
+        self.optional = choice;
+        self
+    }
+
+        pub fn optional_components(&self, cancel: &dyn Fn() -> bool) -> Result<Vec<OptionalComponent>> {
+        if !self.has_packwiz() {
+            return Ok(Vec::new());
+        }
+        let installer = self.installer();
+        let mods = installer.inspect_optional(&self.pack_url, cancel)?;
+        Ok(mods
+            .into_iter()
+            .map(|m| OptionalComponent {
+                id: m.path,
+                name: m.name,
+                description: m.description,
+                default: m.default,
+                side: m.side,
+                category: m.category,
+            })
+            .collect())
+    }
+
+            pub fn flavor_groups(&self, cancel: &dyn Fn() -> bool) -> Result<Vec<FlavorGroup>> {
+        if !self.has_packwiz() {
+            return Ok(Vec::new());
+        }
+        Ok(self.installer().inspect_unsup(&self.pack_url, cancel)?)
     }
 
     fn has_packwiz(&self) -> bool {
@@ -225,7 +289,7 @@ impl<'a> Modpack<'a> {
                 "Add a CurseForge API key in Settings to browse CurseForge content".to_string(),
             )
         })?;
-        let installer = Installer::new();
+        let installer = self.installer();
         Ok(installer.curseforge(self.paths.curseforge_cache_dir(), key))
     }
 
@@ -239,6 +303,10 @@ impl<'a> Modpack<'a> {
             game_dir: self.game_dir(),
             manifest_path: self.paths.modpack_manifest(&self.instance_id),
             side: Side::Client,
+            optional: self.optional.clone(),
+            unsup: self.unsup,
+            flavors: self.flavors.clone(),
+            public_key: self.public_key.clone(),
         }
     }
 
@@ -298,7 +366,7 @@ impl<'a> Modpack<'a> {
             });
         }
 
-        let installer = Installer::new();
+        let installer = self.installer();
         let pack = installer.fetch_pack(&self.pack_url)?;
 
         let installed_version = if manifest.pack_version.is_empty() {
@@ -327,7 +395,7 @@ impl<'a> Modpack<'a> {
         cancel: &dyn Fn() -> bool,
         progress: &mut dyn FnMut(SyncProgress),
     ) -> Result<Manifest> {
-        let installer = Installer::new();
+        let installer = self.installer();
         Ok(installer.sync(&self.options(), force, cancel, progress)?)
     }
 
@@ -479,7 +547,7 @@ impl<'a> Modpack<'a> {
             };
         }
 
-        let installer = Installer::new();
+        let installer = self.installer();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
         let project = modrinth.project(project_id);
         let version = version_id.and_then(|v| modrinth.version_number(v));
@@ -551,7 +619,7 @@ impl<'a> Modpack<'a> {
                 .curseforge()?
                 .search(query, project_type, loader, &game_version, 20, offset)?);
         }
-        let installer = Installer::new();
+        let installer = self.installer();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
         Ok(modrinth.search(query, project_type, loader, &game_version, 20, offset)?)
     }
@@ -572,7 +640,7 @@ impl<'a> Modpack<'a> {
                 downloads: p.downloads,
             });
         }
-        let installer = Installer::new();
+        let installer = self.installer();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
         let p = modrinth
             .project(project_id)
@@ -601,7 +669,7 @@ impl<'a> Modpack<'a> {
             self.curseforge()?
                 .list_versions(project_id, &game_version, loader)?
         } else {
-            let installer = Installer::new();
+            let installer = self.installer();
             installer
                 .modrinth(self.paths.modrinth_cache_dir())
                 .list_versions(project_id, &game_version, loader)?
@@ -630,7 +698,7 @@ impl<'a> Modpack<'a> {
                 .curseforge()?
                 .best_version(project_id, &game_version, loader)?)
         } else {
-            let installer = Installer::new();
+            let installer = self.installer();
             Ok(installer
                 .modrinth(self.paths.modrinth_cache_dir())
                 .best_version(project_id, &game_version, loader)?)
@@ -648,7 +716,7 @@ impl<'a> Modpack<'a> {
                 .curseforge()?
                 .resolve_version(project_id, version_id)?)
         } else {
-            let installer = Installer::new();
+            let installer = self.installer();
             Ok(installer
                 .modrinth(self.paths.modrinth_cache_dir())
                 .resolve_version(version_id)?)
@@ -664,7 +732,7 @@ impl<'a> Modpack<'a> {
         let changelog = if source == "curseforge" {
             self.curseforge()?.file_changelog(project_id, version_id)
         } else {
-            let installer = Installer::new();
+            let installer = self.installer();
             installer
                 .modrinth(self.paths.modrinth_cache_dir())
                 .version_changelog(version_id)
@@ -735,7 +803,7 @@ impl<'a> Modpack<'a> {
             ))
         })?;
 
-        let installer = Installer::new();
+        let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
         let bytes = http.download(&version.url)?;
         if let Some(expected) = &version.sha512 {
@@ -853,7 +921,7 @@ impl<'a> Modpack<'a> {
         version: ResolvedVersion,
         allow_disable_managed: bool,
     ) -> Result<InstalledMod> {
-        let installer = Installer::new();
+        let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
         let folder = folder_for(project_type);
 
@@ -1014,7 +1082,7 @@ impl<'a> Modpack<'a> {
         loader_version: Option<&str>,
     ) -> Result<Vec<u8>> {
         let game_dir = self.game_dir();
-        let installer = Installer::new();
+        let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
 
         let mut files: Vec<serde_json::Value> = Vec::new();

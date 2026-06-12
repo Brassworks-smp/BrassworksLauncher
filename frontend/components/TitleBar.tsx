@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Minus, Square, X, Copy } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useT } from "@/lib/i18n";
 
 const isMac =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
@@ -23,6 +24,7 @@ export function TitleBar() {
 }
 
 function WindowControls() {
+  const t = useT();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -39,18 +41,18 @@ function WindowControls() {
   const win = () => getCurrentWindow();
   return (
     <div className="absolute right-0 top-0 flex h-full items-stretch">
-      <Ctrl onClick={() => win().minimize().catch(() => {})} label="Minimize">
+      <Ctrl onClick={() => win().minimize().catch(() => {})} label={t("titleBar.minimize")}>
         <Minus size={14} />
       </Ctrl>
       <Ctrl
         onClick={() => win().toggleMaximize().catch(() => {})}
-        label={maximized ? "Restore" : "Maximize"}
+        label={maximized ? t("titleBar.restore") : t("titleBar.maximize")}
       >
         {maximized ? <Copy size={11} /> : <Square size={11} />}
       </Ctrl>
       <Ctrl
         onClick={() => win().close().catch(() => {})}
-        label="Close"
+        label={t("common.close")}
         danger
       >
         <X size={15} />

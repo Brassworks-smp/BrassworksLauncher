@@ -1,4 +1,3 @@
-
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +35,8 @@ pub struct Versions {
     pub fabric: Option<String>,
     #[serde(default)]
     pub quilt: Option<String>,
+            #[serde(default)]
+    pub unsup: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,10 +75,22 @@ pub struct MetaFile {
     pub download: Download,
     #[serde(default)]
     pub update: Option<Update>,
+        #[serde(default)]
+    pub option: Option<ModOption>,
 }
 
 fn default_side() -> String {
     "both".to_string()
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ModOption {
+    #[serde(default)]
+    pub optional: bool,
+    #[serde(default)]
+    pub default: bool,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -114,4 +127,45 @@ pub struct CurseforgeUpdate {
     pub project_id: i64,
     #[serde(rename = "file-id", default)]
     pub file_id: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_optional_metafile() {
+        let toml = r#"
+            name = "Cool Mod"
+            filename = "coolmod.jar"
+            side = "client"
+            [download]
+            url = "https://example.com/coolmod.jar"
+            hash-format = "sha256"
+            hash = "abc"
+            [option]
+            optional = true
+            default = false
+            description = "Adds cool things"
+        "#;
+        let meta: MetaFile = toml::from_str(toml).unwrap();
+        let opt = meta.option.expect("has [option]");
+        assert!(opt.optional);
+        assert!(!opt.default);
+        assert_eq!(opt.description.as_deref(), Some("Adds cool things"));
+    }
+
+    #[test]
+    fn non_optional_metafile_has_no_option() {
+        let toml = r#"
+            name = "Required Mod"
+            filename = "req.jar"
+            [download]
+            url = "https://example.com/req.jar"
+            hash-format = "sha256"
+            hash = "abc"
+        "#;
+        let meta: MetaFile = toml::from_str(toml).unwrap();
+        assert!(meta.option.is_none());
+    }
 }

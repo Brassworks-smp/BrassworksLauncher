@@ -17,18 +17,16 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useClosable } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 import type { SkinProfile, SkinCape, SavedSkin } from "@/lib/types";
 
-/** A blueprint = a starting texture for a new preset, loaded from
- *  `public/skins/blueprints.json` so the set is editable without code changes.
- *  `texture` is either a local public path (e.g. "/skins/steve.png") or an
- *  https URL (e.g. a textures.minecraft.net URL). `model` defaults to classic.
- *  Blueprints are grouped into named sections (each renders its own header). */
+
 type Blueprint = { name: string; texture: string; model?: string };
 type BlueprintSection = { header: string; skins: Blueprint[] };
 type BlueprintConfig = { sections: BlueprintSection[] };
 
 const isUrlTexture = (t: string) => /^https?:\/\//i.test(t);
+
 const bpModel = (m?: string) => (m === "slim" ? "slim" : "classic");
 
 const BASE_YAW = 0.5;
@@ -158,8 +156,8 @@ function SkinCanvas({
     <canvas
       ref={ref}
       className={`[filter:drop-shadow(0_8px_8px_rgba(0,0,0,0.4))] transition-opacity duration-500 ${
-        loaded ? "opacity-100" : "opacity-0"
-      }`}
+        rotate ? "cursor-grab active:cursor-grabbing" : ""
+      } ${loaded ? "opacity-100" : "opacity-0"}`}
     />
   );
 }
@@ -276,7 +274,7 @@ function Flip3DThumb({ url, model, cape }: { url: string; model: string; cape: s
   );
 }
 
-/** Draws the front face of a cape texture (UV 1,1 → 10×16) into a tile. */
+
 function CapeImage({ url }: { url: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -305,14 +303,27 @@ function CapeImage({ url }: { url: string }) {
 }
 
 function SelectedMark() {
+  const t = useT();
   return (
     <>
       <span className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow-lg ring-2 ring-ink-950/40">
         <Check size={16} strokeWidth={3.5} />
       </span>
       <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-brass-600/90 to-transparent pb-1.5 pt-6 text-center font-mc text-[11px] tracking-wider text-ink-950">
-        Selected
+        {t("instances.selected")}
       </span>
+    </>
+  );
+}
+
+
+function CapeSelectedMark() {
+  return (
+    <>
+      <span className="absolute right-1 top-1 z-10 grid h-5 w-5 place-items-center rounded-full bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow-lg ring-2 ring-ink-950/40">
+        <Check size={11} strokeWidth={3.5} />
+      </span>
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-1/3 bg-gradient-to-t from-brass-600/85 to-transparent" />
     </>
   );
 }
@@ -402,6 +413,7 @@ export function SkinView({
   username?: string;
   onSkinApplied?: () => void;
 }) {
+  const t = useT();
   const [profile, setProfile] = useState<SkinProfile | null>(
     accountId ? cachedProfiles[accountId] ?? null : null,
   );
@@ -421,7 +433,7 @@ export function SkinView({
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  /** Resolve a preset's own cape id to a renderable URL via the account's capes. */
+  
   const capeUrlFor = (capeId: string | null) =>
     profile?.capes.find((c) => c.id === capeId)?.url ?? null;
 
@@ -501,10 +513,7 @@ export function SkinView({
     await importFiles(files);
   };
 
-  /** Open the new-preset editor from a blueprint: its texture, its default model,
-   *  a default name; cape/everything else is the user's choice. Local textures are
-   *  read straight from the launcher's bundled file (not a remote copy); remote
-   *  https textures are handed to the backend to download. */
+  
   const openBlueprint = async (d: Blueprint) => {
     setPending([]);
     try {
@@ -547,7 +556,7 @@ export function SkinView({
       await api.applySavedSkin(accountId, s.id);
       api.setFaceTexture(accountId, bust(api.fileSrc(s.file)));
       setSelected(s.id);
-      toast("Applied skin", "success");
+      toast(t("skin.appliedSkin"), "success");
       onSkinApplied?.();
       refresh();
     } catch (e2) {
@@ -584,7 +593,7 @@ export function SkinView({
     if (!source) return;
     api
       .exportSkin(source, selectedSkin?.name ?? `${displayName}-skin`)
-      .then(() => toast("Skin saved to Downloads", "success"))
+      .then(() => toast(t("skin.savedToDownloads"), "success"))
       .catch((e) => setError(String(e)));
   };
 
@@ -593,7 +602,7 @@ export function SkinView({
       <div className="grid flex-1 place-items-center text-center text-ink-600">
         <div>
           <Shirt size={28} className="mx-auto mb-2 opacity-50" />
-          Sign in with a Microsoft account to manage skins &amp; capes.
+          {t("skin.signInPrompt")}
         </div>
       </div>
     );
@@ -609,7 +618,7 @@ export function SkinView({
         onChange={onPickFile}
         className="hidden"
       />
-      <h1 className="pb-4 font-mc text-2xl tracking-wide text-gray-100">Skin selector</h1>
+      <h1 className="pb-4 font-mc text-2xl tracking-wide text-gray-100">{t("skin.title")}</h1>
 
       {error && (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -635,7 +644,7 @@ export function SkinView({
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-600">
-            <Move size={13} /> Drag to rotate
+            <Move size={13} /> {t("skin.dragToRotate")}
           </div>
           {selectedSkin && (
             <div className="mt-2 max-w-full truncate font-mc text-[13px] text-brass-300">
@@ -644,7 +653,7 @@ export function SkinView({
           )}
           <div className="mt-3 flex flex-col gap-2 self-stretch">
             <button onClick={saveToDisk} className={`${BTN} justify-center`}>
-              <Download size={15} /> Save skin
+              <Download size={15} /> {t("skin.saveSkin")}
             </button>
           </div>
         </div>
@@ -667,7 +676,7 @@ export function SkinView({
             void importFiles(Array.from(e.dataTransfer.files));
           }}
         >
-          <Section title="Your presets" open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
+          <Section title={t("skin.yourPresets")} open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
             <button
               onClick={() => fileInput.current?.click()}
               className={`flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
@@ -675,8 +684,8 @@ export function SkinView({
               }`}
             >
               {busy ? <Loader2 size={22} className="animate-spin" /> : <Plus size={22} />}
-              <span className="text-sm font-medium">Add skin</span>
-              <span className="text-[11px]">Click or drag &amp; drop PNGs</span>
+              <span className="text-sm font-medium">{t("skin.addSkin")}</span>
+              <span className="text-[11px]">{t("skin.dragDropHint")}</span>
             </button>
 
             {library.map((s) => {
@@ -701,10 +710,11 @@ export function SkinView({
                         e.stopPropagation();
                         void duplicate(s);
                       }}
-                      title="Duplicate"
-                      className="grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-brass-300"
+                      title={t("skin.duplicatePreset")}
+                      aria-label={t("skin.duplicatePreset")}
+                      className="grid h-8 w-8 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-brass-300"
                     >
-                      <CopyPlus size={12} />
+                      <CopyPlus size={15} />
                     </span>
                     {}
                     {!isSel && (
@@ -714,10 +724,11 @@ export function SkinView({
                           e.stopPropagation();
                           removePreset(s);
                         }}
-                        title="Delete"
-                        className="grid h-6 w-6 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-red-300"
+                        title={t("skin.deletePreset")}
+                        aria-label={t("skin.deletePreset")}
+                        className="grid h-8 w-8 place-items-center rounded-md bg-ink-950/80 text-ink-600 transition hover:text-red-300"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={15} />
                       </span>
                     )}
                   </span>
@@ -730,7 +741,7 @@ export function SkinView({
                       }}
                       className="flex items-center gap-1 rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
                     >
-                      <Pencil size={11} /> Edit
+                      <Pencil size={11} /> {t("common.edit")}
                     </span>
                     <span
                       role="button"
@@ -740,7 +751,7 @@ export function SkinView({
                       }}
                       className="flex items-center gap-1 rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
                     >
-                      <Check size={11} /> {isSel ? "Re-apply" : "Apply"}
+                      <Check size={11} /> {isSel ? t("skin.reapply") : t("skin.apply")}
                     </span>
                   </span>
                 </Tile>
@@ -760,7 +771,7 @@ export function SkinView({
               {sec.skins.map((d) => (
                 <Tile
                   key={d.name}
-                  title={`New preset from ${d.name}`}
+                  title={t("skin.newPresetFrom", { name: d.name })}
                   onClick={() => void openBlueprint(d)}
                 >
                   <Flip3DThumb url={d.texture} model={bpModel(d.model)} cape={null} />
@@ -784,7 +795,7 @@ export function SkinView({
           selectedId={selected}
           onClose={advanceEditor}
           onSaved={(applied) => {
-            toast(applied ? "Applied skin and cape" : "Saved preset", "success");
+            toast(applied ? t("skin.appliedSkinCape") : t("skin.savedPreset"), "success");
             if (applied) onSkinApplied?.();
             advanceEditor();
             refresh();
@@ -815,6 +826,7 @@ function PresetEditor({
   onSaved: (applied: boolean) => void;
   onError: (e: string) => void;
 }) {
+  const t = useT();
   const isEdit = state.mode === "edit";
   const preset = isEdit ? state.preset : null;
   const seed = isEdit ? null : state.seed;
@@ -847,7 +859,7 @@ function PresetEditor({
   const dupe = library.some(
     (s) => s.id !== preset?.id && s.name.toLowerCase() === trimmed.toLowerCase(),
   );
-  const nameError = trimmed === "" ? "Enter a name" : dupe ? "That name is already used" : null;
+  const nameError = trimmed === "" ? t("skin.enterName") : dupe ? t("skin.nameUsed") : null;
   const canSubmit = !nameError && !saving;
 
   const replace = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -884,7 +896,7 @@ function PresetEditor({
     }
   };
 
-  const title = isEdit ? "Edit skin" : "New skin";
+  const title = isEdit ? t("skin.editSkin") : t("skin.newSkin");
 
   return (
     <div
@@ -920,18 +932,18 @@ function PresetEditor({
               />
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-600">
-              <Move size={13} /> Drag to rotate
+              <Move size={13} /> {t("skin.dragToRotate")}
             </div>
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-5">
             <input ref={fileInput} type="file" accept=".png" onChange={replace} className="hidden" />
             <div>
-              <div className="mb-2 font-mc text-sm text-gray-100">Name</div>
+              <div className="mb-2 font-mc text-sm text-gray-100">{t("instanceSettings.details.name")}</div>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Skin name"
+                placeholder={t("skin.namePlaceholder")}
                 spellCheck={false}
                 className={`w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm text-gray-100 outline-none ring-1 transition focus:ring-brass-500/60 ${
                   nameError && trimmed !== "" ? "ring-red-500/60" : "ring-edge"
@@ -942,18 +954,18 @@ function PresetEditor({
               )}
             </div>
             <div>
-              <div className="mb-2 font-mc text-sm text-gray-100">Texture</div>
+              <div className="mb-2 font-mc text-sm text-gray-100">{t("skin.texture")}</div>
               <button onClick={() => fileInput.current?.click()} className={BTN}>
-                <UploadIcon size={15} /> Replace texture
+                <UploadIcon size={15} /> {t("skin.replaceTexture")}
               </button>
             </div>
 
             <div>
-              <div className="mb-2 font-mc text-sm text-gray-100">Arm style</div>
+              <div className="mb-2 font-mc text-sm text-gray-100">{t("skin.armStyle")}</div>
               <div className="flex gap-2">
                 {[
-                  { id: "classic", label: "Wide" },
-                  { id: "slim", label: "Slim" },
+                  { id: "classic", label: t("skin.wide") },
+                  { id: "slim", label: t("skin.slim") },
                 ].map((a) => {
                   const on = model === a.id;
                   return (
@@ -982,23 +994,19 @@ function PresetEditor({
             </div>
 
             <div>
-              <div className="mb-2 font-mc text-sm text-gray-100">Cape</div>
+              <div className="mb-2 font-mc text-sm text-gray-100">{t("skin.cape")}</div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(58px,1fr))] gap-2">
                 <button
                   onClick={() => setCapeId(null)}
-                  className={`relative flex aspect-[10/16] flex-col items-center justify-center gap-1 rounded-lg border transition ${
+                  className={`group relative flex aspect-[10/16] flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border transition-all duration-200 hover:-translate-y-0.5 ${
                     !capeId
-                      ? "border-patina-400 text-patina-300 ring-2 ring-patina-400/60"
+                      ? "border-brass-400 text-brass-200 ring-2 ring-brass-400/50 glow"
                       : "border-edge text-ink-600 hover:border-brass-600/40"
                   }`}
                 >
-                  <X size={16} />
-                  <span className="text-[11px]">None</span>
-                  {!capeId && (
-                    <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-patina-500 text-ink-950 shadow-md ring-1 ring-ink-950/40">
-                      <Check size={10} />
-                    </span>
-                  )}
+                  <X size={16} className="transition-transform duration-300 group-hover:scale-110" />
+                  <span className="text-[11px]">{t("skin.none")}</span>
+                  {!capeId && <CapeSelectedMark />}
                 </button>
                 {capes.map((c) => {
                   const on = capeId === c.id;
@@ -1007,24 +1015,22 @@ function PresetEditor({
                       key={c.id}
                       onClick={() => setCapeId(c.id)}
                       title={c.name}
-                      className={`relative aspect-[10/16] overflow-hidden rounded-lg border bg-ink-950/60 transition ${
+                      className={`group relative aspect-[10/16] overflow-hidden rounded-lg border bg-ink-950/60 transition-all duration-200 hover:-translate-y-0.5 ${
                         on
-                          ? "border-patina-400 ring-2 ring-patina-400/60"
+                          ? "border-brass-400 ring-2 ring-brass-400/50 glow"
                           : "border-edge hover:border-brass-600/40"
                       }`}
                     >
-                      <CapeImage url={c.url} />
-                      {on && (
-                        <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-patina-500 text-ink-950 shadow-md ring-1 ring-ink-950/40">
-                          <Check size={10} />
-                        </span>
-                      )}
+                      <span className="block h-full w-full transition-transform duration-300 group-hover:scale-110">
+                        <CapeImage url={c.url} />
+                      </span>
+                      {on && <CapeSelectedMark />}
                     </button>
                   );
                 })}
               </div>
               {capes.length === 0 && (
-                <p className="mt-1 text-xs text-ink-600">No capes on this account.</p>
+                <p className="mt-1 text-xs text-ink-600">{t("skin.noCapes")}</p>
               )}
             </div>
           </div>
@@ -1032,16 +1038,14 @@ function PresetEditor({
 
         <div className="flex items-center justify-end gap-3 border-t border-edge px-5 py-3">
           <span className="mr-auto text-xs text-ink-600">
-            {isSelected
-              ? "This skin is selected — saving applies it."
-              : "Saves the preset — use a card's Apply button to wear it."}
+            {isSelected ? t("skin.selectedHint") : t("skin.presetHint")}
           </span>
           <button onClick={close} className={BTN}>
-            <X size={15} /> Cancel
+            <X size={15} /> {t("common.cancel")}
           </button>
           <button onClick={save} disabled={!canSubmit} className={BTN_PRIMARY}>
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            {isSelected ? "Save & Apply" : "Save"}
+            {isSelected ? t("skin.saveApply") : t("common.save")}
           </button>
         </div>
       </div>

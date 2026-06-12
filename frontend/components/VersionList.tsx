@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, Loader2, Check } from "lucide-react";
 import { Changelog } from "@/components/Markdown";
 import { Collapse } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 import type { ContentVersion } from "@/lib/types";
 
 export function VersionList({
@@ -23,6 +24,7 @@ export function VersionList({
   currentVersionId?: string | null;
   onPick: (versionId: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
@@ -31,7 +33,7 @@ export function VersionList({
   const anyBusy = busy || picked !== null;
 
   if (versions.length === 0) {
-    return <div className="py-4 text-center text-xs text-ink-600">No versions found.</div>;
+    return <div className="py-4 text-center text-xs text-ink-600">{t("versionList.noVersions")}</div>;
   }
 
   return (
@@ -50,7 +52,7 @@ export function VersionList({
               <button
                 onClick={() => setOpen(expanded ? null : v.version_id)}
                 className="grid h-6 w-6 place-items-center rounded text-ink-600 transition hover:text-brass-300"
-                title="Changelog"
+                title={t("settings.updates.changelog")}
               >
                 <ChevronRight
                   size={15}
@@ -71,7 +73,7 @@ export function VersionList({
                   disabled
                   className="flex cursor-default items-center gap-1.5 rounded-md border border-patina-500/40 bg-patina-500/10 px-3 py-1.5 text-xs font-semibold text-patina-400"
                 >
-                  <Check size={12} /> Installed
+                  <Check size={12} /> {t("versionList.installed")}
                 </button>
               ) : (
                 <button
@@ -86,7 +88,7 @@ export function VersionList({
                   {(busy || picked === v.version_id) && (
                     <Loader2 size={12} className="animate-spin" />
                   )}
-                  {picked === v.version_id ? "Installing…" : actionLabel}
+                  {picked === v.version_id ? t("versionList.installing") : actionLabel}
                 </button>
               )}
             </div>

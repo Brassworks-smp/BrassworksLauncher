@@ -1,4 +1,3 @@
-
 use brassworks_core::Launcher;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

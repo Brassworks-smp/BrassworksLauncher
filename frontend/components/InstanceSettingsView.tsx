@@ -21,23 +21,30 @@ import {
   Share2,
   GitBranch,
   Copy,
+  Lock,
+  Pin,
 } from "lucide-react";
+import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
+import { useT } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import {
   buildInstanceIcons,
   currentPalette,
+  DEFAULT_INSTANCE_ICON,
   iconSrc,
   isBuiltinIcon,
 } from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
 import { VersionPicker } from "@/components/VersionPicker";
+import { FlavorPicker } from "@/components/FlavorPicker";
 import type {
   Instance,
   LauncherSettings,
   LaunchProgress,
   ModpackStatus,
   ContentVersion,
+  FlavorGroup,
   JavaReport,
   LoaderKind,
   LoaderVersion,
@@ -52,13 +59,15 @@ import {
   Row,
   ActionButton,
   inputCls,
+  CardColumns,
+  NumberField,
 } from "@/components/ui";
 
-const JVM_PRESETS: { id: string; label: string; args: string[] }[] = [
-  { id: "none", label: "None (vanilla defaults)", args: [] },
+const JVM_PRESETS: { id: string; tkey: string; args: string[] }[] = [
+  { id: "none", tkey: "instanceSettings.jvm.presetNone", args: [] },
   {
     id: "balanced",
-    label: "Balanced - smooth G1GC (recommended)",
+    tkey: "instanceSettings.jvm.presetBalanced",
     args: [
       "-XX:+UseG1GC",
       "-XX:+ParallelRefProcEnabled",
@@ -69,7 +78,7 @@ const JVM_PRESETS: { id: string; label: string; args: string[] }[] = [
   },
   {
     id: "aikars",
-    label: "Aikar's flags - heavy modpacks",
+    tkey: "instanceSettings.jvm.presetAikars",
     args: [
       "-XX:+UseG1GC",
       "-XX:+ParallelRefProcEnabled",
@@ -123,7 +132,17 @@ export function InstanceSettingsView({
   onError: (e: string) => void;
   onCheckUpdates: () => void;
 }) {
+  const t = useT();
   const patch = (p: Partial<Instance>) => onSaveInstance({ ...instance, ...p });
+
+  
+  
+  const [resetNonce, setResetNonce] = useState(0);
+  const [pinPickerOpen, setPinPickerOpen] = useState(false);
+  const resetInstance = (p: Partial<Instance>) => {
+    patch(p);
+    setResetNonce((n) => n + 1);
+  };
 
   const defaultIcons = useMemo(
     () => buildInstanceIcons(currentPalette()),
@@ -147,10 +166,9 @@ export function InstanceSettingsView({
     : "default";
 
   const managed = instance.pack.kind !== "none";
-  const canEditVersion =
-    !managed ||
-    ((instance.pack.kind === "modrinth" || instance.pack.kind === "curseforge") &&
-      !instance.modpack_locked);
+  
+  
+  const canEditVersion = !managed || !instance.modpack_locked;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -162,63 +180,100 @@ export function InstanceSettingsView({
           <ArrowLeft size={16} />
         </button>
         <div className="flex items-center gap-3">
-          {instance.icon && (
-            <img
-              src={iconSrc(instance.icon) ?? undefined}
-              alt=""
-              className="h-9 w-9 rounded-md object-cover"
-            />
-          )}
+          <img
+            src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON) ?? undefined}
+            alt=""
+            className="h-9 w-9 rounded-md object-cover"
+          />
           <div>
-            <input
-              defaultValue={instance.name}
-              key={instance.id}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v && v !== instance.name) patch({ name: v });
-                else e.target.value = instance.name;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  e.currentTarget.value = instance.name;
-                  e.currentTarget.blur();
-                }
-              }}
-              title="Rename instance"
-              spellCheck={false}
-              className="-mx-1.5 w-full max-w-md rounded-md bg-transparent px-1.5 font-mc text-2xl tracking-wide text-gray-100 outline-none transition hover:bg-ink-800/60 focus:bg-ink-800 focus:ring-1 focus:ring-brass-500/50"
-            />
+            {instance.featured ? (
+              <div
+                title={t("instanceSettings.featuredNameLocked")}
+                className="-mx-1.5 max-w-md truncate px-1.5 font-mc text-2xl tracking-wide text-gray-100"
+              >
+                {instance.name}
+              </div>
+            ) : (
+              <input
+                defaultValue={instance.name}
+                key={instance.name}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== instance.name) patch({ name: v });
+                  else e.target.value = instance.name;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    e.currentTarget.value = instance.name;
+                    e.currentTarget.blur();
+                  }
+                }}
+                title={t("instanceSettings.renameInstance")}
+                spellCheck={false}
+                className="-mx-1.5 w-full max-w-md rounded-md bg-transparent px-1.5 font-mc text-2xl tracking-wide text-gray-100 outline-none transition hover:bg-ink-800/60 focus:bg-ink-800 focus:ring-1 focus:ring-brass-500/50"
+              />
+            )}
             <div className="text-xs text-ink-600">
-              Instance settings - overrides apply only to this instance.
+              {t("instanceSettings.subtitle")}
             </div>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1">
-        <div className="grid grid-cols-2 gap-4">
-          <Card title="Notes & tags" icon={<StickyNote size={14} />}>
-            <textarea
-              defaultValue={instance.notes ?? ""}
-              onBlur={(e) => patch({ notes: e.target.value.trim() || null })}
-              placeholder="Personal notes about this instance - mods to try, server rules, whatever you like…"
-              rows={3}
-              className={`${inputCls} resize-none leading-relaxed`}
-              spellCheck={false}
-            />
+        <CardColumns>
+          <Card title={t("instanceSettings.details.title")} icon={<StickyNote size={14} />}>
+            <Field
+              label={t("instanceSettings.details.name")}
+              hint={
+                instance.featured
+                  ? t("instanceSettings.featuredNameLockedHint")
+                  : undefined
+              }
+            >
+              <input
+                key={instance.name}
+                defaultValue={instance.name}
+                disabled={instance.featured}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== instance.name) patch({ name: v });
+                  else e.target.value = instance.name;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    e.currentTarget.value = instance.name;
+                    e.currentTarget.blur();
+                  }
+                }}
+                spellCheck={false}
+                className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-60`}
+              />
+            </Field>
+            <Field label={t("instanceSettings.details.notes")}>
+              <textarea
+                defaultValue={instance.notes ?? ""}
+                onBlur={(e) => patch({ notes: e.target.value.trim() || null })}
+                placeholder={t("instanceSettings.details.notesPlaceholder")}
+                rows={3}
+                className={`${inputCls} resize-none leading-relaxed`}
+                spellCheck={false}
+              />
+            </Field>
             <div>
-              <div className="mb-1.5 text-sm text-ink-600">Tags</div>
+              <div className="mb-1.5 text-sm text-ink-600">{t("instanceSettings.details.tags")}</div>
               <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-ink-950/70 px-2 py-1.5 ring-1 ring-edge">
-                {(instance.tags ?? []).map((t) => (
+                {(instance.tags ?? []).map((tag) => (
                   <span
-                    key={t}
+                    key={tag}
                     className="flex items-center gap-1 rounded-full bg-brass-500/15 px-2 py-0.5 text-xs text-brass-300"
                   >
-                    {t}
+                    {tag}
                     <button
                       onClick={() =>
-                        patch({ tags: (instance.tags ?? []).filter((x) => x !== t) })
+                        patch({ tags: (instance.tags ?? []).filter((x) => x !== tag) })
                       }
                       className="text-brass-300/70 hover:text-red-300"
                     >
@@ -227,7 +282,7 @@ export function InstanceSettingsView({
                   </span>
                 ))}
                 <input
-                  placeholder="Add tag…"
+                  placeholder={t("instanceSettings.details.addTag")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       const v = e.currentTarget.value.trim().toLowerCase();
@@ -244,10 +299,19 @@ export function InstanceSettingsView({
           </Card>
           <ExportCard instanceId={instance.id} />
           {canEditVersion && <VersionLoaderCard instance={instance} onSave={patch} />}
-          <Card title="Memory" icon={<SlidersHorizontal size={14} />}>
+          <Card
+            title={t("instanceSettings.memory.title")}
+            icon={<SlidersHorizontal size={14} />}
+            onReset={() =>
+              resetInstance({ max_memory_mb: null, min_memory_mb: null })
+            }
+            resetTitle={t("instanceSettings.resetToDefault")}
+          >
             <Toggle
-              label="Override launcher default"
-              description={`Default is ${(settings.default_max_memory_mb / 1024).toFixed(0)} GB max.`}
+              label={t("instanceSettings.memory.override")}
+              description={t("instanceSettings.memory.overrideDesc", {
+                gb: (settings.default_max_memory_mb / 1024).toFixed(0),
+              })}
               checked={memOverride}
               onChange={(on) =>
                 patch(
@@ -271,15 +335,51 @@ export function InstanceSettingsView({
             )}
           </Card>
 
+          <Card title={t("instanceSettings.quick.title")} icon={<Pin size={14} />}>
+            <p className="text-xs text-ink-600">
+              {t("instanceSettings.quick.desc")}
+            </p>
+            {appliedPins(instance).length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {appliedPins(instance).map((s) => (
+                  <span
+                    key={s.id}
+                    className="flex items-center gap-1 rounded-full bg-brass-500/15 px-2 py-0.5 text-xs text-brass-300"
+                  >
+                    <Pin size={10} /> {t(s.tkey)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-600">{t("instanceSettings.quick.empty")}</p>
+            )}
+            <button
+              onClick={() => setPinPickerOpen(true)}
+              className="flex items-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <Pin size={13} /> {t("instanceSettings.quick.choose")}
+            </button>
+          </Card>
+
           <JavaCard
             instance={instance}
             javaChoice={javaChoice}
             patch={patch}
             onError={onError}
+            onReset={() =>
+              resetInstance({ java_policy: null, java_path: null })
+            }
           />
 
-          <Card title="JVM arguments" icon={<Terminal size={14} />}>
-            <Field label="Preset" hint="Pick tuned flags or Custom to edit them.">
+          <Card
+            title={t("instanceSettings.jvm.title")}
+            icon={<Terminal size={14} />}
+            onReset={() => {
+              setArgsDraft("");
+              resetInstance({ extra_jvm_args: [] });
+            }}
+          >
+            <Field label={t("instanceSettings.jvm.preset")} hint={t("instanceSettings.jvm.presetHint")}>
               <Select
                 value={presetIdForArgs(instance.extra_jvm_args)}
                 onChange={(id) => {
@@ -290,12 +390,12 @@ export function InstanceSettingsView({
                   patch({ extra_jvm_args: p.args });
                 }}
                 options={[
-                  ...JVM_PRESETS.map((p) => ({ value: p.id, label: p.label })),
-                  { value: "custom", label: "Custom" },
+                  ...JVM_PRESETS.map((p) => ({ value: p.id, label: t(p.tkey) })),
+                  { value: "custom", label: t("instanceSettings.jvm.custom") },
                 ]}
               />
             </Field>
-            <Field label="Arguments">
+            <Field label={t("instanceSettings.jvm.arguments")}>
               <textarea
                 rows={3}
                 value={argsDraft}
@@ -312,57 +412,70 @@ export function InstanceSettingsView({
             </Field>
           </Card>
 
-          <Card title="Game window" icon={<Monitor size={14} />}>
-            <Field label="Resolution override" hint="Leave blank to use the launcher default.">
+          <Card
+            title={t("instanceSettings.window.title")}
+            icon={<Monitor size={14} />}
+            onReset={() => resetInstance({ resolution: null })}
+            resetTitle={t("instanceSettings.resetToDefault")}
+          >
+            <Field label={t("instanceSettings.window.resOverride")} hint={t("instanceSettings.window.resHint")}>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
+                <NumberField
                   min={640}
-                  defaultValue={instance.resolution?.[0] ?? ""}
-                  onBlur={(e) => {
-                    const w = Number(e.target.value) || 0;
+                  value={instance.resolution?.[0] ?? null}
+                  onChange={(w) => {
                     const h = instance.resolution?.[1] ?? 0;
                     patch({ resolution: w && h ? [w, h] : w ? [w, 720] : null });
                   }}
                   placeholder="1280"
-                  className={`${inputCls} w-24`}
+                  className="w-24"
                 />
                 <span className="text-ink-600">×</span>
-                <input
-                  type="number"
+                <NumberField
                   min={480}
-                  defaultValue={instance.resolution?.[1] ?? ""}
-                  onBlur={(e) => {
-                    const h = Number(e.target.value) || 0;
+                  value={instance.resolution?.[1] ?? null}
+                  onChange={(h) => {
                     const w = instance.resolution?.[0] ?? 0;
                     patch({ resolution: w && h ? [w, h] : h ? [1280, h] : null });
                   }}
                   placeholder="720"
-                  className={`${inputCls} w-24`}
+                  className="w-24"
                 />
               </div>
             </Field>
           </Card>
 
-          <Card title="Commands" icon={<Terminal size={14} />}>
-            <Field label="Pre-launch command" hint="Overrides the launcher default for this instance.">
+          <Card
+            title={t("instanceSettings.commands.title")}
+            icon={<Terminal size={14} />}
+            onReset={() =>
+              resetInstance({
+                pre_launch_command: null,
+                post_exit_command: null,
+              })
+            }
+            resetTitle={t("instanceSettings.resetToDefault")}
+          >
+            <Field label={t("instanceSettings.commands.pre")} hint={t("instanceSettings.commands.preHint")}>
               <input
+                key={`pre-${resetNonce}`}
                 defaultValue={instance.pre_launch_command ?? ""}
                 onBlur={(e) =>
                   patch({ pre_launch_command: e.target.value.trim() || null })
                 }
-                placeholder="e.g. /usr/bin/mangohud --version"
+                placeholder={t("instanceSettings.commands.prePlaceholder")}
                 className={`${inputCls} font-mono text-xs`}
                 spellCheck={false}
               />
             </Field>
-            <Field label="Post-exit command">
+            <Field label={t("instanceSettings.commands.post")}>
               <input
+                key={`post-${resetNonce}`}
                 defaultValue={instance.post_exit_command ?? ""}
                 onBlur={(e) =>
                   patch({ post_exit_command: e.target.value.trim() || null })
                 }
-                placeholder="e.g. notify-send 'Closed'"
+                placeholder={t("instanceSettings.commands.postPlaceholder")}
                 className={`${inputCls} font-mono text-xs`}
                 spellCheck={false}
               />
@@ -370,8 +483,14 @@ export function InstanceSettingsView({
           </Card>
 
           {!instance.featured && (
-            <Card title="Branding" icon={<ImageIcon size={14} />}>
-              <Field label="Default icons" hint="Quick-pick a built-in instance icon.">
+            <Card
+              title={t("instanceSettings.branding.title")}
+              icon={<ImageIcon size={14} />}
+              onReset={() =>
+                resetInstance({ icon: null, banner: null, logo: null })
+              }
+            >
+              <Field label={t("instanceSettings.branding.defaultIcons")} hint={t("instanceSettings.branding.defaultIconsHint")}>
                 <div className="flex flex-wrap gap-2">
                   {defaultIcons.map((ic) => (
                     <button
@@ -390,35 +509,37 @@ export function InstanceSettingsView({
                   ))}
                 </div>
               </Field>
-              <Field label="Icon URL" hint="Square logo shown on the card and Play page.">
+              <Field label={t("instanceSettings.branding.iconUrl")} hint={t("instanceSettings.branding.iconUrlHint")}>
                 <input
-                  key={instance.icon ?? "none"}
+                  key={`icon-${instance.icon ?? "none"}-${resetNonce}`}
                   defaultValue={
                     isBuiltinIcon(instance.icon) ? "" : (instance.icon ?? "")
                   }
                   onBlur={(e) => patch({ icon: e.target.value.trim() || null })}
-                  placeholder="https://… or /local.png"
+                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </Field>
-              <Field label="Banner URL" hint="Wide image shown behind the Play hero.">
+              <Field label={t("instanceSettings.branding.bannerUrl")} hint={t("instanceSettings.branding.bannerUrlHint")}>
                 <input
+                  key={`banner-${resetNonce}`}
                   defaultValue={instance.banner ?? ""}
                   onBlur={(e) => patch({ banner: e.target.value.trim() || null })}
-                  placeholder="https://… or /local.png"
+                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </Field>
               <Field
-                label="Logo URL"
-                hint="Hero logo shown centered above the Play button. Any aspect ratio."
+                label={t("instanceSettings.branding.logoUrl")}
+                hint={t("instanceSettings.branding.logoUrlHint")}
               >
                 <input
+                  key={`logo-${resetNonce}`}
                   defaultValue={instance.logo ?? ""}
                   onBlur={(e) => patch({ logo: e.target.value.trim() || null })}
-                  placeholder="https://… or /local.png"
+                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
@@ -439,33 +560,33 @@ export function InstanceSettingsView({
           )}
 
           {instance.featured && (
-            <Card title="Server feeds" icon={<Newspaper size={14} />}>
+            <Card title={t("instanceSettings.feeds.title")} icon={<Newspaper size={14} />}>
               <Toggle
-                label="Show news"
+                label={t("instanceSettings.feeds.showNews")}
                 checked={instance.show_news}
                 onChange={(v) => patch({ show_news: v })}
               />
-              <Field label="News URL">
+              <Field label={t("instanceSettings.feeds.newsUrl")}>
                 <input
                   defaultValue={instance.news_url ?? ""}
                   onBlur={(e) => patch({ news_url: e.target.value.trim() || null })}
-                  placeholder="https://api.example.com/news/"
+                  placeholder={t("instanceSettings.feeds.newsPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </Field>
               <Toggle
-                label="Show player count"
+                label={t("instanceSettings.feeds.showPlayers")}
                 checked={instance.show_playercount}
                 onChange={(v) => patch({ show_playercount: v })}
               />
-              <Field label="Player count URL">
+              <Field label={t("instanceSettings.feeds.playersUrl")}>
                 <input
                   defaultValue={instance.playercount_url ?? ""}
                   onBlur={(e) =>
                     patch({ playercount_url: e.target.value.trim() || null })
                   }
-                  placeholder="https://api.example.com/playercount"
+                  placeholder={t("instanceSettings.feeds.playersPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
@@ -474,15 +595,23 @@ export function InstanceSettingsView({
           )}
 
           {!instance.featured && (
-            <Card title="Danger zone" icon={<Trash2 size={14} />}>
+            <Card title={t("instanceSettings.danger.title")} icon={<Trash2 size={14} />}>
               <p className="text-xs text-ink-600">
-                Permanently delete this instance and all its game files.
+                {t("instanceSettings.danger.desc")}
               </p>
               <DeleteButton instanceId={instance.id} onDeleted={onDeleted} onError={onError} />
             </Card>
           )}
-        </div>
+        </CardColumns>
       </div>
+
+      {pinPickerOpen && (
+        <QuickSettingsPicker
+          instance={instance}
+          onSaveInstance={onSaveInstance}
+          onClose={() => setPinPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -492,12 +621,15 @@ function JavaCard({
   javaChoice,
   patch,
   onError,
+  onReset,
 }: {
   instance: Instance;
   javaChoice: string;
   patch: (p: Partial<Instance>) => void;
   onError: (e: string) => void;
+  onReset?: () => void;
 }) {
+  const t = useT();
   const [report, setReport] = useState<JavaReport | null>(null);
   const load = () => {
     if (api.isTauri()) api.javaInfo(instance.id).then(setReport).catch(() => {});
@@ -505,10 +637,15 @@ function JavaCard({
   useEffect(load, [instance.id]);
 
   return (
-    <Card title="Java" icon={<Coffee size={14} />}>
+    <Card
+      title={t("instanceSettings.java.title")}
+      icon={<Coffee size={14} />}
+      onReset={onReset}
+      resetTitle={t("instanceSettings.resetToDefault")}
+    >
       <Field
-        label="Java for this instance"
-        hint="“Launcher default” uses your global policy. Auto downloads the exact version this build needs."
+        label={t("instanceSettings.java.forThis")}
+        hint={t("instanceSettings.java.forThisHint")}
       >
         <Select
           value={javaChoice}
@@ -518,21 +655,21 @@ function JavaCard({
             else patch({ java_policy: v, java_path: null });
           }}
           options={[
-            { value: "default", label: "Launcher default" },
-            { value: "auto", label: "Auto-download" },
-            { value: "system", label: "System Java" },
-            { value: "custom", label: "Custom path…" },
+            { value: "default", label: t("instanceSettings.java.default") },
+            { value: "auto", label: t("instanceSettings.java.auto") },
+            { value: "system", label: t("instanceSettings.java.system") },
+            { value: "custom", label: t("instanceSettings.java.custom") },
           ]}
         />
       </Field>
       {javaChoice === "custom" && (
-        <Field label="Java executable path">
+        <Field label={t("instanceSettings.java.execPath")}>
           <input
             defaultValue={instance.java_path ?? ""}
             onBlur={(e) =>
               patch({ java_policy: "custom", java_path: e.target.value.trim() || null })
             }
-            placeholder="/path/to/bin/java"
+            placeholder={t("instanceSettings.java.pathPlaceholder")}
             className={`${inputCls} font-mono text-xs`}
             spellCheck={false}
           />
@@ -540,7 +677,7 @@ function JavaCard({
       )}
       {report && report.runtimes.length > 0 && (
         <div>
-          <div className="mb-1.5 text-sm text-ink-600">Downloaded runtimes</div>
+          <div className="mb-1.5 text-sm text-ink-600">{t("instanceSettings.java.downloaded")}</div>
           <div className="flex flex-col gap-1">
             {report.runtimes.map((r) => (
               <div
@@ -551,7 +688,7 @@ function JavaCard({
                 <span className="flex-1 truncate text-gray-200">{r.label}</span>
                 <button
                   onClick={() => api.revealPath(r.path).catch(() => {})}
-                  title="Open folder"
+                  title={t("instanceSettings.java.openFolder")}
                   className="text-ink-600 opacity-0 transition hover:text-brass-300 group-hover:opacity-100"
                 >
                   <FolderOpen size={13} />
@@ -561,12 +698,12 @@ function JavaCard({
                     api
                       .deleteJavaRuntime(r.path)
                       .then(() => {
-                        toast("Runtime deleted", "info");
+                        toast(t("instanceSettings.java.runtimeDeleted"), "info");
                         load();
                       })
                       .catch((e) => onError(String(e)))
                   }
-                  title="Uninstall"
+                  title={t("instanceSettings.java.uninstall")}
                   className="text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
                 >
                   <Trash2 size={13} />
@@ -597,9 +734,14 @@ function ModpackCard({
   onCheckUpdates: () => void;
   onSaveInstance: (i: Instance) => void;
 }) {
+  const t = useT();
   const id = instance.id;
   const pack = instance.pack;
+  const loaderEntry = VL_LOADERS.find((l) => l.kind === instance.loader);
   const isPackwiz = pack.kind === "packwiz" || instance.featured;
+  
+  
+  const urlEditable = !instance.featured && !instance.modpack_locked;
   const source = pack.kind === "curseforge" ? "curseforge" : "modrinth";
   const projectId =
     pack.kind === "modrinth"
@@ -612,6 +754,8 @@ function ModpackCard({
   const [showVersions, setShowVersions] = useState(false);
   const [branches, setBranches] = useState<api.PackwizBranch[] | null>(null);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  
+  const [flavorGroups, setFlavorGroups] = useState<FlavorGroup[] | "loading" | null>(null);
   const currentVersion =
     pack.kind === "modrinth"
       ? pack.version_id
@@ -632,16 +776,24 @@ function ModpackCard({
   const run = (fn: () => Promise<void>) => fn().catch((e) => onError(String(e)));
 
   return (
-    <Card title="Modpack" icon={<Package size={14} />}>
-      <Row label="Installed version" value={modStatus?.installed_version ?? "-"} />
+    <Card title={t("instanceSettings.modpack.title")} icon={<Package size={14} />}>
+      <Row label={t("instanceSettings.modpack.installedVersion")} value={modStatus?.installed_version ?? "-"} />
       {isPackwiz && (
-        <Row label="Latest version" value={modStatus?.latest_version || "-"} />
+        <Row label={t("instanceSettings.modpack.latestVersion")} value={modStatus?.latest_version || "-"} />
+      )}
+      <Row label={t("instanceSettings.modpack.minecraft")} value={instance.minecraft_version} />
+      <Row
+        label={t("instanceSettings.modpack.loaderRow")}
+        value={loaderEntry ? t(loaderEntry.tkey) : instance.loader}
+      />
+      {instance.loader !== "vanilla" && (
+        <Row label={t("instanceSettings.modpack.loaderVersion")} value={lvToStr(instance.loader_version)} />
       )}
 
       {pack.kind === "packwiz" && (
         <div className="flex flex-col gap-2 rounded-lg border border-edge bg-ink-900/40 p-3">
           <div className="flex items-center gap-1.5 text-xs text-ink-600">
-            <GitBranch size={13} /> Source
+            <GitBranch size={13} /> {t("instanceSettings.modpack.source")}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -650,28 +802,37 @@ function ModpackCard({
               className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge"
             />
             <button
-              title="Copy URL"
+              title={t("instanceSettings.modpack.copyUrl")}
               onClick={() => navigator.clipboard?.writeText(pack.url)}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
               <Copy size={14} />
             </button>
             <button
-              title="Open in browser"
+              title={t("instanceSettings.modpack.openBrowser")}
               onClick={() => api.openExternal(pack.url).catch(() => {})}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
               <ExternalLink size={14} />
             </button>
           </div>
-          {branches && branches.length > 0 ? (
+          {!urlEditable ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-ink-600">
+              <Lock size={12} />
+              {instance.featured
+                ? t("instanceSettings.modpack.sourceFixedFeatured")
+                : t("instanceSettings.modpack.unlockToSwitch")}
+            </div>
+          ) : branches && branches.length > 0 ? (
             <Dropdown
               value={pack.url}
               onChange={(v) => {
                 if (v === pack.url) return;
                 run(async () => {
                   await api.switchPackwizBranch(id, v);
-                  await api.reinstallModpack(id);
+                  
+                  
+                  await api.syncModpack(id);
                   const updated = await api.getInstance(id);
                   onSaveInstance(updated);
                 });
@@ -688,7 +849,7 @@ function ModpackCard({
                   .then((list) => {
                     setBranches(list);
                     if (list.length === 0)
-                      onError("No other branches with a pack.toml were found.");
+                      onError(t("instanceSettings.modpack.noBranches"));
                   })
                   .catch((e) => onError(String(e)))
                   .finally(() => setLoadingBranches(false));
@@ -700,9 +861,77 @@ function ModpackCard({
               ) : (
                 <GitBranch size={14} />
               )}
-              Switch branch
+              {t("instanceSettings.modpack.switchBranch")}
             </button>
           )}
+
+          {pack.unsup && (
+            <button
+              disabled={flavorGroups === "loading" || maintaining}
+              onClick={() => {
+                setFlavorGroups("loading");
+                api
+                  .inspectPackwizFlavors(pack.url)
+                  .then((groups) => {
+                    if (groups.length === 0) {
+                      setFlavorGroups(null);
+                      onError(t("instanceSettings.modpack.noFlavors"));
+                    } else {
+                      setFlavorGroups(groups);
+                    }
+                  })
+                  .catch((e) => {
+                    setFlavorGroups(null);
+                    onError(String(e));
+                  });
+              }}
+              className="flex items-center justify-center gap-2 self-start rounded-md border border-brass-600/40 px-3 py-1.5 text-xs text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {flavorGroups === "loading" ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <SlidersHorizontal size={14} />
+              )}
+              {t("instanceSettings.modpack.changeFlavors")}
+            </button>
+          )}
+        </div>
+      )}
+
+      {flavorGroups && (
+        <div
+          className="modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+          onMouseDown={(e) =>
+            e.target === e.currentTarget && setFlavorGroups(null)
+          }
+        >
+          <div className="rise flex h-[70vh] w-[560px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 p-5 shadow-2xl">
+            {flavorGroups === "loading" ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-ink-600">
+                <Loader2 size={22} className="animate-spin text-brass-400" />
+                <span className="text-sm">{t("instanceSettings.modpack.readingFlavors")}</span>
+              </div>
+            ) : (
+              <FlavorPicker
+                title={instance.name}
+                groups={flavorGroups}
+                preset={instance.unsup_flavors ?? undefined}
+                busy={maintaining}
+                confirmLabel={t("instanceSettings.modpack.applyFlavors")}
+                onBack={() => setFlavorGroups(null)}
+                onConfirm={(ids) => {
+                  setFlavorGroups(null);
+                  run(async () => {
+                    await api.setPackwizFlavors(id, ids);
+                    onSaveInstance(await api.getInstance(id));
+                    
+                    
+                    await api.syncModpack(id);
+                  });
+                }}
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -710,7 +939,7 @@ function ModpackCard({
         <div className="rounded-lg border border-edge bg-ink-900/50 p-3">
           <div className="mb-1.5 flex items-center justify-between text-xs">
             <span className="flex items-center gap-2 text-brass-300">
-              <Loader2 size={13} className="animate-spin" /> Working
+              <Loader2 size={13} className="animate-spin" /> {t("instanceSettings.modpack.working")}
               {progress?.message ? (
                 <span className="text-ink-600">· {progress.message}</span>
               ) : null}
@@ -727,8 +956,8 @@ function ModpackCard({
       )}
 
       <Toggle
-        label="Lock modpack"
-        description="Locked packs verify/update on launch and protect their mods."
+        label={t("instanceSettings.modpack.lock")}
+        description={t("instanceSettings.modpack.lockDesc")}
         checked={instance.modpack_locked}
         onChange={(v) =>
           api
@@ -749,7 +978,7 @@ function ModpackCard({
                 onClick={() => setShowVersions(false)}
                 className="self-start text-xs text-ink-600 hover:text-brass-300"
               >
-                ← Back
+                ← {t("common.back")}
               </button>
               <div className="max-h-[320px] overflow-y-auto pr-1">
                 <VersionList
@@ -757,7 +986,7 @@ function ModpackCard({
                   projectId={projectId}
                   source={source}
                   versions={versions ?? []}
-                  actionLabel={maintaining ? "Working…" : "Switch"}
+                  actionLabel={maintaining ? t("instanceSettings.modpack.workingEllipsis") : t("instanceSettings.modpack.switch")}
                   busy={maintaining}
                   currentVersionId={currentVersion}
                   onPick={(vid) => {
@@ -774,10 +1003,10 @@ function ModpackCard({
                 disabled={maintaining || !versions}
                 onClick={() => setShowVersions(true)}
               >
-                Change / update version
+                {t("instanceSettings.modpack.changeVersion")}
                 {currentVersion && (
                   <span className="ml-auto text-[11px] text-ink-600">
-                    current: {currentVersion}
+                    {t("instanceSettings.modpack.current", { version: currentVersion })}
                   </span>
                 )}
               </ActionButton>
@@ -786,7 +1015,7 @@ function ModpackCard({
                 disabled={maintaining}
                 onClick={() => run(() => api.updateModpack(id, null))}
               >
-                Verify &amp; repair
+                {t("instanceSettings.modpack.verifyRepair")}
               </ActionButton>
             </>
           )}
@@ -798,21 +1027,21 @@ function ModpackCard({
             disabled={maintaining}
             onClick={onCheckUpdates}
           >
-            Check for updates
+            {t("instanceSettings.modpack.checkUpdates")}
           </ActionButton>
           <ActionButton
             icon={<Wrench size={15} />}
             disabled={maintaining}
             onClick={() => run(() => api.repairModpack(id))}
           >
-            Repair modpack
+            {t("instanceSettings.modpack.repair")}
           </ActionButton>
           <ActionButton
             icon={<Hammer size={15} />}
             disabled={maintaining}
             onClick={() => run(() => api.reinstallLoader(id))}
           >
-            Reinstall loader
+            {t("instanceSettings.modpack.reinstallLoader")}
           </ActionButton>
           <ActionButton
             danger
@@ -820,7 +1049,7 @@ function ModpackCard({
             disabled={maintaining}
             onClick={() => run(() => api.reinstallModpack(id))}
           >
-            Reinstall from scratch
+            {t("instanceSettings.modpack.reinstallScratch")}
           </ActionButton>
         </>
       ) : null}
@@ -829,7 +1058,7 @@ function ModpackCard({
         icon={<FolderOpen size={15} />}
         onClick={() => api.openInstanceDir(id).catch((e) => onError(String(e)))}
       >
-        Open install folder
+        {t("instanceSettings.modpack.openFolder")}
       </ActionButton>
       {(pack.kind === "modrinth" || pack.kind === "curseforge") && projectId && (
         <ActionButton
@@ -844,7 +1073,9 @@ function ModpackCard({
               .catch(() => {})
           }
         >
-          View on {pack.kind === "curseforge" ? "CurseForge" : "Modrinth"}
+          {t("instanceSettings.modpack.viewOn", {
+            provider: pack.kind === "curseforge" ? "CurseForge" : "Modrinth",
+          })}
         </ActionButton>
       )}
     </Card>
@@ -860,12 +1091,13 @@ function DeleteButton({
   onDeleted: (id: string) => void;
   onError: (e: string) => void;
 }) {
+  const t = useT();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!confirm) {
     return (
       <ActionButton danger icon={<Trash2 size={15} />} onClick={() => setConfirm(true)}>
-        Delete instance
+        {t("instanceSettings.danger.deleteInstance")}
       </ActionButton>
     );
   }
@@ -879,7 +1111,7 @@ function DeleteButton({
           setBusy(true);
           try {
             await api.deleteInstance(instanceId);
-            toast("Instance deleted", "info");
+            toast(t("instanceSettings.danger.deletedToast"), "info");
             onDeleted(instanceId);
           } catch (e) {
             onError(String(e));
@@ -889,35 +1121,35 @@ function DeleteButton({
           }
         }}
       >
-        Confirm delete
+        {t("instanceSettings.danger.confirmDelete")}
       </ActionButton>
       <button
         onClick={() => setConfirm(false)}
         className="rounded-lg border border-edge px-3 text-sm text-ink-600 hover:text-gray-200"
       >
-        Cancel
+        {t("common.cancel")}
       </button>
     </div>
   );
 }
 
 function ExportCard({ instanceId }: { instanceId: string }) {
+  const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const run = (format: "modrinth" | "curseforge") => {
     setBusy(format);
     api
       .exportModpack(instanceId, format)
-      .then((path) => toast(`Exported to ${path}`, "success"))
+      .then((path) => toast(t("instanceSettings.export.exportedToast", { path }), "success"))
       .catch((e) => toast(String(e), "error"))
       .finally(() => setBusy(null));
   };
   const btn =
     "flex flex-1 items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50";
   return (
-    <Card title="Export modpack" icon={<Share2 size={14} />}>
+    <Card title={t("instanceSettings.export.title")} icon={<Share2 size={14} />}>
       <p className="text-xs text-ink-600">
-        Bundle this instance&apos;s added content into a shareable modpack file
-        (saved to your Downloads folder).
+        {t("instanceSettings.export.desc")}
       </p>
       <div className="flex gap-2">
         <button onClick={() => run("modrinth")} disabled={!!busy} className={btn}>
@@ -926,7 +1158,7 @@ function ExportCard({ instanceId }: { instanceId: string }) {
           ) : (
             <Download size={15} />
           )}
-          Modrinth .mrpack
+          {t("instanceSettings.export.mrpack")}
         </button>
         <button
           onClick={() => run("curseforge")}
@@ -938,19 +1170,19 @@ function ExportCard({ instanceId }: { instanceId: string }) {
           ) : (
             <Download size={15} />
           )}
-          CurseForge .zip
+          {t("instanceSettings.export.cfzip")}
         </button>
       </div>
     </Card>
   );
 }
 
-const VL_LOADERS: { id: string; kind: LoaderKind; label: string }[] = [
-  { id: "vanilla", kind: "vanilla", label: "Vanilla" },
-  { id: "neoforge", kind: "neo_forge", label: "NeoForge" },
-  { id: "forge", kind: "forge", label: "Forge" },
-  { id: "fabric", kind: "fabric", label: "Fabric" },
-  { id: "quilt", kind: "quilt", label: "Quilt" },
+const VL_LOADERS: { id: string; kind: LoaderKind; tkey: string }[] = [
+  { id: "vanilla", kind: "vanilla", tkey: "instanceSettings.loader.vanilla" },
+  { id: "neoforge", kind: "neo_forge", tkey: "instanceSettings.loader.neoforge" },
+  { id: "forge", kind: "forge", tkey: "instanceSettings.loader.forge" },
+  { id: "fabric", kind: "fabric", tkey: "instanceSettings.loader.fabric" },
+  { id: "quilt", kind: "quilt", tkey: "instanceSettings.loader.quilt" },
 ];
 
 const lvToStr = (lv: LoaderVersion): string =>
@@ -967,6 +1199,7 @@ function VersionLoaderCard({
   instance: Instance;
   onSave: (p: Partial<Instance>) => void;
 }) {
+  const t = useT();
   const kindToPicker = (k: string) => (k === "neo_forge" ? "neoforge" : k);
   const [pickerLoader, setPickerLoader] = useState(kindToPicker(instance.loader));
   const [mc, setMc] = useState(instance.minecraft_version);
@@ -978,10 +1211,10 @@ function VersionLoaderCard({
     lvToStr(instance.loader_version) !== lv;
 
   return (
-    <Card title="Version & loader" icon={<Hammer size={14} />}>
+    <Card title={t("instanceSettings.version.title")} icon={<Hammer size={14} />}>
       <Field
-        label="Mod loader"
-        hint="Switch loaders or make a vanilla instance modded. Re-installs on next launch."
+        label={t("instanceSettings.version.modLoader")}
+        hint={t("instanceSettings.version.modLoaderHint")}
       >
         <div className="flex flex-wrap gap-1.5">
           {VL_LOADERS.map((l) => (
@@ -997,7 +1230,7 @@ function VersionLoaderCard({
                   : "border-edge text-ink-600 hover:text-brass-300"
               }`}
             >
-              {l.label}
+              {t(l.tkey)}
             </button>
           ))}
         </div>
@@ -1016,15 +1249,15 @@ function VersionLoaderCard({
             loader: kind,
             loader_version: strToLv(lv),
           });
-          toast("Version updated - it installs on next launch", "info");
+          toast(t("instanceSettings.version.updatedToast"), "info");
         }}
         disabled={!changed}
         className="brass-btn flex items-center justify-center gap-2 self-start rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Wrench size={15} /> Apply changes
+        <Wrench size={15} /> {t("instanceSettings.version.apply")}
       </button>
       <p className="text-xs text-ink-600">
-        Existing mods may need to be updated for the new version or loader.
+        {t("instanceSettings.version.modsNote")}
       </p>
     </Card>
   );

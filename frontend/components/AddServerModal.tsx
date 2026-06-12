@@ -3,12 +3,10 @@ import { X, Server, Loader2, Wifi, WifiOff, Check } from "lucide-react";
 import * as api from "@/lib/api";
 import { parseMotd } from "@/lib/motd";
 import { useClosable } from "./ui";
+import { useT } from "@/lib/i18n";
 import type { ServerEntry, ServerStatus } from "@/lib/types";
 
-/**
- * Add or edit a server entry (name + address) with a live "test connection"
- * preview that pings the address and shows the MOTD before saving.
- */
+
 export function AddServerModal({
   initial,
   onClose,
@@ -18,6 +16,7 @@ export function AddServerModal({
   onClose: () => void;
   onSave: (entry: ServerEntry) => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   const [name, setName] = useState(initial?.name ?? "");
   const [ip, setIp] = useState(initial?.ip ?? "");
@@ -72,7 +71,7 @@ export function AddServerModal({
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
             <Server size={17} className="text-brass-400" />
-            {initial ? "Edit server" : "Add server"}
+            {initial ? t("addServer.editServer") : t("servers.addServer")}
           </h2>
           <button
             onClick={close}
@@ -84,16 +83,16 @@ export function AddServerModal({
 
         <div className="flex flex-col gap-4 p-5">
           <div>
-            <div className="mb-1.5 text-sm text-ink-600">Server name</div>
+            <div className="mb-1.5 text-sm text-ink-600">{t("addServer.serverName")}</div>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Server"
+              placeholder={t("addServer.namePlaceholder")}
               className={inputCls}
             />
           </div>
           <div>
-            <div className="mb-1.5 text-sm text-ink-600">Address</div>
+            <div className="mb-1.5 text-sm text-ink-600">{t("addServer.address")}</div>
             <div className="flex gap-2">
               <input
                 value={ip}
@@ -113,7 +112,7 @@ export function AddServerModal({
                 className="flex shrink-0 items-center gap-1.5 rounded-md border border-edge px-3 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-50"
               >
                 {testing ? <Loader2 size={13} className="animate-spin" /> : <Wifi size={13} />}
-                Test
+                {t("addServer.test")}
               </button>
             </div>
           </div>
@@ -137,17 +136,21 @@ export function AddServerModal({
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-patina-300">
-                      <Wifi size={13} /> Online · {status.players_online}/
-                      {status.players_max} · {status.ping_ms}ms
+                      <Wifi size={13} />{" "}
+                      {t("addServer.onlineStatus", {
+                        online: status.players_online,
+                        max: status.players_max,
+                        ms: status.ping_ms,
+                      })}
                     </div>
                     <div className="mt-1 whitespace-pre-line break-words font-mc text-[12px] text-ink-600">
-                      {status.motd ? parseMotd(status.motd) : "(no MOTD)"}
+                      {status.motd ? parseMotd(status.motd) : t("addServer.noMotd")}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-red-300">
-                  <WifiOff size={13} /> Couldn&apos;t reach this server.
+                  <WifiOff size={13} /> {t("addServer.unreachable")}
                 </div>
               )}
             </div>
@@ -159,14 +162,14 @@ export function AddServerModal({
             onClick={close}
             className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={save}
             disabled={!ip.trim()}
             className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-40"
           >
-            <Check size={15} /> {initial ? "Save" : "Add server"}
+            <Check size={15} /> {initial ? t("common.save") : t("servers.addServer")}
           </button>
         </div>
       </div>

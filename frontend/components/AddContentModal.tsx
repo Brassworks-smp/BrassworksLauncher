@@ -13,16 +13,19 @@ import {
   ChevronLeft,
   ChevronDown,
   ListChecks,
+  Unlock,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { ResultRow, useInfiniteSearch, SEARCH_PAGE } from "./Browse";
 import { Markdown, Changelog } from "./Markdown";
 import { SegmentedTabs, Collapse, useClosable } from "./ui";
+import { useT } from "@/lib/i18n";
 import type {
   ContentSource,
   ContentVersion,
   InstalledMod,
+  LoaderKind,
   ProjectDetail,
   SearchHit,
 } from "@/lib/types";
@@ -30,9 +33,18 @@ import type {
 type ProjectType = "mod" | "resourcepack" | "shader";
 type Source = "modrinth" | "curseforge";
 
-const SOURCES: { id: Source; label: string; color: string }[] = [
-  { id: "modrinth", label: "Modrinth", color: "#54e596" },
-  { id: "curseforge", label: "CurseForge", color: "#f58c6b" },
+
+const LOADER_TKEY: Record<LoaderKind, string> = {
+  vanilla: "instanceSettings.loader.vanilla",
+  neo_forge: "instanceSettings.loader.neoforge",
+  forge: "instanceSettings.loader.forge",
+  fabric: "instanceSettings.loader.fabric",
+  quilt: "instanceSettings.loader.quilt",
+};
+
+const SOURCES: { id: Source; tkey: string; color: string }[] = [
+  { id: "modrinth", tkey: "mods.modrinth", color: "#54e596" },
+  { id: "curseforge", tkey: "mods.curseforge", color: "#f58c6b" },
 ];
 
 const keyOf = (h: { source: string; project_id: string }) =>
@@ -67,10 +79,10 @@ const MODRINTH_ACCENT_LIGHT: CSSProperties = {
   ["--color-brass-700" as string]: "#0e7a37",
 };
 
-const TABS: { id: ProjectType; label: string; icon: typeof Box }[] = [
-  { id: "mod", label: "Mods", icon: Box },
-  { id: "resourcepack", label: "Resource Packs", icon: ImageIcon },
-  { id: "shader", label: "Shaders", icon: Sparkles },
+const TABS: { id: ProjectType; tkey: string; icon: typeof Box }[] = [
+  { id: "mod", tkey: "mods.catMods", icon: Box },
+  { id: "resourcepack", tkey: "mods.catResourcePacks", icon: ImageIcon },
+  { id: "shader", tkey: "mods.catShaders", icon: Sparkles },
 ];
 
 function fmtDownloads(n: number): string {
@@ -81,19 +93,28 @@ function fmtDownloads(n: number): string {
 
 export function AddContentModal({
   instanceId,
+  mc,
+  loader,
   installed,
   lockedIds,
   initial,
   onClose,
   onInstalled,
+  onUnlock,
 }: {
   instanceId: string;
+  
+  mc: string;
+  loader: LoaderKind;
   installed: Record<string, string | null>;
   lockedIds?: string[];
   initial?: SearchHit | null;
   onClose: () => void;
   onInstalled: (mod: InstalledMod) => void;
+  
+  onUnlock?: () => void;
 }) {
+  const t = useT();
   const [type, setType] = useState<ProjectType>(
     (initial?.project_type as ProjectType) || "mod",
   );
@@ -167,7 +188,7 @@ export function AddContentModal({
               </button>
             )}
             <h2 className="font-mc text-lg tracking-wide text-gray-100">
-              {selected ? selected.title : "Add content"}
+              {selected ? selected.title : t("mods.addContent")}
             </h2>
             {selected ? (
               <span
@@ -184,7 +205,7 @@ export function AddContentModal({
                 size="sm"
                 value={source}
                 onChange={(v) => setSource(v as Source)}
-                options={SOURCES.map((s) => ({ id: s.id, label: s.label }))}
+                options={SOURCES.map((s) => ({ id: s.id, label: t(s.tkey) }))}
               />
             )}
           </div>
@@ -211,6 +232,7 @@ export function AddContentModal({
             isInstalled={keyOf(selected) in installed}
             locked={lockedSet.has(keyOf(selected))}
             onInstalled={onInstalled}
+            onUnlock={onUnlock}
           />
         ) : (
           <>
@@ -219,9 +241,9 @@ export function AddContentModal({
               <SegmentedTabs
                 value={type}
                 onChange={(v) => setType(v as ProjectType)}
-                options={TABS.map(({ id, label, icon: Icon }) => ({
+                options={TABS.map(({ id, tkey, icon: Icon }) => ({
                   id,
-                  label,
+                  label: t(tkey),
                   icon: <Icon size={14} />,
                 }))}
               />
@@ -234,10 +256,12 @@ export function AddContentModal({
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder={`Search ${api.sourceLabel(source)} for ${
-                    TABS.find((t) => t.id === type)?.label.toLowerCase() ??
-                    "content"
-                  }…`}
+                  placeholder={t("addContent.searchPlaceholder", {
+                    source: api.sourceLabel(source),
+                    type: t(
+                      TABS.find((tb) => tb.id === type)?.tkey ?? "mods.title",
+                    ).toLowerCase(),
+                  })}
                   className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
                 />
               </div>
@@ -260,8 +284,8 @@ export function AddContentModal({
               ) : hits.length === 0 ? (
                 <div className="grid h-full place-items-center text-center text-sm text-ink-600">
                   {query
-                    ? "No results - try a different search."
-                    : `Start typing to search ${api.sourceLabel(source)}.`}
+                    ? t("addContent.noResults")
+                    : t("addContent.startTyping", { source: api.sourceLabel(source) })}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -280,7 +304,7 @@ export function AddContentModal({
                   )}
                   {!hasMore && hits.length >= SEARCH_PAGE && (
                     <div className="py-3 text-center text-[11px] text-ink-600">
-                      End of results
+                      {t("addContent.endOfResults")}
                     </div>
                   )}
                 </div>
@@ -288,8 +312,13 @@ export function AddContentModal({
             </div>
 
             <div className="border-t border-edge px-5 py-2 text-center text-[11px] text-ink-600">
-              Only versions compatible with Minecraft 1.21.1
-              {type === "mod" ? " · NeoForge" : ""} are shown.
+              {t("addContent.compatNote", {
+                mc,
+                loader:
+                  type === "mod" && loader !== "vanilla"
+                    ? ` · ${t(LOADER_TKEY[loader])}`
+                    : "",
+              })}
             </div>
           </>
         )}
@@ -307,6 +336,7 @@ function DetailView({
   isInstalled,
   locked,
   onInstalled,
+  onUnlock,
 }: {
   instanceId: string;
   hit: SearchHit;
@@ -315,7 +345,9 @@ function DetailView({
   isInstalled: boolean;
   locked: boolean;
   onInstalled: (mod: InstalledMod) => void;
+  onUnlock?: () => void;
 }) {
+  const t = useT();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -356,9 +388,9 @@ function DetailView({
     p.then((res) => {
       const n = res.dependencies.length;
       toast(
-        `Installed ${res.item.name}${
-          n ? ` + ${n} ${n === 1 ? "dependency" : "dependencies"}` : ""
-        }`,
+        n
+          ? t("addContent.installedDeps", { name: res.item.name, n })
+          : t("addContent.installedToast", { name: res.item.name }),
         "success",
       );
       onInstalled(res.item);
@@ -389,7 +421,7 @@ function DetailView({
                   )
                   .catch(() => {})
               }
-              title={`View on ${api.sourceLabel(hit.source)}`}
+              title={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
               className="text-ink-600 hover:text-brass-300"
             >
               <ExternalLink size={14} />
@@ -399,18 +431,33 @@ function DetailView({
             {detail?.description ?? hit.description}
           </p>
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-600">
-            <Users size={11} /> {fmtDownloads(hit.downloads || detail?.downloads || 0)}{" "}
-            downloads
+            <Users size={11} />{" "}
+            {t("addContent.downloads", {
+              count: fmtDownloads(hit.downloads || detail?.downloads || 0),
+            })}
             {latest && (
-              <span className="ml-2 font-mono">latest {latest.version_number}</span>
+              <span className="ml-2 font-mono">
+                {t("addContent.latestVersion", { version: latest.version_number })}
+              </span>
             )}
           </div>
         </div>
         <div className="flex shrink-0 flex-col gap-2">
           {locked ? (
-            <div className="w-32 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600">
-              Managed by the modpack. Unlock it on the Content page to change.
-            </div>
+            onUnlock ? (
+              <button
+                onClick={onUnlock}
+                title={t("addContent.unlockTitle")}
+                className="flex w-32 flex-col items-center gap-1 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+              >
+                <Unlock size={14} />
+                {t("addContent.managedUnlock")}
+              </button>
+            ) : (
+              <div className="w-32 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600">
+                {t("addContent.managedLocked")}
+              </div>
+            )
           ) : (
             <button
               disabled={!!busy}
@@ -421,24 +468,31 @@ function DetailView({
                 <Loader2 size={15} className="animate-spin" />
               ) : updateAvailable ? (
                 <>
-                  <Download size={15} /> Update
+                  <Download size={15} /> {t("addContent.update")}
                 </>
               ) : isInstalled ? (
                 <>
-                  <Check size={15} /> Reinstall
+                  <Check size={15} /> {t("addContent.reinstall")}
                 </>
               ) : (
                 <>
-                  <Download size={15} /> Add
+                  <Download size={15} /> {t("common.add")}
                 </>
               )}
             </button>
           )}
           <button
             onClick={() => setShowVersions((v) => !v)}
-            className="flex items-center justify-center gap-1.5 rounded-md border border-edge px-4 py-2 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            aria-pressed={showVersions}
+            title={showVersions ? t("addContent.backToDescription") : t("addContent.showAllVersions")}
+            className={`flex items-center justify-center gap-1.5 rounded-md border px-4 py-2 text-xs transition ${
+              showVersions
+                ? "border-brass-500/50 bg-brass-500/15 text-brass-200"
+                : "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
+            }`}
           >
-            <ListChecks size={14} /> Versions
+            {showVersions ? <ChevronLeft size={14} /> : <ListChecks size={14} />}
+            {showVersions ? t("addContent.description") : t("addContent.versions")}
           </button>
         </div>
       </div>
@@ -494,6 +548,7 @@ function VersionList({
   locked: boolean;
   onPick: (versionId: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   if (!versions)
     return (
@@ -504,7 +559,7 @@ function VersionList({
   if (versions.length === 0)
     return (
       <div className="py-10 text-center text-sm text-ink-600">
-        No compatible versions.
+        {t("mods.noVersions")}
       </div>
     );
   return (
@@ -522,7 +577,7 @@ function VersionList({
                 onClick={() =>
                   setOpen(expanded ? null : v.version_id)
                 }
-                title="Show changelog"
+                title={t("addContent.showChangelog")}
                 className={`grid h-6 w-6 shrink-0 place-items-center rounded transition ${
                   expanded
                     ? "bg-brass-500/15 text-brass-300"
@@ -544,12 +599,12 @@ function VersionList({
                   </span>
                   {i === 0 && (
                     <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
-                      latest
+                      {t("addContent.latest")}
                     </span>
                   )}
                   {isInstalled && (
                     <span className="rounded bg-patina-500/15 px-1.5 text-[9px] text-patina-400">
-                      installed
+                      {t("addContent.installedBadge")}
                     </span>
                   )}
                 </div>
@@ -566,9 +621,9 @@ function VersionList({
                 {busy === v.version_id ? (
                   <Loader2 size={13} className="animate-spin" />
                 ) : isInstalled ? (
-                  "Current"
+                  t("addContent.current")
                 ) : (
-                  "Install"
+                  t("mods.install")
                 )}
               </button>
             </div>

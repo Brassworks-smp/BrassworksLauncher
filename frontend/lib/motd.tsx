@@ -19,11 +19,7 @@ const MC_COLORS: Record<string, string> = {
   f: "#ffffff",
 };
 
-/**
- * Parse a `§`-coded MOTD string into styled spans. Setting a color resets
- * formatting flags, matching vanilla behavior. Unknown/`§r` reset everything.
- * Uncolored text inherits the surrounding element color.
- */
+
 export function parseMotd(input: string): React.ReactNode {
   const nodes: React.ReactNode[] = [];
   let color: string | undefined;

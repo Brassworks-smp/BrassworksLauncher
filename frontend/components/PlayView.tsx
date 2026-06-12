@@ -9,30 +9,46 @@ import {
   ArrowUpCircle,
   X,
   AlertTriangle,
+  Settings,
+  ExternalLink,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { iconSrc } from "@/lib/instanceIcons";
 import type {
   Instance,
   LaunchProgress,
+  LauncherSettings,
   ModpackStatus,
   NewsItem,
   PlayerCount,
 } from "@/lib/types";
 import { ServerCard } from "./ServerCard";
 import { NewsCard } from "./NewsCard";
+import {
+  appliedPins,
+  QuickSettingsPicker,
+} from "@/lib/quickSettings";
+import { useT, type TFunc } from "@/lib/i18n";
+
 
 const STAGE_LABEL: Record<string, string> = {
-  resolving: "Resolving",
-  checking_updates: "Checking for updates",
-  syncing_modpack: "Updating modpack",
-  loading_version: "Loading version",
-  downloading: "Downloading",
-  preparing_jvm: "Preparing Java",
-  installing_loader: "Installing NeoForge",
-  launching: "Launching",
-  running: "Running",
+  resolving: "play.stage.resolving",
+  checking_updates: "play.stage.checkingUpdates",
+  syncing_modpack: "play.stage.syncingModpack",
+  loading_version: "play.stage.loadingVersion",
+  downloading: "play.stage.downloading",
+  preparing_jvm: "play.stage.preparingJvm",
+  installing_loader: "play.stage.installingLoader",
+  launching: "play.stage.launching",
+  running: "play.stage.running",
 };
+
+
+function stageLabelOf(t: TFunc, stage: string): string {
+  const k = STAGE_LABEL[stage];
+  return k ? t(k) : stage;
+}
+
 
 function loaderLabel(i: Instance): string {
   const map: Record<string, string> = {
@@ -45,26 +61,26 @@ function loaderLabel(i: Instance): string {
   return map[i.loader] ?? i.loader;
 }
 
-function kindLabel(i: Instance): string {
-  if (i.featured) return "Featured pack";
+function kindLabel(t: TFunc, i: Instance): string {
+  if (i.featured) return t("play.featuredPack");
   switch (i.pack.kind) {
     case "modrinth":
-      return "Modrinth modpack";
+      return t("play.modrinthModpack");
     case "curseforge":
-      return "CurseForge modpack";
+      return t("play.curseforgeModpack");
     case "packwiz":
-      return "packwiz modpack";
+      return t("play.packwizModpack");
     default:
-      return "Custom instance";
+      return t("play.customInstance");
   }
 }
 
-function formatPlaytime(seconds: number, alwaysHours = false): string {
+function formatPlaytime(t: TFunc, seconds: number, alwaysHours = false): string {
   if (alwaysHours) {
     const hrs = seconds / 3600;
     return `${hrs.toFixed(1)}h`;
   }
-  if (!seconds || seconds < 60) return "Under a minute";
+  if (!seconds || seconds < 60) return t("play.underMinute");
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   if (h === 0) return `${m}m`;
@@ -82,6 +98,7 @@ export function PlayView({
   notInstalled,
   showPlaytime,
   playtimeHours,
+  featuredEnabled,
   players,
   playersError,
   news,
@@ -92,6 +109,8 @@ export function PlayView({
   onUpdate,
   onStop,
   onCancel,
+  onSaveInstance,
+  launcherSettings,
 }: {
   instance: Instance | null;
   busy: boolean;
@@ -103,6 +122,7 @@ export function PlayView({
   notInstalled: boolean;
   showPlaytime: boolean;
   playtimeHours: boolean;
+  featuredEnabled: boolean;
   players: PlayerCount | null;
   playersError: boolean;
   news: NewsItem | null;
@@ -113,11 +133,14 @@ export function PlayView({
   onUpdate: () => void;
   onStop: () => void;
   onCancel: () => void;
+  onSaveInstance: (i: Instance) => void;
+  launcherSettings: LauncherSettings | null;
 }) {
+  const t = useT();
   if (!instance) {
     return (
       <div className="grid flex-1 place-items-center text-ink-600">
-        Loading instance…
+        {t("play.loadingInstance")}
       </div>
     );
   }
@@ -127,23 +150,27 @@ export function PlayView({
       ? Math.min(100, Math.round((progress.current / progress.total) * 100))
       : null;
 
-  const hasUpdate = !!modStatus?.update_available && !running && !busy;
+  
+  const hasUpdate =
+    !!modStatus?.update_available && !notInstalled && !running && !busy;
   const updateAvailable = hasUpdate && locked;
 
-  const showPlayers = instance.show_playercount && !!instance.playercount_url;
-  const showNews = instance.show_news && !!instance.news_url;
+  const showPlayers =
+    featuredEnabled && instance.show_playercount && !!instance.playercount_url;
+  const showNews = featuredEnabled && instance.show_news && !!instance.news_url;
 
   return (
-    <div className="flex flex-1 gap-4">
+    <div className="flex min-h-0 flex-1 gap-4">
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
         <div className="play-hero-overlay pointer-events-none absolute inset-0" />
 
         <div className="relative z-10 flex h-full w-full flex-col p-7">
-          <div>
+          {}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-edge bg-ink-900/50 px-3 py-1 text-[11px] text-brass-300">
               <span className="h-1.5 w-1.5 rounded-full bg-patina-400" />
-              {kindLabel(instance)}
+              {kindLabel(t, instance)}
             </div>
             <div className="flex items-center gap-3">
               {instance.icon && (
@@ -163,24 +190,26 @@ export function PlayView({
               </Chip>
               {showPlaytime && (
                 <Chip icon={<Clock size={13} />}>
-                  {formatPlaytime(instance.playtime_seconds, playtimeHours)}{" "}
-                  played
+                  {t("play.played", {
+                    time: formatPlaytime(t, instance.playtime_seconds, playtimeHours),
+                  })}
                 </Chip>
               )}
               {modStatus?.installed_version && (
-                <Chip>Pack v{modStatus.installed_version}</Chip>
+                <Chip>{t("play.packChip", { version: modStatus.installed_version })}</Chip>
               )}
               {instance.last_played && (
                 <Chip>
-                  Last played{" "}
-                  {new Date(instance.last_played).toLocaleDateString()}
+                  {t("play.lastPlayedChip", {
+                    date: new Date(instance.last_played).toLocaleDateString(),
+                  })}
                 </Chip>
               )}
             </div>
           </div>
 
 
-          <div className="mt-auto">
+          <div className="shrink-0 pt-4">
             {hasUpdate && (
               <div
                 className={`mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm rise ${
@@ -192,12 +221,12 @@ export function PlayView({
                 <ArrowUpCircle size={16} />
                 <span className="flex-1">
                   {locked
-                    ? `Modpack update available${
-                        modStatus?.latest_version
-                          ? ` - v${modStatus.latest_version}`
-                          : ""
-                      }`
-                    : "Update available - lock the modpack to install it."}
+                    ? modStatus?.latest_version
+                      ? t("play.updateAvailableVersion", {
+                          version: modStatus.latest_version,
+                        })
+                      : t("play.updateAvailable")
+                    : t("play.updateLockHint")}
                 </span>
               </div>
             )}
@@ -208,8 +237,8 @@ export function PlayView({
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="font-medium text-brass-300">
                     {progress
-                      ? STAGE_LABEL[progress.stage] ?? progress.stage
-                      : "Preparing"}
+                      ? stageLabelOf(t, progress.stage)
+                      : t("play.preparing")}
                     {progress?.message ? (
                       <span className="ml-2 text-ink-600">
                         {progress.message}
@@ -239,7 +268,7 @@ export function PlayView({
               onUpdate={onUpdate}
               onStop={onStop}
               stageLabel={
-                progress ? STAGE_LABEL[progress.stage] ?? "Working" : "Preparing"
+                progress ? stageLabelOf(t, progress.stage) : t("play.preparing")
               }
             />
             {busy && (
@@ -247,12 +276,12 @@ export function PlayView({
                 onClick={onCancel}
                 className="mt-2 flex w-full items-center justify-center gap-1.5 text-xs text-ink-600 transition hover:text-red-300"
               >
-                <X size={13} /> Cancel download
+                <X size={13} /> {t("play.cancelDownload")}
               </button>
             )}
             {!canPlay && (
               <p className="mt-2 text-center text-xs text-amber-400/80">
-                Sign in with Microsoft to start playing.
+                {t("play.signInToPlay")}
               </p>
             )}
             {!busy &&
@@ -262,16 +291,23 @@ export function PlayView({
               modStatus.failed.length > 0 && (
                 <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-xs text-amber-400/80">
                   <AlertTriangle size={12} />
-                  {modStatus.failed.length} file
-                  {modStatus.failed.length === 1 ? "" : "s"} couldn&apos;t
-                  download - they&apos;ll retry on next launch.
+                  {t("play.filesFailed", { count: modStatus.failed.length })}
                 </p>
               )}
           </div>
         </div>
       </div>
 
-      <div className="flex w-[240px] shrink-0 flex-col gap-4 overflow-y-auto">
+      <div
+        className={`flex min-h-0 shrink-0 flex-col gap-3 overflow-y-auto pr-1 transition-[width] duration-200 ${
+          appliedPins(instance).length > 0 ? "w-[300px]" : "w-[248px]"
+        }`}
+      >
+        <QuickSettingsCard
+          instance={instance}
+          settings={launcherSettings}
+          onSaveInstance={onSaveInstance}
+        />
         {showPlayers && (
           <ServerCard
             address="brassworks.opnsoc.org"
@@ -283,19 +319,112 @@ export function PlayView({
         {showNews && (
           <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
         )}
-        <InstanceInfoCard instance={instance} modStatus={modStatus} />
+        <InstanceMetaCard instance={instance} modStatus={modStatus} />
       </div>
     </div>
   );
 }
 
-function InstanceInfoCard({
+
+function SideCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-edge bg-ink-900/50 p-4 transition-colors hover:border-brass-600/40">
+      <div className="mb-2.5 font-mc text-xs tracking-wide text-brass-300">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+
+function QuickSettingsCard({
+  instance,
+  settings,
+  onSaveInstance,
+}: {
+  instance: Instance;
+  settings: LauncherSettings | null;
+  onSaveInstance: (i: Instance) => void;
+}) {
+  const t = useT();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const patch = (p: Partial<Instance>) => onSaveInstance({ ...instance, ...p });
+  const pinned = appliedPins(instance);
+
+  return (
+    <div className="rounded-xl border border-edge bg-ink-900/50 p-4 transition-colors hover:border-brass-600/40">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="font-mc text-xs tracking-wide text-brass-300">
+          {t("instanceSettings.quick.title")}
+        </div>
+        <button
+          onClick={() => setPickerOpen(true)}
+          title={t("play.customizeTitle")}
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-ink-600 transition hover:bg-ink-800/70 hover:text-brass-300"
+        >
+          <Settings size={12} /> {t("play.customize")}
+        </button>
+      </div>
+
+      {pinned.length === 0 || !settings ? (
+        <button
+          onClick={() => setPickerOpen(true)}
+          className="w-full rounded-lg border border-dashed border-edge/70 px-3 py-4 text-center text-[11px] leading-snug text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+        >
+          {t("play.pinHint")}
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {pinned.map((s) => (
+            <div
+              key={s.id}
+              className="rounded-lg border border-edge/60 bg-ink-950/40 p-2.5"
+            >
+              {!s.selfLabeled && (
+                <div className="mb-1.5 text-[11px] font-medium text-ink-500">
+                  {t(s.tkey)}
+                </div>
+              )}
+              {settings && (
+                <s.Control
+                  instance={instance}
+                  patch={patch}
+                  settings={settings}
+                  onSaveInstance={onSaveInstance}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pickerOpen && (
+        <QuickSettingsPicker
+          instance={instance}
+          onSaveInstance={onSaveInstance}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+
+function InstanceMetaCard({
   instance,
   modStatus,
 }: {
   instance: Instance;
   modStatus: ModpackStatus | null;
 }) {
+  const t = useT();
   const [modCount, setModCount] = useState<number | null>(null);
   useEffect(() => {
     let alive = true;
@@ -313,11 +442,9 @@ function InstanceInfoCard({
 
   const pack = instance.pack;
   const sourceId =
-    pack.kind === "modrinth"
+    pack.kind === "modrinth" || pack.kind === "curseforge"
       ? pack.project_id
-      : pack.kind === "curseforge"
-        ? pack.project_id
-        : null;
+      : null;
   const sourceUrl =
     pack.kind === "modrinth" && pack.project_id
       ? `https://modrinth.com/modpack/${pack.project_id}`
@@ -325,52 +452,37 @@ function InstanceInfoCard({
         ? `https://www.curseforge.com/projects/${pack.project_id}`
         : null;
 
+  
+  if (!sourceId && pack.kind === "none") return null;
+
   return (
-    <div className="rounded-lg border border-edge bg-ink-900/40 p-4 transition-colors hover:border-brass-600/40">
-      <h3 className="mb-3 font-mc text-sm tracking-wide text-brass-300">
-        Instance
-      </h3>
+    <SideCard title={t("instanceSettings.details.title")}>
       <dl className="flex flex-col gap-2 text-xs">
-        <InfoRow label="Type" value={kindLabel(instance)} />
-        <InfoRow label="Loader" value={loaderLabel(instance)} />
-        <InfoRow label="Minecraft" value={instance.minecraft_version} />
-        {instance.pack.kind !== "none" && (
+        {pack.kind !== "none" && (
           <InfoRow
-            label="Mods"
+            label={t("play.mods")}
             value={modCount === null ? "…" : `${modCount}`}
           />
         )}
+        {modStatus?.installed_version && pack.kind !== "none" && (
+          <InfoRow label={t("play.packVersion")} value={modStatus.installed_version} />
+        )}
         {sourceId && (
           <InfoRow
-            label={pack.kind === "curseforge" ? "CurseForge ID" : "Modrinth ID"}
+            label={pack.kind === "curseforge" ? t("play.curseforgeId") : t("play.modrinthId")}
             value={sourceId}
           />
         )}
-        {modStatus?.installed_version && instance.pack.kind !== "none" && (
-          <InfoRow label="Pack version" value={modStatus.installed_version} />
-        )}
-        <InfoRow
-          label="Playtime"
-          value={formatPlaytime(instance.playtime_seconds)}
-        />
-        <InfoRow
-          label="Last played"
-          value={
-            instance.last_played
-              ? new Date(instance.last_played).toLocaleDateString()
-              : "Never"
-          }
-        />
       </dl>
       {sourceUrl && (
         <button
           onClick={() => api.openExternal(sourceUrl).catch(() => {})}
-          className="mt-3 w-full rounded-md border border-edge px-3 py-1.5 text-xs text-brass-300 transition hover:border-brass-600/40 hover:bg-brass-500/5"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-edge/60 px-3 py-1.5 text-xs text-brass-300 transition hover:border-brass-600/40 hover:bg-brass-500/5"
         >
-          View modpack page →
+          <ExternalLink size={12} /> {t("play.viewModpackPage")}
         </button>
       )}
-    </div>
+    </SideCard>
   );
 }
 
@@ -419,6 +531,7 @@ function MainButton({
   onStop: () => void;
   stageLabel: string;
 }) {
+  const t = useT();
   if (running) {
     return (
       <button
@@ -427,11 +540,11 @@ function MainButton({
       >
         <span className="inline-flex items-center gap-2 group-hover:hidden">
           <span className="h-2.5 w-2.5 rounded-full bg-patina-400 animate-pulse" />
-          Game running
+          {t("sidebar.gameRunning")}
         </span>
         <span className="hidden items-center gap-2 group-hover:inline-flex">
           <Square size={16} className="fill-current" />
-          Stop game
+          {t("play.stopGame")}
         </span>
       </button>
     );
@@ -457,7 +570,7 @@ function MainButton({
         className="group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-linear-to-b from-amber-400 to-amber-500 text-xl text-ink-950 shadow-[0_5px_0_#b45309] transition-all hover:from-amber-300 active:translate-y-[3px] active:shadow-[0_2px_0_#b45309] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
       >
         <Download size={22} />
-        UPDATE
+        {t("play.update")}
       </button>
     );
   }
@@ -471,12 +584,12 @@ function MainButton({
       {notInstalled ? (
         <>
           <Download size={22} />
-          INSTALL
+          {t("play.install")}
         </>
       ) : (
         <>
           <Play size={22} className="fill-current" />
-          PLAY
+          {t("play.play")}
         </>
       )}
     </button>

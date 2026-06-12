@@ -1,4 +1,6 @@
 import {
+  Children,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -7,7 +9,15 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, Star, ChevronUp, ChevronDown, Check } from "lucide-react";
+import {
+  Loader2,
+  Star,
+  ChevronUp,
+  ChevronDown,
+  Check,
+  RotateCcw,
+} from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 export function useClosable(onClose: () => void, duration = 190) {
   const [closing, setClosing] = useState(false);
@@ -23,6 +33,147 @@ export function useClosable(onClose: () => void, duration = 190) {
 
 export const inputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
+
+
+export function NumberField({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  placeholder,
+  className = "",
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+  className?: string;
+}) {
+  const t = useT();
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+  useEffect(() => setDraft(value == null ? "" : String(value)), [value]);
+  const clamp = (n: number) => {
+    if (min != null) n = Math.max(min, n);
+    if (max != null) n = Math.min(max, n);
+    return n;
+  };
+  const commit = (raw: string) => {
+    if (raw.trim() === "") return onChange(null);
+    const n = Math.round(Number(raw));
+    if (Number.isFinite(n)) onChange(clamp(n));
+    else setDraft(value == null ? "" : String(value));
+  };
+  const bump = (dir: 1 | -1) => {
+    const base = Number(draft);
+    const start = Number.isFinite(base) && draft.trim() !== "" ? base : value ?? min ?? 0;
+    onChange(clamp(start + dir * step));
+  };
+  return (
+    <div className={`relative flex items-center ${className}`}>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        placeholder={placeholder}
+        className={`${inputCls} no-spin pr-6`}
+      />
+      <div className="absolute right-1 flex flex-col">
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={t("ui.increase")}
+          onClick={() => bump(1)}
+          className="-my-px text-ink-600 transition hover:text-brass-300"
+        >
+          <ChevronUp size={11} />
+        </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={t("ui.decrease")}
+          onClick={() => bump(-1)}
+          className="-my-px text-ink-600 transition hover:text-brass-300"
+        >
+          <ChevronDown size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+export function placeMenu(
+  anchor: DOMRect,
+  desiredHeight = 256,
+  margin = 8,
+): { top?: number; bottom?: number; maxHeight: number } {
+  const below = window.innerHeight - anchor.bottom - margin;
+  const above = anchor.top - margin;
+  if (below < desiredHeight && above > below) {
+    return {
+      bottom: window.innerHeight - anchor.top + 4,
+      maxHeight: Math.max(96, Math.min(desiredHeight, above)),
+    };
+  }
+  return {
+    top: anchor.bottom + 4,
+    maxHeight: Math.max(96, Math.min(desiredHeight, below)),
+  };
+}
+
+
+export function useMenuDismiss(
+  open: boolean,
+  close: () => void,
+  
+  ignoreRef?: React.RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onScroll = (e: Event) => {
+      if (ignoreRef?.current?.contains(e.target as Node)) return;
+      close();
+    };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, close, ignoreRef]);
+}
+
+
+export function CardColumns({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const items = Children.toArray(children).filter(Boolean);
+  const left = items.filter((_, i) => i % 2 === 0);
+  const right = items.filter((_, i) => i % 2 === 1);
+  return (
+    <div className={`grid grid-cols-2 items-start gap-4 ${className}`}>
+      <div className="flex flex-col gap-4">{left}</div>
+      <div className="flex flex-col gap-4">{right}</div>
+    </div>
+  );
+}
 
 const clampNum = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
@@ -42,6 +193,7 @@ function MemSlider({
   max: number;
   step?: number;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const commit = () => {
@@ -75,7 +227,7 @@ function MemSlider({
               <button
                 type="button"
                 tabIndex={-1}
-                aria-label="Increase"
+                aria-label={t("ui.increase")}
                 onClick={() => onChange(clampNum(value + step, min, max))}
                 className="-my-px text-ink-600 transition hover:text-brass-300"
               >
@@ -84,7 +236,7 @@ function MemSlider({
               <button
                 type="button"
                 tabIndex={-1}
-                aria-label="Decrease"
+                aria-label={t("ui.decrease")}
                 onClick={() => onChange(clampNum(value - step, min, max))}
                 className="-my-px text-ink-600 transition hover:text-brass-300"
               >
@@ -133,6 +285,7 @@ export function MemorySettings({
   onChange: (max: number, min: number) => void;
   note?: React.ReactNode;
 }) {
+  const t = useT();
   const HARD_CAP = 65536;
   const SOFT_CAP = 16384;
   const [allowHigh, setAllowHigh] = useState(max > SOFT_CAP || min > SOFT_CAP);
@@ -141,8 +294,8 @@ export function MemorySettings({
   return (
     <>
       <Toggle
-        label="Allow more than 16 GB"
-        description="Raise the cap to 64 GB for high-RAM machines."
+        label={t("ui.allowHighMem")}
+        description={t("ui.allowHighMemDesc")}
         checked={high}
         onChange={(on) => {
           setAllowHigh(on);
@@ -151,14 +304,14 @@ export function MemorySettings({
         }}
       />
       <MemSlider
-        label="Maximum memory (-Xmx)"
+        label={t("ui.maxMemory")}
         value={max}
         min={1024}
         max={cap}
         onChange={(v) => onChange(v, Math.min(min, v))}
       />
       <MemSlider
-        label="Minimum memory (-Xms)"
+        label={t("ui.minMemory")}
         value={min}
         min={512}
         max={Math.min(max, cap)}
@@ -314,14 +467,22 @@ export function BrassSwitch({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-[4px] border transition-colors ${
-        checked ? "border-brass-600 bg-brass-500" : "border-edge bg-ink-700"
+        checked
+          ? "border-brass-600/70 bg-gradient-to-b from-brass-400 to-brass-500"
+          : "border-edge bg-ink-700"
       }`}
     >
       <span
-        className={`h-[16px] w-[16px] rounded-[2px] transition-transform duration-150 ${
-          checked ? "translate-x-[25px] bg-white" : "translate-x-[3px] bg-ink-600"
+        className={`flex h-[16px] w-[16px] items-center justify-center transition-transform duration-150 ${
+          checked ? "translate-x-[25px]" : "translate-x-[3px]"
         }`}
-      />
+      >
+        <span
+          className={`h-[14px] w-[4px] rounded-full transition-colors ${
+            checked ? "bg-white shadow-[0_0_2px_rgba(0,0,0,0.25)]" : "bg-ink-600"
+          }`}
+        />
+      </span>
     </span>
   );
 }
@@ -344,59 +505,38 @@ export function Field({
   );
 }
 
-export function Select({
-  value,
-  onChange,
-  options,
-}: {
+
+export function Select(props: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
 }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${inputCls} cursor-pointer appearance-none`}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} className="bg-ink-900">
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
+  return <Dropdown {...props} />;
 }
 
-/** Styled dropdown (button + portal popover) — replaces the native <select>. */
+
 export function Dropdown({
   value,
   onChange,
   options,
-  placeholder = "Select…",
+  placeholder,
+  accentStyle,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
+  
+  accentStyle?: React.CSSProperties;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useMenuDismiss(open, close, menuRef);
 
   const toggle = () => {
     if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
@@ -414,7 +554,7 @@ export function Dropdown({
         className={`${inputCls} flex cursor-pointer items-center justify-between gap-2 text-left`}
       >
         <span className={`truncate ${selected ? "" : "text-ink-600"}`}>
-          {selected ? selected.label : placeholder}
+          {selected ? selected.label : placeholder ?? t("ui.select")}
         </span>
         <ChevronDown
           size={15}
@@ -430,8 +570,19 @@ export function Dropdown({
               onClick={() => setOpen(false)}
             />
             <div
-              className="fixed z-[81] max-h-64 overflow-y-auto rounded-lg border border-edge bg-ink-900 p-1 shadow-2xl"
-              style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+              ref={menuRef}
+              className="fixed z-[81] overflow-y-auto rounded-lg border border-edge bg-ink-900 p-1 shadow-2xl"
+              style={{
+                ...(() => {
+                  const p = placeMenu(rect);
+                  return p.top != null
+                    ? { top: p.top, maxHeight: p.maxHeight }
+                    : { bottom: p.bottom, maxHeight: p.maxHeight };
+                })(),
+                left: rect.left,
+                width: rect.width,
+                ...accentStyle,
+              }}
             >
               {options.map((o) => (
                 <button
@@ -449,7 +600,9 @@ export function Dropdown({
                 >
                   <span className="truncate">{o.label}</span>
                   {o.value === value && (
-                    <Check size={14} className="shrink-0 text-brass-300" />
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow ring-1 ring-ink-950/30">
+                      <Check size={11} strokeWidth={3.5} />
+                    </span>
                   )}
                 </button>
               ))}
@@ -465,23 +618,46 @@ export function Card({
   title,
   children,
   icon,
+  onReset,
+  resetTitle,
 }: {
   title: string;
   children: React.ReactNode;
   icon?: React.ReactNode;
+  
+  onReset?: () => void;
+  resetTitle?: string;
 }) {
+  const t = useT();
+  const resetLabel = resetTitle ?? t("ui.resetSection");
   return (
-    <section className="rounded-xl panel p-5">
-      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-brass-400/80">
+    <section className="rounded-xl border border-edge bg-ink-900/50 p-4">
+      <h2 className="mb-3 flex items-center gap-1.5 font-mc text-xs tracking-wide text-brass-300">
         {icon}
         {title}
+        {onReset && (
+          <button
+            onClick={onReset}
+            title={resetLabel}
+            aria-label={resetLabel}
+            className="ml-auto rounded-md p-1 text-ink-600 transition hover:bg-brass-500/10 hover:text-brass-300"
+          >
+            <RotateCcw size={13} />
+          </button>
+        )}
       </h2>
-      <div className="flex flex-col gap-4">{children}</div>
+      <div className="flex flex-col gap-3">{children}</div>
     </section>
   );
 }
 
-export function Row({ label, value }: { label: string; value: string }) {
+export function Row({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-ink-600">{label}</span>
@@ -600,13 +776,14 @@ export function StarButton({
   title?: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      title={title ?? (starred ? "Unstar" : "Star")}
+      title={title ?? (starred ? t("ui.unstar") : t("ui.star"))}
       className={`pressable grid place-items-center rounded-md transition ${
         starred
           ? "text-brass-300 hover:text-brass-200"

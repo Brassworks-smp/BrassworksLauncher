@@ -22,25 +22,43 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { SegmentedTabs, StarButton, useProgressive, useClosable } from "./ui";
+import { useT, type TFunc } from "@/lib/i18n";
+import {
+  SegmentedTabs,
+  StarButton,
+  useProgressive,
+  useClosable,
+  placeMenu,
+  useMenuDismiss,
+} from "./ui";
 import { DatapacksModal } from "./DatapacksModal";
 import type { WorldInfo, WorldBackup } from "@/lib/types";
 
 const worldsCache = new Map<string, WorldInfo[]>();
 
-const GAME_MODES = ["Survival", "Creative", "Adventure", "Spectator"];
-const DIFFICULTIES = ["Peaceful", "Easy", "Normal", "Hard"];
+const GAME_MODE_KEYS = [
+  "worlds.mode.survival",
+  "worlds.mode.creative",
+  "worlds.mode.adventure",
+  "worlds.mode.spectator",
+];
+const DIFFICULTY_KEYS = [
+  "worlds.diff.peaceful",
+  "worlds.diff.easy",
+  "worlds.diff.normal",
+  "worlds.diff.hard",
+];
 
-function relativeTime(ms: number): string {
-  if (!ms) return "Never played";
+function relativeTime(ms: number, t: TFunc): string {
+  if (!ms) return t("worlds.time.never");
   const diff = Date.now() - ms;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("worlds.time.justNow");
+  if (mins < 60) return t("worlds.time.minsAgo", { n: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return t("worlds.time.hoursAgo", { n: hrs });
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return t("worlds.time.daysAgo", { n: days });
   return new Date(ms).toLocaleDateString();
 }
 
@@ -102,6 +120,7 @@ export function WorldsView({
   canPlay: boolean;
   onQuickPlay: (qp: api.QuickPlay) => void;
 }) {
+  const t = useT();
   const [worlds, setWorlds] = useState<WorldInfo[] | null>(
     () => worldsCache.get(instanceId) ?? null,
   );
@@ -118,12 +137,12 @@ export function WorldsView({
   const backup = (w: WorldInfo) =>
     api
       .backupWorld(instanceId, w.folder)
-      .then(() => toast(`Backed up “${w.name}”`, "success"))
+      .then(() => toast(t("worlds.backedUp", { name: w.name }), "success"))
       .catch((e) => toast(String(e), "error"));
   const download = (w: WorldInfo) =>
     api
       .exportWorld(instanceId, w.folder)
-      .then((p) => toast(`Saved to ${p}`, "success"))
+      .then((p) => toast(t("worlds.savedTo", { path: p }), "success"))
       .catch((e) => toast(String(e), "error"));
 
   const load = useCallback(() => {
@@ -175,7 +194,7 @@ export function WorldsView({
       .deleteWorld(instanceId, w.folder)
       .then(() => {
         if (worlds) update(worlds.filter((x) => x.folder !== w.folder));
-        toast(`Deleted “${w.name}”`, "success");
+        toast(t("worlds.deletedToast", { name: w.name }), "success");
       })
       .catch((e) => toast(String(e), "error"));
     closeDelete();
@@ -197,12 +216,12 @@ export function WorldsView({
   const starredCount = (worlds ?? []).filter((w) => w.starred).length;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
       <div className="flex items-center justify-between pb-4">
         <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">Worlds</h1>
+          <h1 className="font-mc text-2xl tracking-wide text-gray-100">{t("worlds.title")}</h1>
           <p className="text-sm text-ink-600">
-            {worlds ? `${worlds.length} world${worlds.length === 1 ? "" : "s"}` : "Loading…"}
+            {worlds ? t("worlds.count", { count: worlds.length }) : t("common.loading")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -210,11 +229,11 @@ export function WorldsView({
             onClick={() => setShowBackups(true)}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <Archive size={15} /> Backups
+            <Archive size={15} /> {t("worlds.backups")}
           </button>
           <button
             onClick={load}
-            title="Refresh"
+            title={t("common.refresh")}
             className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -231,7 +250,7 @@ export function WorldsView({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search worlds…"
+            placeholder={t("worlds.searchPlaceholder")}
             className="w-56 rounded-lg bg-ink-900/50 py-2 pl-8 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
           />
         </div>
@@ -240,11 +259,11 @@ export function WorldsView({
           value={modeFilter}
           onChange={setModeFilter}
           options={[
-            { id: "all", label: "All" },
-            { id: "0", label: "Survival" },
-            { id: "1", label: "Creative" },
-            { id: "2", label: "Adventure" },
-            { id: "3", label: "Spectator" },
+            { id: "all", label: t("worlds.all") },
+            { id: "0", label: t("worlds.mode.survival") },
+            { id: "1", label: t("worlds.mode.creative") },
+            { id: "2", label: t("worlds.mode.adventure") },
+            { id: "3", label: t("worlds.mode.spectator") },
           ]}
         />
         {starredCount > 0 && (
@@ -257,7 +276,7 @@ export function WorldsView({
             }`}
           >
             <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={12} />
-            Starred
+            {t("worlds.starred")}
           </button>
         )}
       </div>
@@ -268,8 +287,8 @@ export function WorldsView({
             <div>
               <Globe2 size={28} className="mx-auto mb-2 opacity-50" />
               {(worlds?.length ?? 0) === 0
-                ? "No worlds yet - create one in-game and it'll show up here."
-                : "No worlds match your filters."}
+                ? t("worlds.emptyNone")
+                : t("worlds.emptyFilter")}
             </div>
           </div>
         ) : (
@@ -340,25 +359,25 @@ export function WorldsView({
           <div className="w-[420px] max-w-full rounded-xl border border-red-500/30 bg-ink-900 p-6 shadow-2xl">
             <div className="mb-3 flex items-center gap-2 text-red-300">
               <AlertTriangle size={20} />
-              <h2 className="font-mc text-lg tracking-wide">Delete world?</h2>
+              <h2 className="font-mc text-lg tracking-wide">{t("worlds.deleteTitle")}</h2>
             </div>
             <p className="text-sm leading-relaxed text-ink-600">
-              “{confirmDelete.name}” will be{" "}
-              <span className="text-red-300/90">permanently deleted</span> from
-              this instance. This cannot be undone.
+              {t("worlds.deleteBody1", { name: confirmDelete.name })}
+              <span className="text-red-300/90">{t("worlds.deletePermanent")}</span>
+              {t("worlds.deleteBody2")}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={closeDelete}
                 className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => doDelete(confirmDelete)}
                 className="flex items-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
               >
-                <Trash2 size={15} /> Delete
+                <Trash2 size={15} /> {t("common.delete")}
               </button>
             </div>
           </div>
@@ -391,8 +410,15 @@ function WorldCard({
   onDelete: () => void;
   onOpen: () => void;
 }) {
+  const t = useT();
   const iconSrc = useWorldIcon(instanceId, world);
-  const [menu, setMenu] = useState<{ top: number; right: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+    maxHeight: number;
+  } | null>(null);
+  useMenuDismiss(!!menu, useCallback(() => setMenu(null), []));
   return (
     <div className="group hover-lift relative flex flex-col overflow-hidden rounded-xl border border-edge bg-ink-900/40 hover:border-brass-600/40">
       <div onClick={onOpen} className="relative h-28 cursor-pointer overflow-hidden">
@@ -413,7 +439,7 @@ function WorldCard({
         />
         {world.hardcore && (
           <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-            <Skull size={10} /> Hardcore
+            <Skull size={10} /> {t("worlds.hardcore")}
           </span>
         )}
       </div>
@@ -429,11 +455,11 @@ function WorldCard({
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-600">
           {world.game_mode >= 0 && (
             <span className="flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 text-brass-300/90">
-              <Swords size={9} /> {GAME_MODES[world.game_mode] ?? "?"}
+              <Swords size={9} /> {GAME_MODE_KEYS[world.game_mode] ? t(GAME_MODE_KEYS[world.game_mode]) : "?"}
             </span>
           )}
           {world.difficulty >= 0 && !world.hardcore && (
-            <span>{DIFFICULTIES[world.difficulty] ?? ""}</span>
+            <span>{DIFFICULTY_KEYS[world.difficulty] ? t(DIFFICULTY_KEYS[world.difficulty]) : ""}</span>
           )}
           {world.version_name && <span>· {world.version_name}</span>}
         </div>
@@ -442,9 +468,9 @@ function WorldCard({
             onClick={(e) => {
               e.stopPropagation();
               api.copyText(String(world.seed));
-              toast("Seed copied", "success");
+              toast(t("worlds.seedCopied"), "success");
             }}
-            title="Copy seed"
+            title={t("worlds.copySeed")}
             className="group/seed mt-1.5 flex w-full items-center gap-1.5 rounded-md border border-edge bg-ink-950/40 px-2 py-1 text-[11px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <Sprout size={11} className="shrink-0 text-brass-400/80" />
@@ -453,7 +479,7 @@ function WorldCard({
           </button>
         )}
         <div className="mt-1.5 flex items-center gap-1 text-[11px] text-ink-600">
-          <Clock size={11} /> {relativeTime(world.last_played)}
+          <Clock size={11} /> {relativeTime(world.last_played, t)}
           <span className="ml-auto">{api.formatBytes(world.size_bytes)}</span>
         </div>
 
@@ -463,17 +489,17 @@ function WorldCard({
             onPlay();
           }}
           disabled={!canPlay}
-          title="Launch straight into this world"
+          title={t("worlds.playTitle")}
           className="brass-btn mt-3 flex items-center justify-center gap-1.5 rounded-md bg-brass-500 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Play size={13} className="fill-current" /> Play
+          <Play size={13} className="fill-current" /> {t("worlds.play")}
         </button>
         <div className="mt-1.5 flex items-center gap-1.5">
           <button
             onClick={onDatapacks}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-edge px-2 py-1.5 text-xs font-medium text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <Boxes size={13} /> Datapacks
+            <Boxes size={13} /> {t("worlds.datapacks")}
             {world.datapack_count > 0 && (
               <span className="rounded bg-brass-500/15 px-1.5 text-[10px] text-brass-300">
                 {world.datapack_count}
@@ -488,9 +514,9 @@ function WorldCard({
                 return;
               }
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              setMenu({ top: r.bottom + 4, right: window.innerWidth - r.right });
+              setMenu({ ...placeMenu(r, 300), right: window.innerWidth - r.right });
             }}
-            title="More"
+            title={t("worlds.more")}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <MoreVertical size={14} />
@@ -500,12 +526,16 @@ function WorldCard({
               <>
               <div className="fixed inset-0 z-[60]" onClick={() => setMenu(null)} />
               <div
-                style={{ top: menu.top, right: menu.right }}
-                className="rise fixed z-[61] w-44 rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
+                style={{
+                  ...(menu.top != null ? { top: menu.top } : { bottom: menu.bottom }),
+                  right: menu.right,
+                  maxHeight: menu.maxHeight,
+                }}
+                className="rise fixed z-[61] w-44 overflow-y-auto rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
               >
                 <MenuItem
                   icon={<Archive size={13} />}
-                  label="Back up now"
+                  label={t("worlds.backUpNow")}
                   onClick={() => {
                     onBackup();
                     setMenu(null);
@@ -513,7 +543,7 @@ function WorldCard({
                 />
                 <MenuItem
                   icon={<Download size={13} />}
-                  label="Download .zip"
+                  label={t("worlds.downloadZip")}
                   onClick={() => {
                     onDownload();
                     setMenu(null);
@@ -521,7 +551,7 @@ function WorldCard({
                 />
                 <MenuItem
                   icon={<FolderOpen size={13} />}
-                  label="Open folder"
+                  label={t("worlds.openFolder")}
                   onClick={() => {
                     api.openDir(instanceId, `saves/${world.folder}`).catch(() => {});
                     setMenu(null);
@@ -529,7 +559,7 @@ function WorldCard({
                 />
                 <MenuItem
                   icon={<Trash2 size={13} />}
-                  label="Delete world"
+                  label={t("worlds.deleteWorld")}
                   danger
                   onClick={() => {
                     onDelete();
@@ -579,6 +609,7 @@ function BackupsModal({
   instanceId: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   const [backups, setBackups] = useState<WorldBackup[] | null>(null);
   useEffect(() => {
@@ -600,7 +631,7 @@ function BackupsModal({
       <div className="flex max-h-[80vh] w-[560px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
-            <Archive size={17} className="text-brass-400" /> World backups
+            <Archive size={17} className="text-brass-400" /> {t("worlds.backupsTitle")}
           </h2>
           <button
             onClick={close}
@@ -618,7 +649,7 @@ function BackupsModal({
             <div className="grid place-items-center py-10 text-center text-sm text-ink-600">
               <div>
                 <Archive size={26} className="mx-auto mb-2 opacity-50" />
-                No backups yet - use “Back up now” on a world.
+                {t("worlds.noBackups")}
               </div>
             </div>
           ) : (
@@ -645,7 +676,7 @@ function BackupsModal({
             onClick={() => api.openDir(instanceId, "backups").catch(() => {})}
             className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <FolderOpen size={13} /> Open backups folder
+            <FolderOpen size={13} /> {t("worlds.openBackupsFolder")}
           </button>
         </div>
       </div>
@@ -672,6 +703,7 @@ function WorldDetailModal({
   onDownload: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   const iconSrc = useWorldIcon(instanceId, world);
   useEffect(() => {
@@ -682,23 +714,26 @@ function WorldDetailModal({
 
   const facts: { label: string; value: string }[] = [
     {
-      label: "Game mode",
-      value: world.game_mode >= 0 ? GAME_MODES[world.game_mode] ?? "?" : "Unknown",
+      label: t("worlds.factGameMode"),
+      value:
+        world.game_mode >= 0 && GAME_MODE_KEYS[world.game_mode]
+          ? t(GAME_MODE_KEYS[world.game_mode])
+          : t("worlds.unknown"),
     },
     {
-      label: "Difficulty",
+      label: t("worlds.factDifficulty"),
       value: world.hardcore
-        ? "Hardcore"
-        : world.difficulty >= 0
-          ? DIFFICULTIES[world.difficulty] ?? "?"
-          : "Unknown",
+        ? t("worlds.hardcore")
+        : world.difficulty >= 0 && DIFFICULTY_KEYS[world.difficulty]
+          ? t(DIFFICULTY_KEYS[world.difficulty])
+          : t("worlds.unknown"),
     },
-    { label: "Version", value: world.version_name ?? "Unknown" },
-    { label: "Size", value: api.formatBytes(world.size_bytes) },
-    { label: "Last played", value: relativeTime(world.last_played) },
+    { label: t("worlds.factVersion"), value: world.version_name ?? t("worlds.unknown") },
+    { label: t("worlds.factSize"), value: api.formatBytes(world.size_bytes) },
+    { label: t("worlds.factLastPlayed"), value: relativeTime(world.last_played, t) },
     {
-      label: "Datapacks",
-      value: world.datapack_count > 0 ? String(world.datapack_count) : "None",
+      label: t("worlds.factDatapacks"),
+      value: world.datapack_count > 0 ? String(world.datapack_count) : t("worlds.none"),
     },
   ];
 
@@ -743,14 +778,14 @@ function WorldDetailModal({
             <button
               onClick={() => {
                 api.copyText(String(world.seed));
-                toast("Seed copied", "success");
+                toast(t("worlds.seedCopied"), "success");
               }}
-              title="Copy seed"
+              title={t("worlds.copySeed")}
               className="group/seed mb-4 flex w-full items-center gap-2 rounded-lg border border-edge bg-ink-950/50 px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
               <Sprout size={15} className="shrink-0 text-brass-400/80" />
               <span className="text-[10px] font-medium uppercase tracking-wide text-ink-600">
-                Seed
+                {t("worlds.seed")}
               </span>
               <span className="truncate font-mono text-gray-200">{String(world.seed)}</span>
               <Copy size={14} className="ml-auto shrink-0 opacity-0 transition group-hover/seed:opacity-100" />
@@ -779,26 +814,26 @@ function WorldDetailModal({
             disabled={!canPlay}
             className="brass-btn flex items-center gap-2 rounded-md bg-brass-500 px-4 py-1.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Play size={14} className="fill-current" /> Play
+            <Play size={14} className="fill-current" /> {t("worlds.play")}
           </button>
           <button
             onClick={onDatapacks}
             className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <Boxes size={13} /> Datapacks
+            <Boxes size={13} /> {t("worlds.datapacks")}
           </button>
           <div className="ml-auto flex items-center gap-1.5">
             <button
               onClick={onBackup}
               className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
-              <Archive size={13} /> Back up
+              <Archive size={13} /> {t("worlds.backUp")}
             </button>
             <button
               onClick={onDownload}
               className="flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
             >
-              <Download size={13} /> Export
+              <Download size={13} /> {t("worlds.export")}
             </button>
           </div>
         </div>

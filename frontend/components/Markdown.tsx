@@ -49,8 +49,7 @@ export function Changelog({
   projectId: string;
   versionId: string;
   source: string;
-  /** When false, defer the network fetch — lets the row stay mounted (and thus
-   *  animate open/closed) without loading every changelog up front. */
+  
   enabled?: boolean;
 }) {
   const [text, setText] = useState<string | null>(null);

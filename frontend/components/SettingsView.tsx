@@ -4,8 +4,6 @@ import {
   Loader2,
   Gamepad2,
   SlidersHorizontal,
-  Globe,
-  Github,
   FlaskConical,
   RefreshCw,
   HardDrive,
@@ -20,9 +18,14 @@ import {
   ArrowUpCircle,
   FolderOpen,
   Check,
+  Server,
+  RotateCcw,
+  Compass,
+  Languages,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { useT, LOCALES } from "@/lib/i18n";
 import { ACCENT_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import type { JavaReport, JavaInstall, LauncherSettings, UpdateInfo } from "@/lib/types";
 import {
@@ -33,17 +36,19 @@ import {
   Toggle,
   Row,
   ActionButton,
-  LinkButton,
   SegmentedTabs,
   inputCls,
+  CardColumns,
+  NumberField,
+  Skeleton,
 } from "@/components/ui";
 
 type Tab = "defaults" | "java" | "launcher";
 
-const TABS: { id: Tab; label: string; icon: typeof Gamepad2 }[] = [
-  { id: "defaults", label: "Defaults", icon: Gamepad2 },
-  { id: "java", label: "Java", icon: Coffee },
-  { id: "launcher", label: "Launcher", icon: SlidersHorizontal },
+const TABS: { id: Tab; tkey: string; icon: typeof Gamepad2 }[] = [
+  { id: "defaults", tkey: "settings.tab.defaults", icon: Gamepad2 },
+  { id: "java", tkey: "settings.tab.java", icon: Coffee },
+  { id: "launcher", tkey: "settings.tab.launcher", icon: SlidersHorizontal },
 ];
 
 export function SettingsView({
@@ -54,6 +59,7 @@ export function SettingsView({
   onError,
   onShowChangelog,
   onUpdateInstalled,
+  onReplayOnboarding,
 }: {
   settings: LauncherSettings | null;
   javaInstanceId: string | null;
@@ -62,7 +68,9 @@ export function SettingsView({
   onError: (e: string) => void;
   onShowChangelog: () => void;
   onUpdateInstalled: (version: string) => void;
+  onReplayOnboarding?: () => void;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("defaults");
   const [cfKeyDraft, setCfKeyDraft] = useState("");
   useEffect(
@@ -71,6 +79,16 @@ export function SettingsView({
   );
   const [cacheBytes, setCacheBytes] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
+  
+  
+  const [defaults, setDefaults] = useState<LauncherSettings | null>(null);
+  
+  
+  const [resetNonce, setResetNonce] = useState(0);
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
+  useEffect(() => {
+    if (api.isTauri()) api.defaultSettings().then(setDefaults).catch(() => {});
+  }, []);
   useEffect(() => {
     if (tab === "launcher" && api.isTauri())
       api.cacheSize().then(setCacheBytes).catch(() => {});
@@ -87,31 +105,65 @@ export function SettingsView({
   const patch = (p: Partial<LauncherSettings>) =>
     onSaveSettings({ ...settings, ...p });
 
+  
+  const resetCard = (keys: (keyof LauncherSettings)[]) => {
+    if (!defaults) return;
+    const p: Partial<LauncherSettings> = {};
+    for (const k of keys) (p as Record<string, unknown>)[k] = defaults[k];
+    patch(p);
+    setResetNonce((n) => n + 1);
+  };
+  
+  const cardReset = (keys: (keyof LauncherSettings)[]) =>
+    defaults ? () => resetCard(keys) : undefined;
+
+  
+  
+  
+  const resetAll = () => {
+    if (!defaults) return;
+    onSaveSettings({
+      ...defaults,
+      selected_instance: settings.selected_instance,
+      instance_folders: settings.instance_folders,
+      last_version: settings.last_version,
+    });
+    setCfKeyDraft("");
+    setResetNonce((n) => n + 1);
+    setConfirmResetAll(false);
+  };
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <h1 className="pb-1 font-mc text-2xl tracking-wide text-gray-100">
-        Settings
+        {t("settings.title")}
       </h1>
       <p className="pb-4 text-xs text-ink-600">
-        These are launcher-wide defaults. Per-instance overrides live on each
-        instance&apos;s gear (Instances → ⚙).
+        {t("settings.subtitle")}
       </p>
 
       <SegmentedTabs
         className="mb-4 self-start"
         value={tab}
         onChange={(v) => setTab(v as Tab)}
-        options={TABS.map(({ id, label, icon: Icon }) => ({
+        options={TABS.map(({ id, tkey, icon: Icon }) => ({
           id,
-          label,
+          label: t(tkey),
           icon: <Icon size={15} />,
         }))}
       />
 
       <div className="flex-1 overflow-y-auto pr-1">
         {tab === "defaults" && (
-          <div className="reveal-down grid grid-cols-2 gap-4">
-            <Card title="Default memory" icon={<SlidersHorizontal size={14} />}>
+          <CardColumns className="reveal-down">
+            <Card
+              title={t("settings.memory.title")}
+              icon={<SlidersHorizontal size={14} />}
+              onReset={cardReset([
+                "default_max_memory_mb",
+                "default_min_memory_mb",
+              ])}
+            >
               <MemorySettings
                 max={settings.default_max_memory_mb}
                 min={settings.default_min_memory_mb}
@@ -123,108 +175,122 @@ export function SettingsView({
                 }
                 note={
                   <p className="text-xs text-ink-600">
-                    New instances inherit these. Override memory per instance on
-                    its gear.
+                    {t("settings.memory.note")}
                   </p>
                 }
               />
             </Card>
 
-            <Card title="When the game starts" icon={<Monitor size={14} />}>
-              <Field label="Launcher window">
+            <Card
+              title={t("settings.start.title")}
+              icon={<Monitor size={14} />}
+              onReset={cardReset([
+                "launch_behavior",
+                "console_on_launch",
+                "console_on_crash",
+                "console_on_quit",
+              ])}
+            >
+              <Field label={t("settings.start.window")}>
                 <Select
                   value={settings.launch_behavior}
                   onChange={(v) => patch({ launch_behavior: v })}
                   options={[
-                    { value: "keep", label: "Keep it open" },
-                    { value: "hide", label: "Minimize it" },
-                    { value: "quit", label: "Quit the launcher" },
+                    { value: "keep", label: t("settings.start.keep") },
+                    { value: "hide", label: t("settings.start.hide") },
+                    { value: "quit", label: t("settings.start.quit") },
                   ]}
                 />
               </Field>
               <Toggle
-                label="Open the console on launch"
+                label={t("settings.start.consoleLaunch")}
                 checked={settings.console_on_launch}
                 onChange={(v) => patch({ console_on_launch: v })}
               />
               <Toggle
-                label="Open the console on crash"
+                label={t("settings.start.consoleCrash")}
                 checked={settings.console_on_crash}
                 onChange={(v) => patch({ console_on_crash: v })}
               />
               <Toggle
-                label="Open the console on quit"
+                label={t("settings.start.consoleQuit")}
                 checked={settings.console_on_quit}
                 onChange={(v) => patch({ console_on_quit: v })}
               />
             </Card>
 
-            <Card title="Default game window" icon={<Monitor size={14} />}>
-              <Field label="Window size" hint="The size Minecraft opens at by default.">
+            <Card
+              title={t("settings.window.title")}
+              icon={<Monitor size={14} />}
+              onReset={cardReset(["default_resolution", "start_minimized"])}
+            >
+              <Field label={t("settings.window.size")} hint={t("settings.window.sizeHint")}>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
+                  <NumberField
                     min={640}
-                    defaultValue={settings.default_resolution?.[0] ?? ""}
-                    onBlur={(e) => {
-                      const w = Number(e.target.value) || 0;
+                    value={settings.default_resolution?.[0] ?? null}
+                    onChange={(w) => {
                       const h = settings.default_resolution?.[1] ?? 0;
                       patch({
                         default_resolution: w && h ? [w, h] : w ? [w, 720] : null,
                       });
                     }}
                     placeholder="1280"
-                    className={`${inputCls} w-24`}
+                    className="w-24"
                   />
                   <span className="text-ink-600">×</span>
-                  <input
-                    type="number"
+                  <NumberField
                     min={480}
-                    defaultValue={settings.default_resolution?.[1] ?? ""}
-                    onBlur={(e) => {
-                      const h = Number(e.target.value) || 0;
+                    value={settings.default_resolution?.[1] ?? null}
+                    onChange={(h) => {
                       const w = settings.default_resolution?.[0] ?? 0;
                       patch({
                         default_resolution: w && h ? [w, h] : h ? [1280, h] : null,
                       });
                     }}
                     placeholder="720"
-                    className={`${inputCls} w-24`}
+                    className="w-24"
                   />
                 </div>
               </Field>
               <Toggle
-                label="Start minimized"
+                label={t("settings.window.startMin")}
                 checked={settings.start_minimized}
                 onChange={(v) => patch({ start_minimized: v })}
               />
             </Card>
 
-            <Card title="Commands" icon={<Terminal size={14} />}>
-              <Field label="Pre-launch command" hint="Runs in a shell before the game starts.">
+            <Card
+              title={t("settings.commands.title")}
+              icon={<Terminal size={14} />}
+              onReset={cardReset(["pre_launch_command", "post_exit_command"])}
+            >
+              <Field label={t("settings.commands.pre")} hint={t("settings.commands.preHint")}>
                 <input
+                  key={`pre-${resetNonce}`}
                   defaultValue={settings.pre_launch_command ?? ""}
                   onBlur={(e) =>
                     patch({ pre_launch_command: e.target.value.trim() || null })
                   }
-                  placeholder="e.g. /usr/bin/mangohud --version"
+                  placeholder={t("settings.commands.prePlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </Field>
-              <Field label="Post-exit command" hint="Runs in a shell after the game closes.">
+              <Field label={t("settings.commands.post")} hint={t("settings.commands.postHint")}>
                 <input
+                  key={`post-${resetNonce}`}
                   defaultValue={settings.post_exit_command ?? ""}
                   onBlur={(e) =>
                     patch({ post_exit_command: e.target.value.trim() || null })
                   }
-                  placeholder="e.g. notify-send 'Minecraft closed'"
+                  placeholder={t("settings.commands.postPlaceholder")}
                   className={`${inputCls} font-mono text-xs`}
                   spellCheck={false}
                 />
               </Field>
             </Card>
-          </div>
+          </CardColumns>
         )}
 
         {tab === "java" && (
@@ -233,12 +299,15 @@ export function SettingsView({
               instanceId={javaInstanceId}
               settings={settings}
               patchSettings={patch}
+              onResetPolicy={cardReset(["java_policy", "java_path"])}
+              defaultJavaPath={defaults?.java_path ?? ""}
             />
           </div>
         )}
 
         {tab === "launcher" && (
-          <div className="reveal-down grid grid-cols-2 gap-4">
+          <div className="reveal-down">
+          <CardColumns>
             <UpdatesCard
               appVersion={appVersion}
               autoUpdate={settings.auto_update}
@@ -248,31 +317,47 @@ export function SettingsView({
               onError={onError}
             />
 
-            <Card title="Appearance" icon={<Palette size={14} />}>
+            <Card
+              title={t("settings.appearance.title")}
+              icon={<Palette size={14} />}
+              onReset={cardReset([
+                "theme",
+                "accent_color",
+                "reduce_motion",
+                "high_contrast",
+                "close_to_tray",
+              ])}
+            >
               <Field
-                label="Theme"
-                hint="“Match system” follows your OS light/dark setting. “Grey” is a softer dark theme."
+                label={t("settings.appearance.theme")}
+                hint={t("settings.appearance.themeHint")}
               >
                 <Select
                   value={
-                    ["brass-light", "brass-dark", "brass-grey"].includes(
-                      settings.theme,
-                    )
+                    [
+                      "brass-light",
+                      "brass-dark",
+                      "brass-grey",
+                      "brass-ocean",
+                      "brass-mocha",
+                    ].includes(settings.theme)
                       ? settings.theme
                       : "system"
                   }
                   onChange={(v) => patch({ theme: v })}
                   options={[
-                    { value: "system", label: "Match system" },
-                    { value: "brass-light", label: "Light" },
-                    { value: "brass-dark", label: "Dark" },
-                    { value: "brass-grey", label: "Grey (soft dark)" },
+                    { value: "system", label: t("theme.matchSystem") },
+                    { value: "brass-grey", label: t("theme.grey") },
+                    { value: "brass-dark", label: t("theme.oled") },
+                    { value: "brass-ocean", label: t("theme.ocean") },
+                    { value: "brass-mocha", label: t("theme.mocha") },
+                    { value: "brass-light", label: t("theme.light") },
                   ]}
                 />
               </Field>
               <Field
-                label="Accent colour"
-                hint="Recolours buttons, sliders and highlights across the app and every theme."
+                label={t("settings.appearance.accent")}
+                hint={t("settings.appearance.accentHint")}
               >
                 <AccentPicker
                   value={settings.accent_color}
@@ -280,50 +365,112 @@ export function SettingsView({
                 />
               </Field>
               <Toggle
-                label="Reduce motion"
-                description="Tone down animations and transitions."
+                label={t("settings.appearance.reduceMotion")}
+                description={t("settings.appearance.reduceMotionDesc")}
                 checked={settings.reduce_motion}
                 onChange={(v) => patch({ reduce_motion: v })}
               />
               <Toggle
-                label="Close to tray"
-                description="Keep running in the system tray when you close the window."
+                label={t("settings.appearance.highContrast")}
+                description={t("settings.appearance.highContrastDesc")}
+                checked={settings.high_contrast}
+                onChange={(v) => patch({ high_contrast: v })}
+              />
+              <Toggle
+                label={t("settings.appearance.closeTray")}
+                description={t("settings.appearance.closeTrayDesc")}
                 checked={settings.close_to_tray}
                 onChange={(v) => patch({ close_to_tray: v })}
               />
             </Card>
 
-            <Card title="Playtime" icon={<Clock size={14} />}>
+            <Card
+              title={t("settings.language.title")}
+              icon={<Languages size={14} />}
+              onReset={cardReset(["locale", "pseudo_localize"])}
+            >
+              <Field label={t("settings.language.field")} hint={t("settings.language.hint")}>
+                <Select
+                  value={settings.locale}
+                  onChange={(v) => patch({ locale: v })}
+                  options={LOCALES.map((l) => ({ value: l.id, label: l.label }))}
+                />
+              </Field>
               <Toggle
-                label="Record playtime"
+                label={t("settings.language.pseudo")}
+                description={t("settings.language.pseudoDesc")}
+                checked={settings.pseudo_localize}
+                onChange={(v) => patch({ pseudo_localize: v })}
+              />
+            </Card>
+
+            <Card
+              title={t("settings.playtime.title")}
+              icon={<Clock size={14} />}
+              onReset={cardReset([
+                "record_playtime",
+                "show_playtime",
+                "playtime_in_hours",
+              ])}
+            >
+              <Toggle
+                label={t("settings.playtime.record")}
                 checked={settings.record_playtime}
                 onChange={(v) => patch({ record_playtime: v })}
               />
               <Toggle
-                label="Show playtime"
+                label={t("settings.playtime.show")}
                 checked={settings.show_playtime}
                 onChange={(v) => patch({ show_playtime: v })}
               />
               <Toggle
-                label="Always show hours"
+                label={t("settings.playtime.hours")}
                 checked={settings.playtime_in_hours}
                 onChange={(v) => patch({ playtime_in_hours: v })}
               />
             </Card>
 
-            <Card title="Integrations" icon={<Plug size={14} />}>
+            <Card
+              title={t("settings.integrations.title")}
+              icon={<Plug size={14} />}
+              onReset={cardReset(["discord_rpc"])}
+            >
               <Toggle
-                label="Discord Rich Presence"
-                description="Show what you're doing in your Discord status."
+                label={t("settings.integrations.rpc")}
+                description={t("settings.integrations.rpcDesc")}
                 checked={settings.discord_rpc}
                 onChange={(v) => patch({ discord_rpc: v })}
               />
             </Card>
 
-            <Card title="CurseForge" icon={<FlaskConical size={14} />}>
+            <Card
+              title={t("settings.featured.title")}
+              icon={<Server size={14} />}
+              onReset={cardReset(["show_featured"])}
+            >
+              <Toggle
+                label={t("settings.featured.toggle")}
+                description={t("settings.featured.toggleDesc")}
+                checked={settings.show_featured}
+                onChange={(v) => patch({ show_featured: v })}
+              />
+            </Card>
+
+            <Card
+              title={t("settings.curseforge.title")}
+              icon={<FlaskConical size={14} />}
+              onReset={
+                defaults
+                  ? () => {
+                      patch({ curseforge_api_key: defaults.curseforge_api_key });
+                      setCfKeyDraft(defaults.curseforge_api_key ?? "");
+                    }
+                  : undefined
+              }
+            >
               <Field
-                label="CurseForge API key"
-                hint="Browsing works out of the box. Set your own key only if you'd rather not use the bundled one."
+                label={t("settings.curseforge.key")}
+                hint={t("settings.curseforge.keyHint")}
               >
                 <input
                   value={cfKeyDraft}
@@ -344,18 +491,43 @@ export function SettingsView({
                 }
                 className="text-left text-xs text-brass-300 hover:text-brass-400"
               >
-                Get a CurseForge API key →
+                {t("settings.curseforge.getKey")}
               </button>
             </Card>
 
-            <Card title="Cache" icon={<HardDrive size={14} />}>
+            <Card
+              title={t("settings.downloads.title")}
+              icon={<Download size={14} />}
+              onReset={cardReset(["download_concurrency"])}
+            >
+              <Field
+                label={t("settings.downloads.parallel")}
+                hint={t("settings.downloads.parallelHint")}
+              >
+                <Select
+                  value={String(settings.download_concurrency)}
+                  onChange={(v) =>
+                    patch({ download_concurrency: Math.max(1, Number(v) || 16) })
+                  }
+                  options={[
+                    { value: "1", label: t("settings.downloads.sequential") },
+                    { value: "4", label: "4" },
+                    { value: "8", label: "8" },
+                    { value: "16", label: t("settings.downloads.def16") },
+                    { value: "24", label: "24" },
+                    { value: "32", label: "32" },
+                  ]}
+                />
+              </Field>
+            </Card>
+
+            <Card title={t("settings.cache.title")} icon={<HardDrive size={14} />}>
               <Row
-                label="Cached metadata"
+                label={t("settings.cache.cached")}
                 value={cacheBytes === null ? "…" : api.formatBytes(cacheBytes)}
               />
               <p className="text-xs text-ink-600">
-                Modrinth &amp; CurseForge data the launcher re-downloads as
-                needed. Safe to clear.
+                {t("settings.cache.desc")}
               </p>
               <ActionButton
                 icon={
@@ -377,36 +549,68 @@ export function SettingsView({
                   }
                 }}
               >
-                Clear cache
+                {t("settings.cache.clear")}
               </ActionButton>
             </Card>
 
-            <Card title="About">
-              <div className="text-sm text-ink-600">
-                Brassworks Launcher
-                {appVersion && (
-                  <div className="mt-1 text-xs">v{appVersion}</div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <LinkButton
-                  icon={<Globe size={15} />}
-                  onClick={() =>
-                    api.openExternal(api.BRASSWORKS_WEBSITE).catch(() => {})
-                  }
+          </CardColumns>
+
+            {onReplayOnboarding && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-edge/60 bg-ink-950/30 px-5 py-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-200">
+                    {t("settings.replay.title")}
+                  </div>
+                  <p className="text-xs text-ink-600">
+                    {t("settings.replay.desc")}
+                  </p>
+                </div>
+                <button
+                  onClick={onReplayOnboarding}
+                  title={t("settings.replay.tooltip")}
+                  className="flex items-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
                 >
-                  Website
-                </LinkButton>
-                <LinkButton
-                  icon={<Github size={15} />}
-                  onClick={() =>
-                    api.openExternal(api.BRASSWORKS_GITHUB).catch(() => {})
-                  }
-                >
-                  GitHub
-                </LinkButton>
+                  <Compass size={13} /> {t("settings.replay.button")}
+                </button>
               </div>
-            </Card>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-edge/60 bg-ink-950/30 px-5 py-4">
+              <div>
+                <div className="text-sm font-medium text-gray-200">
+                  {t("settings.resetAll.title")}
+                </div>
+                <p className="text-xs text-ink-600">
+                  {t("settings.resetAll.desc")}
+                </p>
+              </div>
+              {confirmResetAll ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={resetAll}
+                    disabled={!defaults}
+                    className="flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-200 transition hover:bg-red-500/20 disabled:opacity-40"
+                  >
+                    <RotateCcw size={13} /> {t("settings.resetAll.confirm")}
+                  </button>
+                  <button
+                    onClick={() => setConfirmResetAll(false)}
+                    className="rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:text-gray-200"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmResetAll(true)}
+                  disabled={!defaults}
+                  title={t("settings.resetAll.tooltip")}
+                  className="flex items-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-40"
+                >
+                  <RotateCcw size={13} /> {t("settings.resetAll.button")}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -429,6 +633,7 @@ function UpdatesCard({
   onUpdateInstalled: (version: string) => void;
   onError: (e: string) => void;
 }) {
+  const t = useT();
   const [checking, setChecking] = useState(false);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [info, setInfo] = useState<UpdateInfo | null>(null);
@@ -443,7 +648,7 @@ function UpdatesCard({
       setInfo(result);
       setCheckedAt(Date.now());
       if (result.available) setBlockReason(await api.updateBlockReason().catch(() => null));
-      else toast("You're on the latest version", "success");
+      else toast(t("settings.updates.latestToast"), "success");
     } catch (e) {
       onError(String(e));
     } finally {
@@ -467,9 +672,9 @@ function UpdatesCard({
       if (total > 0) setPct(Math.min(100, Math.round((downloaded / total) * 100)));
     });
     try {
-      toast(`Downloading update v${info.version}…`, "info");
+      toast(t("settings.updates.downloadingToast", { version: info.version }), "info");
       await api.installUpdate();
-      toast(`Update v${info.version} installed`, "success");
+      toast(t("settings.updates.installedToast", { version: info.version }), "success");
       onUpdateInstalled(info.version);
       setInfo(null);
     } catch (e) {
@@ -482,18 +687,18 @@ function UpdatesCard({
   };
 
   return (
-    <Card title="Updates" icon={<ArrowUpCircle size={14} />}>
-      <Row label="Current version" value={appVersion ? `v${appVersion}` : "-"} />
+    <Card title={t("settings.updates.title")} icon={<ArrowUpCircle size={14} />}>
+      <Row label={t("settings.updates.current")} value={appVersion ? `v${appVersion}` : "-"} />
       <Toggle
-        label="Automatic updates"
-        description="Check for and install launcher updates on startup."
+        label={t("settings.updates.auto")}
+        description={t("settings.updates.autoDesc")}
         checked={autoUpdate}
         onChange={onToggleAuto}
       />
 
       {info?.available && !downloading && (
         <div className="rounded-lg border border-brass-500/40 bg-brass-500/10 px-3 py-2 text-xs text-brass-200">
-          Version {info.version} is available.
+          {t("settings.updates.available", { version: info.version })}
         </div>
       )}
 
@@ -507,7 +712,7 @@ function UpdatesCard({
         <div className="rounded-lg border border-edge bg-ink-900/50 p-3">
           <div className="mb-1.5 flex items-center justify-between text-xs">
             <span className="flex items-center gap-2 text-brass-300">
-              <Loader2 size={13} className="animate-spin" /> Downloading update
+              <Loader2 size={13} className="animate-spin" /> {t("settings.updates.downloading")}
             </span>
             {pct !== null && (
               <span className="tabular-nums text-ink-600">{pct}%</span>
@@ -528,7 +733,7 @@ function UpdatesCard({
           onClickAsync={download}
           disabled={!!blockReason}
         >
-          Download &amp; install v{info.version}
+          {t("settings.updates.downloadInstall", { version: info.version })}
         </ActionButton>
       ) : (
         <ActionButton
@@ -542,16 +747,16 @@ function UpdatesCard({
           disabled={checking || downloading}
           onClickAsync={check}
         >
-          Check for updates
+          {t("settings.updates.check")}
           {!checking && checkedAt !== null && !info?.available && (
-            <span className="ml-auto text-[11px] text-patina-400">Up to date</span>
+            <span className="ml-auto text-[11px] text-patina-400">{t("settings.updates.upToDate")}</span>
           )}
         </ActionButton>
       )}
 
       <ActionButton icon={<ScrollText size={15} />} onClick={onShowChangelog}>
-        Changelog
-        <span className="ml-auto text-[11px] text-ink-600">what&apos;s new</span>
+        {t("settings.updates.changelog")}
+        <span className="ml-auto text-[11px] text-ink-600">{t("settings.updates.whatsNew")}</span>
       </ActionButton>
     </Card>
   );
@@ -564,6 +769,7 @@ function AccentPicker({
   value: string | null;
   onChange: (c: string | null) => void;
 }) {
+  const t = useT();
   const swatches: { color: string; key: string; isDefault?: boolean }[] = [
     { color: DEFAULT_ACCENT, key: "default", isDefault: true },
     ...ACCENT_COLORS.map((c) => ({ color: c, key: c })),
@@ -576,15 +782,21 @@ function AccentPicker({
           <button
             key={s.key}
             onClick={() => onChange(s.isDefault ? null : s.color)}
-            title={s.isDefault ? "Default (green)" : s.color}
-            style={{ background: s.color }}
-            className={`grid h-6 w-6 place-items-center rounded-md transition hover:scale-110 ${
-              active
-                ? "ring-2 ring-white/80 ring-offset-1 ring-offset-ink-850"
-                : ""
+            title={s.isDefault ? t("theme.accentDefault") : s.color}
+            style={{
+              backgroundImage: `linear-gradient(to bottom right, color-mix(in srgb, ${s.color} 88%, #fff), color-mix(in srgb, ${s.color} 78%, #000))`,
+            }}
+            className={`grid h-7 w-7 place-items-center rounded-md shadow-sm transition hover:scale-110 ${
+              active ? "scale-110" : ""
             }`}
           >
-            {active && <Check size={12} className="text-ink-950" />}
+            {active && (
+              <Check
+                size={14}
+                strokeWidth={3.5}
+                className="text-white [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.6))]"
+              />
+            )}
           </button>
         );
       })}
@@ -599,11 +811,16 @@ function JavaTab({
   instanceId,
   settings,
   patchSettings,
+  onResetPolicy,
+  defaultJavaPath,
 }: {
   instanceId: string | null;
   settings: LauncherSettings;
   patchSettings: (p: Partial<LauncherSettings>) => void;
+  onResetPolicy?: () => void;
+  defaultJavaPath?: string;
 }) {
+  const t = useT();
   const [report, setReport] = useState<JavaReport | null>(() =>
     instanceId ? javaReportCache.get(instanceId) ?? null : null,
   );
@@ -612,17 +829,24 @@ function JavaTab({
   const [runtimes, setRuntimes] = useState<JavaInstall[]>(
     () => javaRuntimesCache ?? [],
   );
+  
+  
+  const [runtimesLoading, setRuntimesLoading] = useState(
+    () => javaRuntimesCache === null,
+  );
   const [downloading, setDownloading] = useState<number | null>(null);
 
   const reloadRuntimes = () => {
-    if (api.isTauri())
-      api
-        .listJavaRuntimes()
-        .then((r) => {
-          javaRuntimesCache = r;
-          setRuntimes(r);
-        })
-        .catch(() => {});
+    if (!api.isTauri()) return;
+    setRuntimesLoading(true);
+    api
+      .listJavaRuntimes()
+      .then((r) => {
+        javaRuntimesCache = r;
+        setRuntimes(r);
+      })
+      .catch(() => {})
+      .finally(() => setRuntimesLoading(false));
   };
 
   const load = () => {
@@ -656,7 +880,7 @@ function JavaTab({
     api
       .downloadJava(major)
       .then(() => {
-        toast(`Java ${major} downloaded`, "success");
+        toast(t("settings.java.downloadedToast", { major }), "success");
         reloadRuntimes();
       })
       .catch((e) => toast(String(e), "error"))
@@ -684,12 +908,12 @@ function JavaTab({
   };
 
   const options = [
-    { value: "auto", label: "Automatic - download the right Java (recommended)" },
+    { value: "auto", label: t("settings.java.auto") },
     ...(report?.system
       ? [
           {
             value: "system",
-            label: `System Java${report.system.major ? " " + report.system.major : ""}`,
+            label: `${t("settings.java.systemJava")}${report.system.major ? " " + report.system.major : ""}`,
           },
         ]
       : []),
@@ -697,20 +921,31 @@ function JavaTab({
       value: `path:${r.path}`,
       label: r.label,
     })),
-    { value: "custom", label: "Custom path…" },
+    { value: "custom", label: t("settings.java.custom") },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4">
-      <Card title="Default Java policy" icon={<Coffee size={14} />}>
+    <CardColumns>
+      <Card
+        title={t("settings.java.policyTitle")}
+        icon={<Coffee size={14} />}
+        onReset={
+          onResetPolicy
+            ? () => {
+                onResetPolicy();
+                setCustomDraft(defaultJavaPath ?? "");
+              }
+            : undefined
+        }
+      >
         <Field
-          label="Which Java to use"
-          hint="Automatic downloads and caches the exact version each instance needs. Override this per instance on its gear."
+          label={t("settings.java.which")}
+          hint={t("settings.java.whichHint")}
         >
           <Select value={current} onChange={pick} options={options} />
         </Field>
         {current === "custom" && (
-          <Field label="Java executable path">
+          <Field label={t("settings.java.execPath")}>
             <input
               value={customDraft}
               onChange={(e) => setCustomDraft(e.target.value)}
@@ -720,7 +955,7 @@ function JavaTab({
                   java_path: customDraft.trim() || null,
                 })
               }
-              placeholder="/path/to/bin/java"
+              placeholder={t("settings.java.pathPlaceholder")}
               className={`${inputCls} font-mono text-xs`}
               spellCheck={false}
             />
@@ -730,22 +965,38 @@ function JavaTab({
           onClick={load}
           className="flex items-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
         >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Rescan
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> {t("settings.java.rescan")}
         </button>
       </Card>
 
-      <Card title="Runtimes" icon={<Coffee size={14} />}>
+      <Card title={t("settings.java.runtimesTitle")} icon={<Coffee size={14} />}>
         <Row
-          label="System Java"
+          label={t("settings.java.systemJava")}
           value={
-            report?.system
-              ? report.system.version ?? `Java ${report.system.major ?? "?"}`
-              : "Not found"
+            loading && !report ? (
+              <Skeleton className="h-3.5 w-24" />
+            ) : report?.system ? (
+              report.system.version ?? t("settings.java.javaN", { n: report.system.major ?? "?" })
+            ) : (
+              t("settings.java.notFound")
+            )
           }
         />
         <div>
-          <div className="mb-1.5 text-sm text-ink-600">Downloaded runtimes</div>
-          {runtimes.length > 0 ? (
+          <div className="mb-1.5 text-sm text-ink-600">{t("settings.java.downloaded")}</div>
+          {runtimesLoading && runtimes.length === 0 ? (
+            <div className="flex flex-col gap-1">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 rounded-md border border-edge bg-ink-950/40 px-2.5 py-1.5"
+                >
+                  <Skeleton className="h-3 w-3 rounded-full" />
+                  <Skeleton className="h-3.5 flex-1" />
+                </div>
+              ))}
+            </div>
+          ) : runtimes.length > 0 ? (
             <div className="flex flex-col gap-1">
               {runtimes.map((r) => (
                 <div
@@ -756,7 +1007,7 @@ function JavaTab({
                   <span className="flex-1 truncate text-gray-200">{r.label}</span>
                   <button
                     onClick={() => api.revealPath(r.path).catch(() => {})}
-                    title="Open folder"
+                    title={t("settings.java.openFolder")}
                     className="text-ink-600 opacity-0 transition hover:text-brass-300 group-hover:opacity-100"
                   >
                     <FolderOpen size={13} />
@@ -766,12 +1017,12 @@ function JavaTab({
                       api
                         .deleteJavaRuntime(r.path)
                         .then(() => {
-                          toast("Runtime deleted", "info");
+                          toast(t("settings.java.runtimeDeleted"), "info");
                           reloadRuntimes();
                         })
                         .catch((e) => toast(String(e), "error"))
                     }
-                    title="Uninstall"
+                    title={t("settings.java.uninstall")}
                     className="text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
                   >
                     <Trash2 size={13} />
@@ -781,14 +1032,13 @@ function JavaTab({
             </div>
           ) : (
             <p className="text-xs text-ink-600">
-              None yet - the right runtime downloads automatically on first
-              launch.
+              {t("settings.java.none")}
             </p>
           )}
         </div>
 
         <div>
-          <div className="mb-1.5 text-sm text-ink-600">Download a version</div>
+          <div className="mb-1.5 text-sm text-ink-600">{t("settings.java.downloadVersion")}</div>
           <div className="flex flex-wrap gap-1.5">
             {MAJORS.map((m) => {
               const have = runtimes.some((r) => r.major === m);
@@ -804,18 +1054,17 @@ function JavaTab({
                   ) : (
                     <Download size={12} />
                   )}
-                  Java {m}
+                  {t("settings.java.javaN", { n: m })}
                   {have ? " ✓" : ""}
                 </button>
               );
             })}
           </div>
           <p className="mt-1 text-[11px] text-ink-600">
-            Temurin (Adoptium) JREs. The correct version also downloads
-            automatically per instance.
+            {t("settings.java.temurin")}
           </p>
         </div>
       </Card>
-    </div>
+    </CardColumns>
   );
 }

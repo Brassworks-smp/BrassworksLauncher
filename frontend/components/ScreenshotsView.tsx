@@ -15,6 +15,7 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useClosable, StarButton, useProgressive } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 import type { Screenshot } from "@/lib/types";
 
 function fmtDate(ms: number): string {
@@ -93,7 +94,7 @@ function useThumb(path: string, large: boolean): ThumbState {
   return state;
 }
 
-/** Grid thumbnail with a skeleton placeholder until the image is decoded. */
+
 function GridThumb({ path, alt }: { path: string; alt: string }) {
   const thumb = useThumb(path, false);
   const [loaded, setLoaded] = useState(false);
@@ -126,6 +127,7 @@ function GridThumb({ path, alt }: { path: string; alt: string }) {
 }
 
 export function ScreenshotsView({ instanceId }: { instanceId: string }) {
+  const t = useT();
   const [shots, setShots] = useState<Screenshot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState<number | null>(null);
@@ -154,7 +156,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
     setActive(null);
     api
       .deleteScreenshot(s.instance, s.name)
-      .then(() => toast(`Deleted ${s.name}`, "info"))
+      .then(() => toast(t("screenshots.deleted", { name: s.name }), "info"))
       .catch((e) => {
         toast(String(e), "error");
         load();
@@ -167,9 +169,9 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type || "image/png"]: blob }),
       ]);
-      toast("Screenshot copied to clipboard", "success");
+      toast(t("screenshots.copiedToast"), "success");
     } catch {
-      toast("Couldn't copy this image", "error");
+      toast(t("screenshots.copyFailed"), "error");
     }
   };
 
@@ -194,10 +196,10 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
       <div className="flex items-center justify-between pb-4">
         <div>
           <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-            Screenshots
+            {t("screenshots.title")}
           </h1>
           <p className="text-sm text-ink-600">
-            {shots ? `${list.length} captured` : "Loading…"}
+            {shots ? t("screenshots.captured", { count: list.length }) : t("common.loading")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -210,7 +212,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
                   : "text-ink-600 hover:text-brass-300/80"
               }`}
             >
-              This instance
+              {t("screenshots.thisInstance")}
             </button>
             <button
               onClick={() => setScope("all")}
@@ -220,12 +222,12 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
                   : "text-ink-600 hover:text-brass-300/80"
               }`}
             >
-              All
+              {t("screenshots.all")}
             </button>
           </div>
           <button
             onClick={() => setStarredOnly((v) => !v)}
-            title="Show starred only"
+            title={t("screenshots.showStarred")}
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs transition ${
               starredOnly
                 ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
@@ -233,20 +235,20 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
             }`}
           >
             <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={13} />
-            Starred
+            {t("screenshots.starred")}
           </button>
           <button
             onClick={() =>
               api.openDir(instanceId, "screenshots").catch(() => {})
             }
-            title="Open screenshots folder"
+            title={t("screenshots.openFolder")}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <FolderOpen size={15} /> Folder
+            <FolderOpen size={15} /> {t("mods.folder")}
           </button>
           <button
             onClick={load}
-            title="Refresh"
+            title={t("common.refresh")}
             className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -258,7 +260,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
         <div className="grid flex-1 place-items-center text-center text-ink-600">
           <div>
             <ImageIcon size={28} className="mx-auto mb-2 opacity-50" />
-            No screenshots yet - press F2 in‑game to take one.
+            {t("screenshots.empty")}
           </div>
         </div>
       ) : (
@@ -287,7 +289,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
                   e.stopPropagation();
                   remove(s);
                 }}
-                title="Delete"
+                title={t("common.delete")}
                 className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-ink-950/80 text-ink-600 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
               >
                 <Trash2 size={13} />
@@ -329,6 +331,7 @@ function Lightbox({
   onCopy: (s: Screenshot) => void | Promise<void>;
   onStar: (s: Screenshot) => void;
 }) {
+  const t = useT();
   const s = shots[index];
   const [copied, setCopied] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -379,7 +382,7 @@ function Lightbox({
             }`}
           >
             <StarButton starred={s.starred} onClick={() => onStar(s)} size={13} />
-            {s.starred ? "Starred" : "Star"}
+            {s.starred ? t("screenshots.starred") : t("ui.star")}
           </button>
           <button
             onClick={async () => {
@@ -390,20 +393,20 @@ function Lightbox({
             className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("screenshots.copiedLabel") : t("screenshots.copy")}
           </button>
           <button
-            onClick={() => api.openFile(s.path).catch(() => toast("Couldn't open this image", "error"))}
-            title="Open in your default photo app"
+            onClick={() => api.openFile(s.path).catch(() => toast(t("screenshots.openFailed"), "error"))}
+            title={t("screenshots.openTitle")}
             className="flex items-center gap-1.5 rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <ExternalLink size={13} /> Open
+            <ExternalLink size={13} /> {t("screenshots.open")}
           </button>
           <button
             onClick={() => onDelete(s)}
             className="flex items-center gap-1.5 rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10"
           >
-            <Trash2 size={13} /> Delete
+            <Trash2 size={13} /> {t("common.delete")}
           </button>
           <button
             onClick={close}
@@ -429,7 +432,7 @@ function Lightbox({
         {large.status === "error" && (
           <div className="flex flex-col items-center gap-2 text-ink-600">
             <ImageIcon size={30} className="opacity-40" />
-            <span className="text-xs">Couldn&apos;t load this image</span>
+            <span className="text-xs">{t("screenshots.loadFailed")}</span>
           </div>
         )}
         {large.status === "ready" && (

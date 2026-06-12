@@ -1,6 +1,7 @@
-
+use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process::Child;
+use std::process::{Child, Stdio};
+use std::sync::{Arc, Mutex};
 
 use portablemc::base::{Event as BaseEvent, JvmPolicy};
 use portablemc::fabric::{self, Event as FabricEvent};
@@ -68,20 +69,15 @@ impl ProgressHandler<'_> {
             BaseEvent::DownloadProgress {
                 count,
                 total_count,
-                size,
-                total_size,
+                size: _,
+                total_size: _,
             } => {
-                let (cur, tot) = if *total_size > 0 {
-                    (*size as u64, *total_size as u64)
-                } else {
-                    (*count as u64, *total_count as u64)
-                };
-                let p = LaunchProgress::new(
+                                                                                                                let p = LaunchProgress::new(
                     &self.instance_id,
                     LaunchStage::Downloading,
                     format!("Downloading {count}/{total_count} files"),
                 )
-                .with_progress(cur, tot);
+                .with_progress(*count as u64, *total_count as u64);
                 self.emit(p);
             }
             BaseEvent::ExtractedBinaries { .. } => {
@@ -255,6 +251,7 @@ fn jvm_args(req: &LaunchRequest) -> Vec<String> {
 
     let mut args = vec![format!("-Xmx{max}M"), format!("-Xms{min}M")];
     args.push("-Dbrassupdater.skip=true".to_string());
+                    args.push("-Djdk.attach.allowAttachSelf=true".to_string());
     args.extend(req.instance.extra_jvm_args.iter().cloned());
     args
 }
@@ -269,7 +266,7 @@ pub fn launch_instance(
     let instance_id = req.instance.id.clone();
 
     let neoforge_override = match &req.instance.pack {
-        PackSource::Packwiz { url } => {
+        PackSource::Packwiz { url, .. } => {
             sync_packwiz(&req, &instance_id, url, cancel, on_progress)?
         }
         PackSource::Modrinth { .. } | PackSource::Curseforge { .. } => {
@@ -351,18 +348,60 @@ pub fn launch_instance(
     game.jvm_args = jvm;
 
     let mut command = game.command();
+                                for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("DYLD_") {
+            command.env_remove(&key);
+        }
+    }
+                            command.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let child = command.spawn().map_err(|e| {
+    let mut child = command.spawn().map_err(|e| {
         CoreError::Launch(format!("failed to spawn game process: {e}"))
     })?;
 
+    drain_child_output(&mut child, &req.paths.instance_game_dir(&req.instance.id));
+
     handler.stage(LaunchStage::Running, "Minecraft is running");
     Ok(child)
+}
+
+fn drain_child_output(child: &mut Child, game_dir: &std::path::Path) {
+    let log_dir = game_dir.join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let file = std::fs::File::create(log_dir.join("game_output.log")).ok();
+    let sink = Arc::new(Mutex::new(file));
+
+    let streams: Vec<Box<dyn Read + Send>> = [
+        child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>),
+        child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    for stream in streams {
+        let sink = sink.clone();
+        std::thread::spawn(move || {
+            let mut reader = stream;
+            let mut buf = [0u8; 8192];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if let Ok(mut guard) = sink.lock() {
+                            if let Some(f) = guard.as_mut() {
+                                let _ = f.write_all(&buf[..n]);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 fn resolve_java(req: &LaunchRequest, handler: &mut ProgressHandler) -> Option<PathBuf> {
@@ -450,10 +489,13 @@ fn sync_thirdparty(
         (on_progress)(p);
     };
 
+    let optional = crate::packs::optional_set(&req.instance.optional_mods);
     crate::packs::sync_pack(
         req.paths,
         instance_id,
         &req.instance.pack,
+        &optional,
+        req.settings.download_concurrency,
         &modrinth,
         Some(&cf),
         cancel,
@@ -465,21 +507,26 @@ fn sync_thirdparty(
 fn sync_packwiz(
     req: &LaunchRequest,
     instance_id: &str,
-    pack_url: &str,
+    _pack_url: &str,
     cancel: &dyn Fn() -> bool,
     on_progress: &mut ProgressSink,
 ) -> Result<Option<String>> {
-    let modpack = Modpack::with_url(req.paths, instance_id, pack_url.to_string());
+            let cf_key = req
+        .settings
+        .curseforge_api_key
+        .clone()
+        .filter(|k| !k.trim().is_empty());
+    let modpack = Modpack::for_instance(req.paths, req.instance, cf_key)
+        .with_concurrency(req.settings.download_concurrency);
 
-    if !req.instance.modpack_locked {
-        if let Some(neoforge) = modpack.installed_neoforge() {
-            (on_progress)(LaunchProgress::new(
-                instance_id,
-                LaunchStage::CheckingUpdates,
-                "Modpack unlocked — skipping auto-update",
-            ));
-            return Ok(Some(neoforge));
-        }
+    let unlocked = !req.instance.modpack_locked;
+    if unlocked && modpack.installed_neoforge().is_some() {
+        (on_progress)(LaunchProgress::new(
+            instance_id,
+            LaunchStage::CheckingUpdates,
+            "Modpack unlocked — skipping auto-update",
+        ));
+                        return Ok(None);
     }
 
     (on_progress)(LaunchProgress::new(
@@ -500,7 +547,7 @@ fn sync_packwiz(
         (on_progress)(p);
     })?;
 
-    Ok(manifest.neoforge_version)
+            Ok(if unlocked { None } else { manifest.neoforge_version })
 }
 
 struct MojOnly<'a, 'b>(&'a mut ProgressHandler<'b>);

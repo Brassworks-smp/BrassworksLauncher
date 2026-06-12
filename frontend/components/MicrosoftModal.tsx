@@ -1,5 +1,6 @@
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { useClosable } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export type MsAuthState =
   | { status: "starting" }
@@ -18,6 +19,7 @@ export function MicrosoftModal({
   state: MsAuthState | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const { closing, close } = useClosable(onClose);
   if (!state) return null;
 
@@ -30,7 +32,7 @@ export function MicrosoftModal({
       <div className="w-[400px] rounded-lg panel p-6 rise">
         <div className="flex items-start justify-between">
           <h2 className="font-mc text-base tracking-wide text-gray-100">
-            Sign in with Microsoft
+            {t("account.signInMicrosoft")}
           </h2>
           <button onClick={close} className="text-ink-600 hover:text-brass-300">
             <X size={18} />
@@ -45,7 +47,7 @@ export function MicrosoftModal({
               onClick={close}
               className="mt-2 rounded-lg bg-ink-800 px-4 py-2 text-sm hover:bg-ink-700"
             >
-              Close
+              {t("common.close")}
             </button>
           </div>
         ) : (
@@ -53,12 +55,12 @@ export function MicrosoftModal({
             <Loader2 size={26} className="animate-spin text-brass-400" />
             <p className="text-sm text-ink-600">
               {state.status === "code"
-                ? "A sign-in window has opened. Finish logging in there - the launcher will pick it up automatically."
-                : "Opening Microsoft sign-in…"}
+                ? t("microsoft.codeMessage")
+                : t("microsoft.opening")}
             </p>
             {state.status === "code" && (
               <p className="text-xs text-ink-600">
-                Verification code:{" "}
+                {t("microsoft.verificationCode")}{" "}
                 <span className="font-mono tracking-[0.2em] text-brass-300">
                   {state.user_code}
                 </span>

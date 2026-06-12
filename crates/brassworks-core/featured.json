@@ -12,6 +12,10 @@
     "locked_default": true,
     "mc_version": "1.21.1",
     "loader": "neoforge",
-    "loader_version": "stable"
+    "loader_version": "stable",
+    "unsup": false,
+    "unsup_public_key": null,
+    "modrinth_ids": ["LNYQ3UL9", "vDKsot3R"],
+    "curseforge_ids": ["883533"]
   }
 ]

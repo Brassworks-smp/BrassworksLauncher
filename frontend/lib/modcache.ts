@@ -1,4 +1,3 @@
-
 import type { ModInfo } from "./types";
 
 const key = (source: string, id: string, version: string | null) =>

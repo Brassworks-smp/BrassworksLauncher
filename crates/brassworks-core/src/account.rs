@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -61,6 +60,14 @@ pub fn offline_uuid(username: &str) -> String {
         .with_version(uuid::Version::Md5)
         .into_uuid()
         .to_string()
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountStatus {
+        Ok,
+        NeedsRelogin,
+        Offline,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

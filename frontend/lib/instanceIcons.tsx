@@ -1,4 +1,3 @@
-
 const GLYPHS: { id: string; glyph: string }[] = [
   {
     id: "box",
@@ -75,6 +74,9 @@ export interface InstanceIcon {
 const BUILTIN_PREFIX = "builtin:";
 const BY_ID = new Map(GLYPHS.map((g) => [g.id, g.glyph]));
 
+
+export const DEFAULT_INSTANCE_ICON = BUILTIN_PREFIX + GLYPHS[0].id;
+
 function cssVar(name: string, fallback: string): string {
   if (typeof document === "undefined") return fallback;
   const v = getComputedStyle(document.documentElement)
@@ -83,7 +85,7 @@ function cssVar(name: string, fallback: string): string {
   return v || fallback;
 }
 
-/** The live theme palette used to draw the built-in icons. */
+
 export function currentPalette(): Palette {
   return {
     accent: cssVar("--color-brass-400", DEFAULTS.accent),
@@ -94,7 +96,7 @@ export function currentPalette(): Palette {
 const uriFor = (glyph: string, p: Palette) =>
   "data:image/svg+xml," + encodeURIComponent(svg(glyph, p));
 
-/** Build the 8 built-in icon swatches with the given palette baked in. */
+
 export function buildInstanceIcons(p: Palette): InstanceIcon[] {
   return GLYPHS.map((g) => ({
     id: g.id,
@@ -106,11 +108,7 @@ export function buildInstanceIcons(p: Palette): InstanceIcon[] {
 export const isBuiltinIcon = (icon: string | null | undefined): boolean =>
   !!icon && icon.startsWith(BUILTIN_PREFIX);
 
-/**
- * Resolve a stored `instance.icon` to an `<img src>`. Built-in icons
- * (`builtin:<id>`) are drawn live in `accent` (e.g. a folder's color) over the
- * global background; any other value (URL / path / data URI) passes through.
- */
+
 export function iconSrc(
   icon: string | null | undefined,
   accent?: string,

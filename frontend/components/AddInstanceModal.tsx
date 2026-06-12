@@ -10,29 +10,61 @@ import {
   Check,
   Box,
   Download,
+  DownloadCloud,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import type { Instance } from "@/lib/types";
+import type {
+  FlavorGroup,
+  Instance,
+  OptionalComponent,
+  FeaturedPack,
+} from "@/lib/types";
 import { VersionPicker } from "@/components/VersionPicker";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
+import { OptionalModsPicker } from "@/components/OptionalModsPicker";
+import { FlavorPicker } from "@/components/FlavorPicker";
 import { SegmentedTabs, Dropdown, useClosable } from "@/components/ui";
+import { useT } from "@/lib/i18n";
+
+
+type PendingInstall =
+  | {
+      kind: "modpack";
+      source: "modrinth" | "curseforge";
+      projectId: string;
+      versionId: string;
+      name: string;
+    }
+  | { kind: "file"; source: "modrinth" | "curseforge"; path: string; name: string }
+  | {
+      kind: "packwiz";
+      url: string;
+      name: string;
+      unsup: boolean;
+      publicKey: string | null;
+    };
+
+
+type PickerData =
+  | { kind: "optional"; components: OptionalComponent[] }
+  | { kind: "flavors"; groups: FlavorGroup[] };
 
 type Tab = "custom" | "modrinth" | "curseforge" | "packwiz" | "import";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "custom", label: "Custom" },
-  { id: "modrinth", label: "Modrinth" },
-  { id: "curseforge", label: "CurseForge" },
-  { id: "packwiz", label: "packwiz" },
-  { id: "import", label: "Import" },
+const TABS: { id: Tab; tkey: string }[] = [
+  { id: "custom", tkey: "addInstance.tab.custom" },
+  { id: "modrinth", tkey: "addInstance.tab.modrinth" },
+  { id: "curseforge", tkey: "addInstance.tab.curseforge" },
+  { id: "packwiz", tkey: "addInstance.tab.packwiz" },
+  { id: "import", tkey: "addInstance.tab.import" },
 ];
 
-const LOADERS: { id: string; label: string }[] = [
-  { id: "vanilla", label: "Vanilla" },
-  { id: "fabric", label: "Fabric" },
-  { id: "quilt", label: "Quilt" },
-  { id: "forge", label: "Forge" },
-  { id: "neoforge", label: "NeoForge" },
+const LOADERS: { id: string; tkey: string }[] = [
+  { id: "vanilla", tkey: "instanceSettings.loader.vanilla" },
+  { id: "fabric", tkey: "instanceSettings.loader.fabric" },
+  { id: "quilt", tkey: "instanceSettings.loader.quilt" },
+  { id: "forge", tkey: "instanceSettings.loader.forge" },
+  { id: "neoforge", tkey: "instanceSettings.loader.neoforge" },
 ];
 
 const ACCENTS: Record<Tab, Record<string, string> | undefined> = {
@@ -67,7 +99,7 @@ const ACCENTS: Record<Tab, Record<string, string> | undefined> = {
   },
 };
 
-/** Heuristic loader availability by Minecraft version (avoids a request storm). */
+
 function loaderAllowed(loader: string, mc: string): boolean {
   if (loader === "vanilla") return true;
   const parts = mc.split(".");
@@ -87,14 +119,23 @@ const inputCls =
 export function AddInstanceModal({
   installing,
   detailInstanceId,
+  initialTab,
+  importOnly,
   onClose,
   onCreated,
   onInstallModpack,
-  onUploadModpack,
+  onInstallModpackFile,
   onError,
+  featured,
+  featuredEnabled,
+  onOpenFeatured,
+  onEnableFeatured,
 }: {
   installing: boolean;
   detailInstanceId: string | null;
+  initialTab?: Tab;
+  
+  importOnly?: boolean;
   onClose: () => void;
   onCreated: (instance: Instance) => void;
   onInstallModpack: (
@@ -102,17 +143,25 @@ export function AddInstanceModal({
     projectId: string,
     versionId: string,
     name: string,
+    optional: string[],
   ) => void;
-  onUploadModpack: (
+  onInstallModpackFile: (
     source: "modrinth" | "curseforge",
-    data: number[],
+    path: string,
     name: string,
+    optional: string[],
   ) => void;
   onError: (e: string) => void;
+  featured?: FeaturedPack[];
+  featuredEnabled?: boolean;
+  onOpenFeatured?: (id: string) => void;
+  onEnableFeatured?: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("custom");
+  const t = useT();
+  const [tab, setTab] = useState<Tab>(
+    importOnly ? "import" : initialTab ?? "custom",
+  );
   const [busy, setBusy] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const { closing, close } = useClosable(onClose);
 
   const [name, setName] = useState("");
@@ -127,24 +176,98 @@ export function AddInstanceModal({
     }
   }, [mc, loader]);
 
-  const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const source: "modrinth" | "curseforge" = file.name.endsWith(".mrpack")
-      ? "modrinth"
-      : "curseforge";
-    const buf = await file.arrayBuffer();
-    onUploadModpack(source, Array.from(new Uint8Array(buf)), file.name.replace(/\.[^.]+$/, ""));
+  
+  const [pending, setPending] = useState<PendingInstall | null>(null);
+  
+  const [picker, setPicker] = useState<PickerData | null>(null);
+  
+  const inspectGen = useRef(0);
+
+  
+  const closePicker = () => {
+    inspectGen.current++;
+    setPending(null);
+    setPicker(null);
   };
 
-  const [packName, setPackName] = useState("");
+  
+  const finalize = async (intent: PendingInstall, ids: string[]) => {
+    if (intent.kind === "modpack") {
+      onInstallModpack(intent.source, intent.projectId, intent.versionId, intent.name, ids);
+      setPending(null);
+    } else if (intent.kind === "file") {
+      onInstallModpackFile(intent.source, intent.path, intent.name, ids);
+      setPending(null);
+    } else {
+      
+      setBusy(true);
+      try {
+        const inst = intent.unsup
+          ? await api.createPackwizInstance(intent.name, intent.url, [], true, ids, intent.publicKey)
+          : await api.createPackwizInstance(intent.name, intent.url, ids);
+        onCreated(inst);
+      } catch (e) {
+        onError(String(e));
+      } finally {
+        setBusy(false);
+        setPending(null);
+      }
+    }
+  };
+
+  
+  const beginInstall = async (intent: PendingInstall) => {
+    const gen = ++inspectGen.current;
+    setPending(intent);
+    setPicker(null);
+    try {
+      if (intent.kind === "packwiz" && intent.unsup) {
+        const groups = await api.inspectPackwizFlavors(intent.url);
+        if (gen !== inspectGen.current) return; 
+        if (groups.length === 0) await finalize(intent, []);
+        else setPicker({ kind: "flavors", groups });
+        return;
+      }
+      const comps =
+        intent.kind === "modpack"
+          ? await api.inspectModpack(intent.source, intent.projectId, intent.versionId)
+          : intent.kind === "file"
+            ? await api.inspectModpackFile(intent.path, intent.source)
+            : await api.inspectPackwiz(intent.url);
+      if (gen !== inspectGen.current) return; 
+      if (comps.length === 0) {
+        await finalize(intent, []);
+      } else {
+        setPicker({ kind: "optional", components: comps });
+      }
+    } catch {
+      if (gen !== inspectGen.current) return;
+      
+      await finalize(intent, []);
+    }
+  };
+
+  const pickFile = async () => {
+    try {
+      const picked = await api.pickModpackFile();
+      if (!picked) return;
+      const base = picked.path
+        .replace(/^.*[\\/]/, "")
+        .replace(/\.[^.]+$/, "");
+      await beginInstall({ kind: "file", source: picked.source, path: picked.path, name: base });
+    } catch (e) {
+      onError(String(e));
+    }
+  };
+
   const [packUrl, setPackUrl] = useState("");
   const [packBranches, setPackBranches] = useState<api.PackwizBranch[] | null>(
     null,
   );
   const [packBranch, setPackBranch] = useState("");
   const [findingBranches, setFindingBranches] = useState(false);
+  const [packUnsup, setPackUnsup] = useState(false);
+  const [packPublicKey, setPackPublicKey] = useState("");
 
   const looksLikeRepo = (s: string) =>
       /github\.com\//.test(s);
@@ -199,7 +322,7 @@ export function AddInstanceModal({
       const list = await api.listPackwizBranches(packUrl.trim());
       setPackBranches(list);
       if (list.length === 0) {
-        onError("No branches with a pack.toml found in that repo.");
+        onError(t("addInstance.noBranches"));
       } else {
         const pref =
           list.find((b) => b.name === "main" || b.name === "master") ?? list[0];
@@ -213,10 +336,16 @@ export function AddInstanceModal({
   };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      
+      
+      if (pending) closePicker();
+      else close();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, [close, pending]);
 
   const createCustom = async () => {
     setBusy(true);
@@ -231,20 +360,18 @@ export function AddInstanceModal({
   };
 
   const createPackwiz = async () => {
-    setBusy(true);
-    try {
-      let url = packUrl.trim();
-      if (packBranches && packBranch) {
-        const b = packBranches.find((x) => x.name === packBranch);
-        if (b) url = b.pack_url;
-      }
-      const inst = await api.createPackwizInstance(packName, url);
-      onCreated(inst);
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setBusy(false);
+    let url = packUrl.trim();
+    if (packBranches && packBranch) {
+      const b = packBranches.find((x) => x.name === packBranch);
+      if (b) url = b.pack_url;
     }
+    await beginInstall({
+      kind: "packwiz",
+      url,
+      name: "",
+      unsup: packUnsup,
+      publicKey: packUnsup && packPublicKey.trim() ? packPublicKey.trim() : null,
+    });
   };
 
   return (
@@ -255,20 +382,22 @@ export function AddInstanceModal({
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
-        style={ACCENTS[tab] as React.CSSProperties | undefined}
+        style={importOnly ? undefined : (ACCENTS[tab] as React.CSSProperties | undefined)}
         className="rise flex h-[80vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
       >
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".mrpack,.zip"
-          onChange={onPickFile}
-          className="hidden"
-        />
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
-            <Boxes size={17} className="text-brass-400" />
-            New instance
+            {importOnly ? (
+              <>
+                <DownloadCloud size={17} className="text-brass-400" />
+                {t("addInstance.tab.import")}
+              </>
+            ) : (
+              <>
+                <Boxes size={17} className="text-brass-400" />
+                {t("addInstance.newInstance")}
+              </>
+            )}
           </h2>
           <button
             onClick={close}
@@ -278,28 +407,58 @@ export function AddInstanceModal({
           </button>
         </div>
 
-        <div className="border-b border-edge px-3 py-2">
-          <SegmentedTabs
-            value={tab}
-            onChange={(v) => setTab(v as Tab)}
-            options={TABS.map((t) => ({ id: t.id, label: t.label }))}
-          />
-        </div>
+        {!importOnly && (
+          <div className="border-b border-edge px-3 py-2">
+            <SegmentedTabs
+              value={tab}
+              onChange={(v) => {
+                if (pending) closePicker();
+                setTab(v as Tab);
+              }}
+              options={TABS.map((tb) => ({ id: tb.id, label: t(tb.tkey) }))}
+            />
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1 flex-col p-5">
+          {pending ? (
+            picker === null ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-ink-600">
+                <Loader2 size={22} className="animate-spin text-brass-400" />
+                <span className="text-sm">{t("addInstance.checkingOptional")}</span>
+              </div>
+            ) : picker.kind === "flavors" ? (
+              <FlavorPicker
+                title={pending.name || t("addInstance.modpackFallback")}
+                groups={picker.groups}
+                busy={installing || busy}
+                onBack={closePicker}
+                onConfirm={(ids) => finalize(pending, ids)}
+              />
+            ) : (
+              <OptionalModsPicker
+                title={pending.name || t("addInstance.modpackFallback")}
+                components={picker.components}
+                busy={installing || busy}
+                onBack={closePicker}
+                onConfirm={(ids) => finalize(pending, ids)}
+              />
+            )
+          ) : (
+          <>
           {tab === "custom" && (
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-0.5">
               <div>
-                <div className="mb-1.5 text-sm text-ink-600">Name</div>
+                <div className="mb-1.5 text-sm text-ink-600">{t("addInstance.name")}</div>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="My instance"
+                  placeholder={t("addInstance.namePlaceholder")}
                   className={inputCls}
                 />
               </div>
               <div>
-                <div className="mb-1.5 text-sm text-ink-600">Mod loader</div>
+                <div className="mb-1.5 text-sm text-ink-600">{t("addInstance.modLoader")}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {LOADERS.map((l) => {
                     const disabled = !!mc && !loaderAllowed(l.id, mc);
@@ -307,7 +466,7 @@ export function AddInstanceModal({
                       <button
                         key={l.id}
                         disabled={disabled}
-                        title={disabled ? `Not available for ${mc}` : undefined}
+                        title={disabled ? t("addInstance.notAvailableFor", { mc }) : undefined}
                         onClick={() => {
                           setLoader(l.id);
                           setLoaderVersion("stable");
@@ -318,7 +477,7 @@ export function AddInstanceModal({
                             : "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
                         }`}
                       >
-                        {l.label}
+                        {t(l.tkey)}
                       </button>
                     );
                   })}
@@ -337,31 +496,23 @@ export function AddInstanceModal({
                 className="brass-btn flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : null}
-                Create instance
+                {t("addInstance.createInstance")}
               </button>
             </div>
           )}
 
           {tab === "packwiz" && (
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-0.5">
               <p className="text-xs text-ink-600">
-                Point at a <span className="text-brass-300">pack.toml</span> URL,
-                or a <span className="text-brass-300">GitHub repo</span> to pick a
-                branch. The launcher detects the loader + Minecraft version and
-                syncs on launch.
+                {t("addInstance.pwDesc1")}
+                <span className="text-brass-300">pack.toml</span>
+                {t("addInstance.pwDesc2")}
+                <span className="text-brass-300">{t("addInstance.pwRepo")}</span>
+                {t("addInstance.pwDesc3")}
               </p>
               <div>
-                <div className="mb-1.5 text-sm text-ink-600">Name (optional)</div>
-                <input
-                  value={packName}
-                  onChange={(e) => setPackName(e.target.value)}
-                  placeholder="Leave blank to use the pack's name"
-                  className={inputCls}
-                />
-              </div>
-              <div>
                 <div className="mb-1.5 text-sm text-ink-600">
-                  pack.toml URL or GitHub repo
+                  {t("addInstance.pwUrlLabel")}
                 </div>
                 <input
                   value={packUrl}
@@ -383,18 +534,19 @@ export function AddInstanceModal({
                   ) : (
                     <GitBranch size={15} />
                   )}
-                  Find branches
+                  {t("addInstance.findBranches")}
                 </button>
               )}
 
               {packBranches && packBranches.length > 0 && (
                 <div>
                   <div className="mb-1.5 flex items-center gap-1.5 text-sm text-ink-600">
-                    <GitBranch size={13} /> Branch
+                    <GitBranch size={13} /> {t("addInstance.branch")}
                   </div>
                   <Dropdown
                     value={packBranch}
                     onChange={setPackBranch}
+                    accentStyle={ACCENTS.packwiz as React.CSSProperties}
                     options={packBranches.map((b) => ({
                       value: b.name,
                       label: b.name,
@@ -403,13 +555,64 @@ export function AddInstanceModal({
                 </div>
               )}
 
+              <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-edge bg-ink-900/40 p-3">
+                <button
+                  onClick={() => setPackUnsup((v) => !v)}
+                  className="flex items-start gap-2.5 text-left"
+                >
+                  <span
+                    className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded transition ${
+                      packUnsup
+                        ? "bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow"
+                        : "border border-ink-600 text-transparent"
+                    }`}
+                  >
+                    <Check size={12} strokeWidth={3.5} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm text-gray-100">
+                      {t("addInstance.unsupEnable")}
+                    </span>
+                    <span className="block text-xs text-ink-600">
+                      {t("addInstance.unsupDesc1")}
+                      <span className="text-brass-300">unsup.toml</span>
+                      {t("addInstance.unsupDesc2")}
+                      <span className="text-brass-300">unsup</span>
+                      {t("addInstance.unsupDesc3")}
+                    </span>
+                  </span>
+                </button>
+                {packUnsup && (
+                  <div className="swap-in">
+                    <div className="mb-1.5 text-xs text-ink-600">
+                      {t("addInstance.pubKeyLabel")}<span className="font-mono">unsup.sig</span>
+                    </div>
+                    <input
+                      value={packPublicKey}
+                      onChange={(e) => setPackPublicKey(e.target.value)}
+                      placeholder="ed25519 …  or  signify …"
+                      className={`${inputCls} font-mono text-xs`}
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() =>
+                    api.openExternal("https://git.sleeping.town/exa/unsup/wiki").catch(() => {})
+                  }
+                  className="flex items-center gap-1.5 self-start text-xs text-brass-300 hover:text-brass-400"
+                >
+                  <BookOpen size={13} /> {t("addInstance.unsupWiki")}
+                </button>
+              </div>
+
               <button
                 onClick={() =>
                   api.openExternal("https://packwiz.infra.link/").catch(() => {})
                 }
                 className="flex items-center gap-1.5 self-start text-xs text-brass-300 hover:text-brass-400"
               >
-                <BookOpen size={13} /> What is packwiz? Read the wiki →
+                <BookOpen size={13} /> {t("addInstance.packwizWiki")}
               </button>
               <button
                 disabled={
@@ -418,14 +621,14 @@ export function AddInstanceModal({
                   (looksLikeRepo(packUrl) && !packBranch)
                 }
                 onClick={createPackwiz}
-                className="brass-btn flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="brass-btn flex shrink-0 items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
                   <Hammer size={16} />
                 )}
-                Add packwiz instance
+                {t("addInstance.addPackwiz")}
               </button>
             </div>
           )}
@@ -433,23 +636,24 @@ export function AddInstanceModal({
           {tab === "import" && (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
               <p className="text-xs text-ink-600">
-                Instances found in Prism Launcher and the Modrinth App. Importing
-                copies their mods, configs, and worlds into a new Brassworks
-                instance (Prism groups become folders).
+                {t("addInstance.importDesc")}
               </p>
               {scanningImports ? (
                 <div className="flex flex-1 items-center justify-center gap-2 text-sm text-ink-600">
-                  <Loader2 size={16} className="animate-spin" /> Scanning launchers…
+                  <Loader2 size={16} className="animate-spin" /> {t("addInstance.scanning")}
                 </div>
               ) : !imports || imports.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-ink-600">
-                  No Prism Launcher or Modrinth App instances found.
+                  {t("addInstance.noImports")}
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between text-xs text-ink-600">
                     <span>
-                      {imports.length} found · {selectedImports.size} selected
+                      {t("addInstance.foundSelected", {
+                        found: imports.length,
+                        selected: selectedImports.size,
+                      })}
                     </span>
                     <button
                       onClick={() =>
@@ -462,8 +666,8 @@ export function AddInstanceModal({
                       className="text-brass-300 hover:text-brass-400"
                     >
                       {selectedImports.size === imports.length
-                        ? "Clear all"
-                        : "Select all"}
+                        ? t("addInstance.clearAll")
+                        : t("addInstance.selectAll")}
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
@@ -532,9 +736,11 @@ export function AddInstanceModal({
                     ) : (
                       <Download size={16} />
                     )}
-                    Import{" "}
-                    {selectedImports.size > 0 ? `${selectedImports.size} ` : ""}
-                    selected
+                    {selectedImports.size > 0
+                      ? t("addInstance.importSelected", {
+                          count: selectedImports.size,
+                        })
+                      : t("addInstance.importSelectedNone")}
                   </button>
                 </>
               )}
@@ -544,20 +750,32 @@ export function AddInstanceModal({
           {(tab === "modrinth" || tab === "curseforge") && (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
               <button
-                onClick={() => fileInput.current?.click()}
+                onClick={pickFile}
                 className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-edge px-3 py-2 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
               >
-                <Upload size={14} /> Upload a .mrpack / CurseForge .zip instead
+                <Upload size={14} /> {t("addInstance.uploadInstead")}
               </button>
               <ModpackBrowser
                 source={tab}
                 detailInstanceId={detailInstanceId}
                 installing={installing}
+                featured={featured}
+                featuredEnabled={featuredEnabled}
+                onOpenFeatured={onOpenFeatured}
+                onEnableFeatured={onEnableFeatured}
                 onInstall={(projectId, versionId, packName2) =>
-                  onInstallModpack(tab, projectId, versionId, packName2)
+                  beginInstall({
+                    kind: "modpack",
+                    source: tab,
+                    projectId,
+                    versionId,
+                    name: packName2,
+                  })
                 }
               />
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
