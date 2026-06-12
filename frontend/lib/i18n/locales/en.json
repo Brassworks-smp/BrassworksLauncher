@@ -194,7 +194,8 @@
       "field": "Display language",
       "hint": "English is the default and the fallback for anything not yet translated.",
       "pseudo": "Pseudo-localization",
-      "pseudoDesc": "Replace translated text with x's so any untranslated UI stands out. For testing."
+      "pseudoDesc": "Replace translated text with x's so any untranslated UI stands out. For testing.",
+      "notComplete": "not completed"
     },
     "replay": {
       "title": "Replay the welcome tour",

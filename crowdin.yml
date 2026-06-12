@@ -6,3 +6,8 @@ preserve_hierarchy: true
 files:
   - source: /frontend/lib/i18n/locales/en.json
     translation: /frontend/lib/i18n/locales/%two_letters_code%.json
+    # Pirate English's two-letter code is "en", which would collide with the
+    # source en.json (and be dropped by the app). Give it a distinct file.
+    languages_mapping:
+      two_letters_code:
+        en-PT: en-PT

@@ -7,49 +7,54 @@ import {
 } from "react";
 
 import en from "./locales/en.json";
+import progress from "./progress.json";
 
 const LOCALE_LABELS: Record<string, string> = {
   en: "English",
-  // af: "Afrikaans",
-  // ar: "العربية",
-  // bg: "Български",
-  // ca: "Català",
-  // cs: "Čeština",
-  // da: "Dansk",
-  // de: "Deutsch",
-  // el: "Ελληνικά",
-  // es: "Español",
-  // et: "Eesti",
-  // fa: "فارسی",
-  // fi: "Suomi",
-  // fil: "Filipino",
-  // fr: "Français",
-  // he: "עברית",
-  // hi: "हिन्दी",
-  // hu: "Magyar",
-  // id: "Bahasa Indonesia",
-  // it: "Italiano",
-  // ja: "日本語",
-  // ko: "한국어",
-  // lt: "Lietuvių",
-  // lv: "Latviešu",
-  // nb: "Norsk bokmål",
-  // nl: "Nederlands",
-  // pl: "Polski",
-  // pt: "Português",
-  // "pt-BR": "Português (Brasil)",
-  // ro: "Română",
-  // ru: "Русский",
-  // sk: "Slovenčina",
-  // sr: "Српски",
-  // sv: "Svenska",
-  // th: "ไทย",
-  // tr: "Türkçe",
-  // uk: "Українська",
-  // vi: "Tiếng Việt",
-  // zh: "中文",
-  // "zh-CN": "中文（简体）",
-  // "zh-TW": "中文（繁體）",
+  "en-PT": "Pirate Speak",
+  lol: "LOLCAT",
+  af: "Afrikaans",
+  ar: "العربية",
+  bg: "Български",
+  ca: "Català",
+  cs: "Čeština",
+  da: "Dansk",
+  de: "Deutsch",
+  el: "Ελληνικά",
+  es: "Español",
+  et: "Eesti",
+  fa: "فارسی",
+  fi: "Suomi",
+  fil: "Filipino",
+  fr: "Français",
+  he: "עברית",
+  hi: "हिन्दी",
+  hr: "Hrvatski",
+  hu: "Magyar",
+  id: "Bahasa Indonesia",
+  it: "Italiano",
+  ja: "日本語",
+  ko: "한국어",
+  lt: "Lietuvių",
+  lv: "Latviešu",
+  ms: "Bahasa Melayu",
+  nb: "Norsk bokmål",
+  nl: "Nederlands",
+  pl: "Polski",
+  pt: "Português",
+  "pt-BR": "Português (Brasil)",
+  ro: "Română",
+  ru: "Русский",
+  sk: "Slovenčina",
+  sr: "Српски",
+  sv: "Svenska",
+  th: "ไทย",
+  tr: "Türkçe",
+  uk: "Українська",
+  vi: "Tiếng Việt",
+  zh: "中文",
+  "zh-CN": "中文（简体）",
+  "zh-TW": "中文（繁體）",
 };
 
 function flatten(
@@ -70,6 +75,10 @@ const CATALOGS: Record<string, Record<string, string>> = {
 };
 const EN = CATALOGS.en;
 
+const PROGRESS = progress as Record<string, number>;
+const SHOW_ABOVE = 40;
+const COMPLETE_AT = 95;
+
 const localeModules = import.meta.glob<Record<string, unknown>>(
   "./locales/*.json",
   { eager: true, import: "default" },
@@ -78,14 +87,20 @@ const localeModules = import.meta.glob<Record<string, unknown>>(
 for (const [path, mod] of Object.entries(localeModules)) {
   const code = path.slice(path.lastIndexOf("/") + 1, -".json".length);
   if (code === "en") continue;
+  if ((PROGRESS[code] ?? 0) <= SHOW_ABOVE) continue;
   const cat = flatten(mod);
   for (const k of Object.keys(cat)) if (cat[k].trim() === "") delete cat[k];
   CATALOGS[code] = cat;
 }
 
-export const LOCALES: { id: string; label: string }[] = Object.keys(CATALOGS)
-  .sort((a, b) => (a === "en" ? -1 : b === "en" ? 1 : a.localeCompare(b)))
-  .map((id) => ({ id, label: LOCALE_LABELS[id] ?? id }));
+export const LOCALES: { id: string; label: string; complete: boolean }[] =
+  Object.keys(CATALOGS)
+    .sort((a, b) => (a === "en" ? -1 : b === "en" ? 1 : a.localeCompare(b)))
+    .map((id) => ({
+      id,
+      label: LOCALE_LABELS[id] ?? id,
+      complete: id === "en" || (PROGRESS[id] ?? 0) >= COMPLETE_AT,
+    }));
 
 function pseudoize(s: string): string {
   let out = "";

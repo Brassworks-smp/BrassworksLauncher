@@ -393,7 +393,12 @@ export function SettingsView({
                 <Select
                   value={settings.locale}
                   onChange={(v) => patch({ locale: v })}
-                  options={LOCALES.map((l) => ({ value: l.id, label: l.label }))}
+                  options={LOCALES.map((l) => ({
+                    value: l.id,
+                    label: l.complete
+                      ? l.label
+                      : `${l.label} (${t("settings.language.notComplete")})`,
+                  }))}
                 />
               </Field>
               <Toggle

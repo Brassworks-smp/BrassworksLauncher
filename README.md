@@ -139,8 +139,9 @@ Brassworks Launcher is translated on **[Crowdin](https://crowdin.com/project/bra
 How it fits together:
 
 - English is the source language and lives in [`frontend/lib/i18n/locales/en.json`](frontend/lib/i18n/locales/en.json) - the single source of truth, and the file Crowdin uploads as its source. Edit copy there.
-- Finished translations come back as `frontend/lib/i18n/locales/<language>.json` and are loaded automatically - shipping a new language is just merging that file. Anything not yet translated falls back to English.
-- A GitHub Action keeps Crowdin in sync: it uploads new English strings and opens a pull request when translations are updated.
+- Finished translations come back as `frontend/lib/i18n/locales/<language>.json` and are loaded automatically. Anything not yet translated falls back to English.
+- Only languages **more than 40% translated** are offered in the language picker, so users never land on a half-English UI. Per-language completeness is tracked in `frontend/lib/i18n/progress.json`.
+- A GitHub Action keeps Crowdin in sync: it uploads new English strings, downloads translations, refreshes `progress.json`, and opens a pull request when anything changes.
 
 ---
 

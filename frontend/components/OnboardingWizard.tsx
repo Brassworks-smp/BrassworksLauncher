@@ -422,7 +422,12 @@ function LanguageStep({
         <Select
           value={settings.locale}
           onChange={(v) => onPatch({ locale: v })}
-          options={LOCALES.map((l) => ({ value: l.id, label: l.label }))}
+          options={LOCALES.map((l) => ({
+            value: l.id,
+            label: l.complete
+              ? l.label
+              : `${l.label} (${t("settings.language.notComplete")})`,
+          }))}
         />
       </div>
     </StepShell>
