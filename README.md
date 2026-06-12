@@ -7,7 +7,7 @@ The official launcher for the Brassworks SMP. Built with Rust and Tauri under th
 ### [**Download for macOS, Windows and Linux**](https://brassworks.opnsoc.org/launcher)
 
 [![Website](https://img.shields.io/badge/Download-brassworks.opnsoc.org-22C55E.svg)](https://brassworks.opnsoc.org/launcher)
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE)
 ![Rust](https://img.shields.io/badge/Rust-1.88+-orange.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB.svg)
 ![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Windows_%7C_Linux-lightgrey.svg)
@@ -185,4 +185,4 @@ cargo check --workspace
 
 ## License
 
-Brassworks Launcher is licensed under the **GNU Lesser General Public License v3.0 or later** (LGPL-3.0-or-later). See [LICENSE](LICENSE) for the full text, with the base GPL terms it builds on in [COPYING](COPYING).
+Brassworks Launcher is licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). See [LICENSE](LICENSE) for the full text.

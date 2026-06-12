@@ -8,7 +8,7 @@ version = "0.5.0"
 authors = ["Brassworks SMP"]
 homepage = "https://github.com/brassworks"
 repository = "https://github.com/brassworks/launcher"
-license = "LGPL-3.0-or-later"
+license = "GPL-3.0-or-later"
 readme = "README.md"
 rust-version = "1.88.0"
 
