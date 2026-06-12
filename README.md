@@ -11,6 +11,7 @@ The official launcher for the Brassworks SMP. Built with Rust and Tauri under th
 ![Rust](https://img.shields.io/badge/Rust-1.88+-orange.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB.svg)
 ![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Windows_%7C_Linux-lightgrey.svg)
+[![Crowdin](https://badges.crowdin.net/brassworks-launcher/localized.svg)](https://crowdin.com/project/brassworks-launcher)
 
 </div>
 
@@ -126,6 +127,20 @@ A handful of built-in themes and a customisable accent colour let you set the mo
 </td>
 </tr>
 </table>
+
+---
+
+## Translations
+
+[![Crowdin](https://badges.crowdin.net/brassworks-launcher/localized.svg)](https://crowdin.com/project/brassworks-launcher)
+
+Brassworks Launcher is translated on **[Crowdin](https://crowdin.com/project/brassworks-launcher)**. Want the launcher in your language, or spot a wording that's off? Head to the Crowdin project, pick a language (or request a new one), and start translating - no coding required.
+
+How it fits together:
+
+- English is the source language and lives in [`frontend/lib/i18n/locales/en.json`](frontend/lib/i18n/locales/en.json) - the single source of truth, and the file Crowdin uploads as its source. Edit copy there.
+- Finished translations come back as `frontend/lib/i18n/locales/<language>.json` and are loaded automatically - shipping a new language is just merging that file. Anything not yet translated falls back to English.
+- A GitHub Action keeps Crowdin in sync: it uploads new English strings and opens a pull request when translations are updated.
 
 ---
 
