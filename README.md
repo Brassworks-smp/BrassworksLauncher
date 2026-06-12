@@ -4,6 +4,9 @@
 
 The official launcher for the Brassworks SMP. Built with Rust and Tauri under the hood, plus a React (Vite) frontend, it makes installing, managing, and launching our custom modpack as simple as possible.
 
+### [**Download for macOS, Windows and Linux**](https://brassworks.opnsoc.org/launcher)
+
+[![Website](https://img.shields.io/badge/Download-brassworks.opnsoc.org-22C55E.svg)](https://brassworks.opnsoc.org/launcher)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](LICENSE)
 ![Rust](https://img.shields.io/badge/Rust-1.88+-orange.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB.svg)
