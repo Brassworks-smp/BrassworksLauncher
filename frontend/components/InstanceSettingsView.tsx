@@ -36,7 +36,8 @@ import {
   isBuiltinIcon,
 } from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
-import { VersionPicker } from "@/components/VersionPicker";
+import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
+import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { FlavorPicker } from "@/components/FlavorPicker";
 import type {
   Instance,
@@ -1204,6 +1205,12 @@ function VersionLoaderCard({
   const [pickerLoader, setPickerLoader] = useState(kindToPicker(instance.loader));
   const [mc, setMc] = useState(instance.minecraft_version);
   const [lv, setLv] = useState(lvToStr(instance.loader_version));
+  
+  
+  const [loaderStatus, setLoaderStatus] = useState<LoaderStatus>("ok");
+  
+  
+  const { supported: supportedLoaders } = useSupportedLoaders(mc);
   const kind = VL_LOADERS.find((l) => l.id === pickerLoader)?.kind ?? "vanilla";
   const changed =
     kind !== instance.loader ||
@@ -1217,22 +1224,28 @@ function VersionLoaderCard({
         hint={t("instanceSettings.version.modLoaderHint")}
       >
         <div className="flex flex-wrap gap-1.5">
-          {VL_LOADERS.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => {
-                setPickerLoader(l.id);
-                if (l.id !== pickerLoader) setLv("stable");
-              }}
-              className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
-                pickerLoader === l.id
-                  ? "border-brass-500/50 bg-brass-500/15 text-brass-300"
-                  : "border-edge text-ink-600 hover:text-brass-300"
-              }`}
-            >
-              {t(l.tkey)}
-            </button>
-          ))}
+          {VL_LOADERS.map((l) => {
+            const disabled =
+              supportedLoaders !== null && !supportedLoaders.includes(l.id);
+            return (
+              <button
+                key={l.id}
+                disabled={disabled}
+                title={disabled ? t("versionPicker.loaderUnavailable", { loader: t(l.tkey), mc }) : undefined}
+                onClick={() => {
+                  setPickerLoader(l.id);
+                  if (l.id !== pickerLoader) setLv("stable");
+                }}
+                className={`rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30 ${
+                  pickerLoader === l.id
+                    ? "border-brass-500/50 bg-brass-500/15 text-brass-300"
+                    : "border-edge text-ink-600 hover:text-brass-300"
+                }`}
+              >
+                {t(l.tkey)}
+              </button>
+            );
+          })}
         </div>
       </Field>
       <VersionPicker
@@ -1241,6 +1254,7 @@ function VersionLoaderCard({
         setMc={setMc}
         loaderVersion={lv}
         setLoaderVersion={setLv}
+        onStatus={setLoaderStatus}
       />
       <button
         onClick={() => {
@@ -1251,7 +1265,11 @@ function VersionLoaderCard({
           });
           toast(t("instanceSettings.version.updatedToast"), "info");
         }}
-        disabled={!changed}
+        disabled={
+          !changed ||
+          loaderStatus === "unavailable" ||
+          loaderStatus === "checking"
+        }
         className="brass-btn flex items-center justify-center gap-2 self-start rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Wrench size={15} /> {t("instanceSettings.version.apply")}

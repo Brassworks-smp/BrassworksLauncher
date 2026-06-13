@@ -447,6 +447,11 @@ export const loaderVersions = (
 ): Promise<LoaderVersionInfo[]> =>
   invoke("loader_versions", { loader, minecraftVersion });
 
+export const supportedLoaders = (
+  minecraftVersion: string,
+): Promise<string[]> =>
+  invoke("supported_loaders", { minecraftVersion });
+
 export const searchModpacks = (
   source: string,
   query: string,

@@ -19,7 +19,8 @@ import type {
   OptionalComponent,
   FeaturedPack,
 } from "@/lib/types";
-import { VersionPicker } from "@/components/VersionPicker";
+import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
+import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
 import { OptionalModsPicker } from "@/components/OptionalModsPicker";
 import { FlavorPicker } from "@/components/FlavorPicker";
@@ -100,19 +101,6 @@ const ACCENTS: Record<Tab, Record<string, string> | undefined> = {
 };
 
 
-function loaderAllowed(loader: string, mc: string): boolean {
-  if (loader === "vanilla") return true;
-  const parts = mc.split(".");
-  if (parts[0] !== "1") return true;
-  const minor = Number(parts[1]);
-  const patch = Number(parts[2] ?? "0");
-  if (!Number.isFinite(minor)) return true; 
-  if (loader === "neoforge") return minor > 20 || (minor === 20 && patch >= 1);
-  if (loader === "fabric" || loader === "quilt") return minor >= 14;
-  if (loader === "forge") return minor >= 1;
-  return true;
-}
-
 const inputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
 
@@ -165,16 +153,24 @@ export function AddInstanceModal({
   const { closing, close } = useClosable(onClose);
 
   const [name, setName] = useState("");
-  const [loader, setLoader] = useState("fabric");
+  const [loader, setLoader] = useState("vanilla");
   const [mc, setMc] = useState("");
   const [loaderVersion, setLoaderVersion] = useState("stable");
+  
+  
+  const [loaderStatus, setLoaderStatus] = useState<LoaderStatus>("ok");
+  
+  
+  const { supported: supportedLoaders } = useSupportedLoaders(mc);
 
+  
+  
   useEffect(() => {
-    if (mc && !loaderAllowed(loader, mc)) {
+    if (supportedLoaders && !supportedLoaders.includes(loader)) {
       setLoader("vanilla");
       setLoaderVersion("stable");
     }
-  }, [mc, loader]);
+  }, [supportedLoaders, loader]);
 
   
   const [pending, setPending] = useState<PendingInstall | null>(null);
@@ -461,7 +457,8 @@ export function AddInstanceModal({
                 <div className="mb-1.5 text-sm text-ink-600">{t("addInstance.modLoader")}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {LOADERS.map((l) => {
-                    const disabled = !!mc && !loaderAllowed(l.id, mc);
+                    const disabled =
+                      supportedLoaders !== null && !supportedLoaders.includes(l.id);
                     return (
                       <button
                         key={l.id}
@@ -489,9 +486,18 @@ export function AddInstanceModal({
                 setMc={setMc}
                 loaderVersion={loaderVersion}
                 setLoaderVersion={setLoaderVersion}
+                onStatus={setLoaderStatus}
               />
               <button
-                disabled={busy || !mc}
+                disabled={
+                  busy ||
+                  !mc ||
+                  
+                  
+                  
+                  loaderStatus === "unavailable" ||
+                  loaderStatus === "checking"
+                }
                 onClick={createCustom}
                 className="brass-btn flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
               >

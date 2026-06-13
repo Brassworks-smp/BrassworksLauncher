@@ -1100,6 +1100,15 @@ pub(crate) async fn loader_versions(
     .map_err(err)?
 }
 
+#[tauri::command]
+pub(crate) async fn supported_loaders(minecraft_version: String) -> CmdResult<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(brassworks_core::supported_loaders(&minecraft_version))
+    })
+    .await
+    .map_err(err)?
+}
+
 
 #[tauri::command]
 pub(crate) async fn search_modpacks(

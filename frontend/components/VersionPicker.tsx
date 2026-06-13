@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Check, Keyboard, List } from "lucide-react";
+import { Loader2, Check, Keyboard, List, AlertTriangle } from "lucide-react";
 import * as api from "@/lib/api";
 import type { McVersion, LoaderVersionInfo } from "@/lib/types";
 import { Dropdown } from "@/components/ui";
@@ -8,18 +8,23 @@ import { useT } from "@/lib/i18n";
 const baseInputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
 
+
+export type LoaderStatus = "ok" | "unavailable" | "checking" | "error";
+
 export function VersionPicker({
   loader,
   mc,
   setMc,
   loaderVersion,
   setLoaderVersion,
+  onStatus,
 }: {
   loader: string;
   mc: string;
   setMc: (v: string) => void;
   loaderVersion: string;
   setLoaderVersion: (v: string) => void;
+  onStatus?: (status: LoaderStatus) => void;
 }) {
   const t = useT();
   const [snapshots, setSnapshots] = useState(false);
@@ -28,6 +33,13 @@ export function VersionPicker({
   const [loaderVersions, setLoaderVersions] = useState<LoaderVersionInfo[]>([]);
   const [loadingMc, setLoadingMc] = useState(false);
   const [loadingLoader, setLoadingLoader] = useState(false);
+  
+  
+  const [loaderErr, setLoaderErr] = useState(false);
+  
+  
+  
+  const [loadedKey, setLoadedKey] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -50,22 +62,58 @@ export function VersionPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshots]);
 
+  const liveKey = loader === "vanilla" ? "" : `${loader}@${mc}`;
+
   useEffect(() => {
     if (loader === "vanilla" || !mc) {
       setLoaderVersions([]);
+      setLoaderErr(false);
       return;
     }
+    const key = `${loader}@${mc}`;
     let alive = true;
     setLoadingLoader(true);
+    setLoaderVersions([]);
+    setLoaderErr(false);
     api
       .loaderVersions(loader, mc)
-      .then((v) => alive && setLoaderVersions(v))
-      .catch(() => alive && setLoaderVersions([]))
+      .then((v) => {
+        if (!alive) return;
+        setLoaderVersions(v);
+        setLoadedKey(key);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLoaderErr(true);
+        setLoadedKey(key);
+      })
       .finally(() => alive && setLoadingLoader(false));
     return () => {
       alive = false;
     };
   }, [loader, mc]);
+
+  
+  
+  
+  
+  
+  
+  const status: LoaderStatus =
+    loader === "vanilla"
+      ? "ok"
+      : !mc || loadingLoader || loadedKey !== liveKey
+        ? "checking"
+        : loaderErr
+          ? "error"
+          : loaderVersions.length > 0
+            ? "ok"
+            : "unavailable";
+
+  useEffect(() => {
+    onStatus?.(status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -141,6 +189,7 @@ export function VersionPicker({
             <Dropdown
               value={loaderVersion}
               onChange={setLoaderVersion}
+              disabled={status === "unavailable"}
               options={[
                 { value: "stable", label: t("versionPicker.latestStable") },
                 ...loaderVersions.map((v) => ({
@@ -156,6 +205,17 @@ export function VersionPicker({
               />
             )}
           </div>
+          {status === "unavailable" && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-red-400">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>
+                {t("versionPicker.loaderUnavailable", {
+                  loader: loader.charAt(0).toUpperCase() + loader.slice(1),
+                  mc,
+                })}
+              </span>
+            </p>
+          )}
         </div>
       )}
     </div>

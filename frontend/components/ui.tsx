@@ -521,13 +521,15 @@ export function Dropdown({
   options,
   placeholder,
   accentStyle,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
-  
+
   accentStyle?: React.CSSProperties;
+  disabled?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -539,6 +541,7 @@ export function Dropdown({
   useMenuDismiss(open, close, menuRef);
 
   const toggle = () => {
+    if (disabled) return;
     if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
     setOpen((o) => !o);
   };
@@ -551,7 +554,8 @@ export function Dropdown({
         ref={btnRef}
         type="button"
         onClick={toggle}
-        className={`${inputCls} flex cursor-pointer items-center justify-between gap-2 text-left`}
+        disabled={disabled}
+        className={`${inputCls} flex cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50`}
       >
         <span className={`truncate ${selected ? "" : "text-ink-600"}`}>
           {selected ? selected.label : placeholder ?? t("ui.select")}
