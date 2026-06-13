@@ -51,7 +51,9 @@ pub use remote::{
     news, player_count, release_changelog, upload_log, LogUpload, NewsItem, PlayerCount,
     PlayerGroup,
 };
-pub use versions::{loader_versions, minecraft_versions, LoaderVersionInfo, McVersion};
+pub use versions::{
+    loader_versions, minecraft_versions, supported_loaders, LoaderVersionInfo, McVersion,
+};
 pub use skins::{Cape, SavedSkin, SkinLibraryView, SkinProfile};
 pub use settings::{InstanceFolder, LauncherSettings};
 

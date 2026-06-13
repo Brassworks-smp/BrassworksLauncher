@@ -24,3 +24,7 @@ fastnbt.workspace = true
 flate2.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "multipart"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+
+sha1.workspace = true

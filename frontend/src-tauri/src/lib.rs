@@ -265,6 +265,7 @@ pub fn run() {
             commands::import_external,
             commands::minecraft_versions,
             commands::loader_versions,
+            commands::supported_loaders,
             commands::search_modpacks,
             commands::modpack_versions,
             commands::install_modpack,

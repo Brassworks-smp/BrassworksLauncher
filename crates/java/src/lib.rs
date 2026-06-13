@@ -36,7 +36,17 @@ pub fn major_for_minecraft(mc_version: &str) -> u32 {
     }
 }
 
+
+pub fn provisionable_major(required: u32) -> u32 {
+    match required {
+        16 => 17,
+        other => other,
+    }
+}
+
 pub fn ensure_runtime(jvm_dir: &Path, major: u32) -> Result<PathBuf, String> {
+    let major = provisionable_major(major);
+
     if let Some(found) = list_runtimes(jvm_dir)
         .into_iter()
         .find(|r| r.major == Some(major))
@@ -297,5 +307,14 @@ mod tests {
         assert_eq!(parse_major("21.0.3"), Some(21));
         assert_eq!(parse_major("1.8.0_392"), Some(8));
         assert_eq!(parse_major("17"), Some(17));
+    }
+
+    #[test]
+    fn java16_substitutes_to_17() {
+        // Adoptium has no Temurin 16 JRE; MC 1.17 (Java 16) runs on Java 17.
+        assert_eq!(provisionable_major(16), 17);
+        assert_eq!(provisionable_major(8), 8);
+        assert_eq!(provisionable_major(17), 17);
+        assert_eq!(provisionable_major(21), 21);
     }
 }

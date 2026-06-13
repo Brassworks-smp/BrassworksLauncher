@@ -1,0 +1,72 @@
+name: Live install test
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which part of the suite to run
+        type: choice
+        default: all
+        options:
+          - all
+          - vanilla
+          - deep
+          - java
+          - loaders
+          - fabric
+          - quilt
+          - forge
+          - neoforge
+      threads:
+        description: Parallel workers for the vanilla sweep (LIVE_THREADS)
+        type: string
+        default: "8"
+      limit:
+        description: Cap the number of vanilla versions (LIVE_LIMIT, blank = all)
+        type: string
+        default: ""
+
+jobs:
+  live-install:
+    name: Live install (${{ inputs.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build the live test (no run)
+        run: cargo test -p brassworks-core --test live_install --no-run
+
+      - name: Run live suite
+        env:
+          RUST_BACKTRACE: "1"
+          LIVE_THREADS: ${{ inputs.threads }}
+          LIVE_LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          case "${{ inputs.suite }}" in
+            all)      FILTERS="" ;;
+            vanilla)  FILTERS="vanilla_all_versions_resolve" ;;
+            deep)     FILTERS="vanilla_deep_audit" ;;
+            java)     FILTERS="java_runtimes_download_and_probe" ;;
+            loaders)  FILTERS="fabric_loaders_resolve quilt_loaders_resolve forge_installers_resolve neoforge_installers_resolve" ;;
+            fabric)   FILTERS="fabric_loaders_resolve" ;;
+            quilt)    FILTERS="quilt_loaders_resolve" ;;
+            forge)    FILTERS="forge_installers_resolve" ;;
+            neoforge) FILTERS="neoforge_installers_resolve" ;;
+          esac
+          cargo test -p brassworks-core --test live_install -- \
+            --ignored --nocapture --test-threads=1 $FILTERS

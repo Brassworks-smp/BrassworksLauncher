@@ -886,7 +886,9 @@
     "typeManually": "Type manually",
     "selectVersion": "Select version…",
     "latestStable": "Latest stable (recommended)",
-    "betaSuffix": " (beta)"
+    "betaSuffix": " (beta)",
+    "loaderUnavailable": "{loader} has no build for Minecraft {mc}. Pick a different version or loader.",
+    "checkingLoader": "Checking loader availability…"
   },
   "datapacks": {
     "installed": "Installed",
