@@ -268,12 +268,22 @@ pub enum Event<'a> {
 
 pub trait Handler {
     fn on_event(&mut self, event: Event);
+
+    /// Return `true` to request that an in-progress install be aborted.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 impl<H: Handler + ?Sized> Handler for &mut H {
     #[inline]
     fn on_event(&mut self, event: Event) {
         (**self).on_event(event)
+    }
+
+    #[inline]
+    fn cancelled(&self) -> bool {
+        (**self).cancelled()
     }
 }
 
@@ -285,13 +295,16 @@ impl Handler for () {
 
 #[allow(unused)]
 pub(crate) trait HandlerInto: Handler + Sized {
-    
+
     #[inline]
     fn into_mojang(self) -> impl moj::Handler {
         pub(crate) struct Adapter<H: Handler>(pub H);
         impl<H: Handler> moj::Handler for Adapter<H> {
             fn on_event(&mut self, event: moj::Event) {
                 self.0.on_event(Event::Mojang(event));
+            }
+            fn cancelled(&self) -> bool {
+                self.0.cancelled()
             }
         }
         Adapter(self)
@@ -366,6 +379,14 @@ pub enum Error {
 impl<T: Into<moj::Error>> From<T> for Error {
     fn from(value: T) -> Self {
         Self::Mojang(value.into())
+    }
+}
+
+impl Error {
+    /// `true` if this error was produced because the install was cancelled.
+    #[inline]
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Mojang(e) if e.is_cancelled())
     }
 }
 

@@ -280,9 +280,14 @@ impl Installer {
                 return Err(Error::DownloadResourcesCancelled {  });
             }
 
-            batch.download((&mut *handler).into_download())
-                .map_err(|e| Error::new_reqwest(e, "download resources"))?
-                .into_result()?;
+            let result = batch.download((&mut *handler).into_download())
+                .map_err(|e| Error::new_reqwest(e, "download resources"))?;
+
+            if result.cancelled() {
+                return Err(Error::DownloadResourcesCancelled {  });
+            }
+
+            result.into_result()?;
 
             handler.on_event(Event::DownloadedResources);
 
@@ -1545,12 +1550,22 @@ pub enum Event<'a> {
 
 pub trait Handler {
     fn on_event(&mut self, event: Event);
+
+    /// Return `true` to request that an in-progress resource download be aborted.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 impl<H: Handler + ?Sized> Handler for &mut H {
     #[inline]
     fn on_event(&mut self, event: Event) {
         (**self).on_event(event)
+    }
+
+    #[inline]
+    fn cancelled(&self) -> bool {
+        (**self).cancelled()
     }
 }
 
@@ -1561,13 +1576,16 @@ impl Handler for () {
 }
 
 pub(crate) trait HandlerInto: Handler + Sized {
-    
+
     #[inline]
     fn into_download(self) -> impl download::Handler {
         pub(crate) struct Adapter<H: Handler>(pub H);
         impl<H: Handler> download::Handler for Adapter<H> {
             fn on_progress(&mut self, count: u32, total_count: u32, size: u32, total_size: u32) {
                 self.0.on_event(Event::DownloadProgress { count, total_count, size, total_size });
+            }
+            fn cancelled(&self) -> bool {
+                self.0.cancelled()
             }
         }
         Adapter(self)
@@ -1634,6 +1652,13 @@ impl From<download::EntryError> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
+
+    /// `true` if this error was produced because the install was cancelled.
+    #[inline]
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::DownloadResourcesCancelled { .. })
+            || matches!(self, Self::Download { batch } if batch.cancelled())
+    }
 
     #[inline]
     pub(crate) fn new_io(error: io::Error, origin: impl Into<Box<str>>) -> Self {

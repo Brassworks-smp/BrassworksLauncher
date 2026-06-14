@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, X, Download } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 export type ToastKind = "success" | "error" | "info" | "progress";
 
@@ -8,9 +9,10 @@ interface Toast {
   key?: string;
   kind: ToastKind;
   message: string;
-  
+
   progress?: number | null;
   sticky?: boolean;
+  onCancel?: () => void;
 }
 
 type Action =
@@ -32,10 +34,19 @@ export function toastProgress(
   key: string,
   message: string,
   progress: number | null,
+  onCancel?: () => void,
 ) {
   emit({
     type: "upsert",
-    toast: { id: ++counter, key, kind: "progress", message, progress, sticky: true },
+    toast: {
+      id: ++counter,
+      key,
+      kind: "progress",
+      message,
+      progress,
+      sticky: true,
+      onCancel,
+    },
   });
 }
 
@@ -70,6 +81,7 @@ const STYLE: Record<
 };
 
 export function ToastHost() {
+  const tr = useT();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -172,6 +184,14 @@ export function ToastHost() {
                   style={{ width: t.progress !== null ? `${t.progress}%` : "40%" }}
                 />
               </div>
+            )}
+            {isProgress && t.onCancel && (
+              <button
+                onClick={() => t.onCancel?.()}
+                className="self-end text-xs font-medium text-ink-600 transition hover:text-red-400"
+              >
+                {tr("common.cancel")}
+              </button>
             )}
           </div>
         );

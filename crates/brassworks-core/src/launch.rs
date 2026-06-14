@@ -37,11 +37,16 @@ pub enum QuickPlay {
 struct ProgressHandler<'a> {
     instance_id: String,
     sink: &'a mut ProgressSink,
+    cancel: &'a dyn Fn() -> bool,
 }
 
 impl ProgressHandler<'_> {
     fn emit(&mut self, progress: LaunchProgress) {
         (self.sink)(progress);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        (self.cancel)()
     }
 
     fn stage(&mut self, stage: LaunchStage, message: impl Into<String>) {
@@ -99,6 +104,9 @@ impl ProgressHandler<'_> {
 }
 
 impl forge::Handler for ProgressHandler<'_> {
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
     fn on_event(&mut self, event: ForgeEvent) {
         match event {
             ForgeEvent::Mojang(moj) => self.handle_moj(&moj),
@@ -132,6 +140,9 @@ impl forge::Handler for ProgressHandler<'_> {
 }
 
 impl fabric::Handler for ProgressHandler<'_> {
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
     fn on_event(&mut self, event: FabricEvent) {
         match event {
             FabricEvent::Mojang(moj) => self.handle_moj(&moj),
@@ -256,6 +267,33 @@ fn jvm_args(req: &LaunchRequest) -> Vec<String> {
     args
 }
 
+trait InstallError: std::fmt::Debug {
+    fn cancelled(&self) -> bool;
+}
+impl InstallError for forge::Error {
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
+}
+impl InstallError for moj::Error {
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
+}
+impl InstallError for fabric::Error {
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
+}
+
+fn map_install_err<E: InstallError>(e: E) -> CoreError {
+    if e.cancelled() {
+        CoreError::Cancelled
+    } else {
+        CoreError::Launch(format!("{e:?}"))
+    }
+}
+
 pub fn launch_instance(
     req: LaunchRequest<'_>,
     cancel: &dyn Fn() -> bool,
@@ -281,6 +319,7 @@ pub fn launch_instance(
     let mut handler = ProgressHandler {
         instance_id: instance_id.clone(),
         sink: on_progress,
+        cancel,
     };
 
     let java_override = resolve_java(&req, &mut handler);
@@ -303,14 +342,14 @@ pub fn launch_instance(
             configure_mojang(&req, installer.mojang_mut(), java_override)?;
             installer
                 .install(&mut handler)
-                .map_err(|e| CoreError::Launch(format!("{e:?}")))?
+                .map_err(map_install_err)?
         }
         LoaderKind::Vanilla => {
             let mut installer = moj::Installer::new(req.instance.minecraft_version.clone());
             configure_mojang(&req, &mut installer, java_override)?;
             installer
                 .install(MojOnly(&mut handler))
-                .map_err(|e| CoreError::Launch(format!("{e:?}")))?
+                .map_err(map_install_err)?
         }
         LoaderKind::Fabric | LoaderKind::Quilt => {
             let loader = if req.instance.loader == LoaderKind::Fabric {
@@ -326,7 +365,7 @@ pub fn launch_instance(
             configure_mojang(&req, installer.mojang_mut(), java_override)?;
             installer
                 .install(&mut handler)
-                .map_err(|e| CoreError::Launch(format!("{e:?}")))?
+                .map_err(map_install_err)?
         }
     };
 
@@ -553,6 +592,9 @@ fn sync_packwiz(
 struct MojOnly<'a, 'b>(&'a mut ProgressHandler<'b>);
 
 impl moj::Handler for MojOnly<'_, '_> {
+    fn cancelled(&self) -> bool {
+        self.0.is_cancelled()
+    }
     fn on_event(&mut self, event: MojEvent) {
         self.0.handle_moj(&event);
     }

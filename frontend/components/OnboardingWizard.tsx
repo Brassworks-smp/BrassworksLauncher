@@ -52,12 +52,12 @@ export function OnboardingWizard({
 
   const steps = [
     { key: "welcome", node: <WelcomeStep /> },
+    { key: "language", node: <LanguageStep settings={settings} onPatch={onPatch} /> },
     { key: "theme", node: <ThemeStep settings={settings} onPatch={onPatch} /> },
     { key: "import", node: <ImportStep onOpenImport={onOpenImport} /> },
     { key: "featured", node: <FeaturedStep settings={settings} onPatch={onPatch} /> },
     { key: "ram", node: <RamStep settings={settings} onPatch={onPatch} /> },
     { key: "rpc", node: <RpcStep settings={settings} onPatch={onPatch} /> },
-    { key: "language", node: <LanguageStep settings={settings} onPatch={onPatch} /> },
     {
       key: "signin",
       node: (

@@ -120,11 +120,9 @@ export function markAllTabIntrosSeen() {
 export function TabIntro({
   view,
   onClose,
-  onSkipAll,
 }: {
   view: View;
   onClose: () => void;
-  onSkipAll: () => void;
 }) {
   const def = INTROS[view];
   const t = useT();
@@ -152,22 +150,14 @@ export function TabIntro({
           ))}
         </div>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        <button
-          onClick={onClose}
-          title={t("tabIntro.dismiss")}
-          aria-label={t("tabIntro.dismiss")}
-          className="grid h-7 w-7 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
-        >
-          <X size={15} />
-        </button>
-        <button
-          onClick={onSkipAll}
-          className="whitespace-nowrap text-[11px] text-ink-600 transition hover:text-brass-300"
-        >
-          {t("tabIntro.skipTips")}
-        </button>
-      </div>
+      <button
+        onClick={onClose}
+        title={t("tabIntro.dismiss")}
+        aria-label={t("tabIntro.dismiss")}
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
+      >
+        <X size={15} />
+      </button>
     </div>
   );
 }

@@ -43,7 +43,6 @@ import {
   hasTabIntro,
   tabIntroSeen,
   markTabIntroSeen,
-  markAllTabIntrosSeen,
   resetTabIntros,
 } from "@/components/TabIntro";
 import { RestartPrompt } from "@/components/RestartPrompt";
@@ -417,7 +416,6 @@ export default function Home() {
     if (!settings || onboardingOpen) return;
     if (!hasTabIntro(view) || tabIntroSeen(view)) return;
     if (INSTANCE_VIEWS.includes(view) && !selectedId) return;
-    markTabIntroSeen(view);
     setTabIntro(view);
   }, [settings, onboardingOpen, view, selectedId]);
 
@@ -527,6 +525,7 @@ export default function Home() {
           `modpack:${p.instance_id}`,
           p.message || tr("page.updatingModpack"),
           pct,
+          () => api.cancelOp(p.instance_id).catch(() => {}),
         );
       }),
       api.onModpackDone((d) => {
@@ -565,7 +564,12 @@ export default function Home() {
       api.onPackProgress((p) => {
         const pct =
           p.total > 0 ? Math.min(100, Math.round((p.current / p.total) * 100)) : null;
-        toastProgress("install", p.message || tr("page.installingModpack"), pct);
+        toastProgress(
+          "install",
+          p.message || tr("page.installingModpack"),
+          pct,
+          () => api.cancelInstall().catch(() => {}),
+        );
       }),
       api.onPackDone((d) => {
         setInstalling(false);
@@ -730,7 +734,9 @@ export default function Home() {
       optional: string[],
     ) => {
       setInstalling(true);
-      toastProgress("install", "Starting install…", null);
+      toastProgress("install", "Starting install…", null, () =>
+        api.cancelInstall().catch(() => {}),
+      );
       api.installModpack(source, projectId, versionId, name, optional).catch((e) => {
         setInstalling(false);
         dismissToast("install");
@@ -748,7 +754,9 @@ export default function Home() {
       optional: string[],
     ) => {
       setInstalling(true);
-      toastProgress("install", "Reading file…", null);
+      toastProgress("install", "Reading file…", null, () =>
+        api.cancelInstall().catch(() => {}),
+      );
       api.installModpackFile(path, source, name, optional).catch((e) => {
         setInstalling(false);
         dismissToast("install");
@@ -940,9 +948,8 @@ export default function Home() {
           {tabIntro === view && (
             <TabIntro
               view={tabIntro}
-              onClose={() => setTabIntro(null)}
-              onSkipAll={() => {
-                markAllTabIntrosSeen();
+              onClose={() => {
+                markTabIntroSeen(tabIntro);
                 setTabIntro(null);
               }}
             />

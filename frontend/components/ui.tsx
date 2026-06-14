@@ -541,8 +541,8 @@ export function Dropdown({
   const close = useCallback(() => setOpen(false), []);
   useMenuDismiss(open, close, menuRef);
 
-  // When the menu opens, reveal the currently-selected option so it's clear
-  // which one is active in long lists (e.g. Minecraft versions).
+  
+  
   useLayoutEffect(() => {
     if (!open) return;
     const menu = menuRef.current;

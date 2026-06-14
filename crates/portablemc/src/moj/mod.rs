@@ -533,12 +533,22 @@ pub enum Event<'a> {
 
 pub trait Handler {
     fn on_event(&mut self, event: Event);
+
+    /// Return `true` to request that an in-progress install be aborted.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 impl<H: Handler + ?Sized> Handler for &mut H {
     #[inline]
     fn on_event(&mut self, event: Event) {
         (**self).on_event(event)
+    }
+
+    #[inline]
+    fn cancelled(&self) -> bool {
+        (**self).cancelled()
     }
 }
 
@@ -549,13 +559,16 @@ impl Handler for () {
 }
 
 pub(crate) trait HandlerInto: Handler + Sized {
-    
+
     #[inline]
     fn into_base(self) -> impl base::Handler {
         pub(crate) struct Adapter<H: Handler>(pub H);
         impl<H: Handler> base::Handler for Adapter<H> {
             fn on_event(&mut self, event: base::Event) {
                 self.0.on_event(Event::Base(event));
+            }
+            fn cancelled(&self) -> bool {
+                self.0.cancelled()
             }
         }
         Adapter(self)
@@ -584,6 +597,14 @@ pub enum Error {
 impl<T: Into<base::Error>> From<T> for Error {
     fn from(value: T) -> Self {
         Error::Base(value.into())
+    }
+}
+
+impl Error {
+    /// `true` if this error was produced because the install was cancelled.
+    #[inline]
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Base(e) if e.is_cancelled())
     }
 }
 
@@ -767,6 +788,10 @@ impl<'a> base::Handler for InternalHandler<'a> {
 
         self.inner.on_event(Event::Base(event));
 
+    }
+
+    fn cancelled(&self) -> bool {
+        self.inner.cancelled()
     }
 
 }

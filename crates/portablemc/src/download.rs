@@ -255,6 +255,7 @@ impl Entry {
 pub struct BatchResult {
     entries: Box<[Result<EntrySuccess, EntryError>]>,
     errors: Box<[usize]>,
+    cancelled: bool,
 }
 
 impl BatchResult {
@@ -262,6 +263,12 @@ impl BatchResult {
     #[inline]
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// `true` if the batch was aborted because the handler requested cancellation.
+    #[inline]
+    pub fn cancelled(&self) -> bool {
+        self.cancelled
     }
 
     #[inline]
@@ -323,6 +330,7 @@ impl From<Result<EntrySuccess, EntryError>> for BatchResult {
         Self {
             errors: if value.is_err() { Box::new([0]) } else { Box::new([]) },
             entries: Box::new([value]),
+            cancelled: false,
         }
     }
 }
@@ -332,6 +340,7 @@ impl From<EntrySuccess> for BatchResult {
         Self {
             entries: Box::new([Ok(value)]),
             errors: Box::new([]),
+            cancelled: false,
         }
     }
 }
@@ -341,6 +350,7 @@ impl From<EntryError> for BatchResult {
         Self {
             entries: Box::new([Err(value)]),
             errors: Box::new([0]),
+            cancelled: false,
         }
     }
 }
@@ -475,6 +485,8 @@ pub enum EntryErrorKind {
     InvalidStatus(u16),
     #[error("internal: {0}")]
     Internal(#[source] Box<dyn error::Error + Send + Sync>),
+    #[error("cancelled")]
+    Cancelled,
 }
 
 impl EntryErrorKind {
@@ -512,12 +524,23 @@ impl EntryError {
 
 pub trait Handler {
     fn on_progress(&mut self, count: u32, total_count: u32, size: u32, total_size: u32);
+
+    /// Return `true` to request that an in-progress batch download be aborted.
+    /// Checked between download chunks so cancellation takes effect mid-download.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 impl<H: Handler + ?Sized> Handler for &mut H {
     #[inline]
     fn on_progress(&mut self, count: u32, total_count: u32, size: u32, total_size: u32) {
         Handler::on_progress(&mut **self, count, total_count, size, total_size)
+    }
+
+    #[inline]
+    fn cancelled(&self) -> bool {
+        Handler::cancelled(&**self)
     }
 }
 
@@ -568,13 +591,27 @@ async fn download_many(
 
     let mut results = (0..entries.len()).map(|_| None).collect::<Vec<_>>();
 
+    let mut cancelled = false;
+
     while completed < entries.len() || !futures.is_empty() {
-        
-        while futures.len() < concurrent_count && !indices.is_empty() {
+
+
+        if !cancelled && handler.cancelled() {
+            cancelled = true;
+            indices.clear();
+            futures.abort_all();
+        }
+
+
+        if cancelled && futures.is_empty() {
+            break;
+        }
+
+        while !cancelled && futures.len() < concurrent_count && !indices.is_empty() {
             futures.spawn(download_many_entry(
-                client.clone(), 
+                client.clone(),
                 Arc::clone(&entries),
-                indices.pop().unwrap(),  
+                indices.pop().unwrap(),
                 progress_tx.clone()));
         }
 
@@ -582,11 +619,13 @@ async fn download_many(
 
         tokio::select! {
             Some(res) = futures.join_next() => {
-                let (index, res) = res.expect("task should not be cancelled nor panicking");
-                completed += 1;
-                force_progress = true;
-                let prev_res = results[index].replace(res);
-                debug_assert!(prev_res.is_none());
+
+                if let Ok((index, res)) = res {
+                    completed += 1;
+                    force_progress = true;
+                    let prev_res = results[index].replace(res);
+                    debug_assert!(prev_res.is_none());
+                }
             }
             Some(progress) = progress_rx.recv() => {
                 size += progress as u32;
@@ -595,8 +634,8 @@ async fn download_many(
                 continue;
             }
         }
-        
-        if force_progress || size - last_size >= progress_size_interval {
+
+        if !cancelled && (force_progress || size - last_size >= progress_size_interval) {
             handler.on_progress(completed as u32, entries.len() as u32, size, total_size);
             last_size = size;
         }
@@ -610,7 +649,8 @@ async fn download_many(
     let mut ret_errors = Vec::new();
 
     for (entry, res) in entries.into_iter().zip(results) {
-        let res = res.expect("all entries should have a result");
+
+        let res = res.unwrap_or(Err(EntryErrorKind::Cancelled));
         if res.is_err() {
             ret_errors.push(ret_entries.len());
         }
@@ -623,6 +663,7 @@ async fn download_many(
     BatchResult {
         entries: ret_entries.into_boxed_slice(),
         errors: ret_errors.into_boxed_slice(),
+        cancelled,
     }
 
 }
