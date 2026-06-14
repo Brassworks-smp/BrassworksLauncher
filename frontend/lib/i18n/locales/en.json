@@ -35,6 +35,7 @@
     "brandSub": "Launcher",
     "instanceLabel": "Instance",
     "gameRunning": "Game running",
+    "resize": "Drag to resize",
     "logs": "Logs",
     "viewLiveLogs": "View live game logs",
     "stopGame": "Stop the game",

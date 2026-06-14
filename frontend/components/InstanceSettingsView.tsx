@@ -800,7 +800,7 @@ function ModpackCard({
             <input
               readOnly
               value={pack.url}
-              className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge"
+              className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge transition-colors caret-brass-400 hover:text-ink-400 hover:ring-brass-600/40 focus:text-ink-300 focus:ring-2 focus:ring-brass-500/70"
             />
             <button
               title={t("instanceSettings.modpack.copyUrl")}

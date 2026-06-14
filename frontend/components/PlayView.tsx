@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Play,
   Loader2,
@@ -29,6 +29,10 @@ import {
   QuickSettingsPicker,
 } from "@/lib/quickSettings";
 import { useT, type TFunc } from "@/lib/i18n";
+
+
+const SIDEBAR_MIN = 240;
+const SIDEBAR_MAX = 560;
 
 
 const STAGE_LABEL: Record<string, string> = {
@@ -139,6 +143,36 @@ export function PlayView({
   launcherSettings: LauncherSettings | null;
 }) {
   const t = useT();
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem("bw-play-sidebar-w"));
+    return v >= SIDEBAR_MIN && v <= SIDEBAR_MAX ? v : 0;
+  });
+  const [resizing, setResizing] = useState(false);
+
+  useEffect(() => {
+    if (sidebarWidth) localStorage.setItem("bw-play-sidebar-w", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarRef.current?.offsetWidth ?? SIDEBAR_MIN;
+    setResizing(true);
+    const onMove = (ev: PointerEvent) => {
+      
+      const w = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + (startX - ev.clientX)));
+      setSidebarWidth(w);
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      setResizing(false);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
+
   if (!instance) {
     return (
       <div className="grid flex-1 place-items-center text-ink-600">
@@ -161,8 +195,11 @@ export function PlayView({
     featuredEnabled && instance.show_playercount && !!instance.playercount_url;
   const showNews = featuredEnabled && instance.show_news && !!instance.news_url;
 
+  
+  const sidebarPx = sidebarWidth || (appliedPins(instance).length > 0 ? 300 : 248);
+
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
+    <div className={`flex min-h-0 flex-1 ${resizing ? "cursor-col-resize select-none" : ""}`}>
       {}
       <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
         <div className="play-hero-overlay pointer-events-none absolute inset-0" />
@@ -301,8 +338,22 @@ export function PlayView({
       </div>
 
       <div
-        className={`flex min-h-0 shrink-0 flex-col gap-3 overflow-y-auto pr-1 transition-[width] duration-200 ${
-          appliedPins(instance).length > 0 ? "w-[300px]" : "w-[248px]"
+        onPointerDown={startResize}
+        title={t("sidebar.resize")}
+        className="group/resize relative w-4 shrink-0 cursor-col-resize touch-none"
+      >
+        <div
+          className={`absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 rounded-full transition-colors ${
+            resizing ? "bg-brass-500" : "bg-transparent group-hover/resize:bg-brass-600/50"
+          }`}
+        />
+      </div>
+
+      <div
+        ref={sidebarRef}
+        style={{ width: sidebarPx }}
+        className={`flex min-h-0 shrink-0 flex-col gap-3 overflow-y-auto pr-1 ${
+          resizing ? "" : "transition-[width] duration-200"
         }`}
       >
         <QuickSettingsCard

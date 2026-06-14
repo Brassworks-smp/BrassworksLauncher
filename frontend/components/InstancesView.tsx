@@ -293,6 +293,26 @@ export function InstancesView({
           </Section>
         )}
 
+        <Section
+          title={tr("instances.yourInstances")}
+          icon={<Box size={13} />}
+          compact={compact}
+          dropFolderId={null}
+          draggingFrom={draggingFrom}
+          onDropInstance={(id) => assignById(id, null)}
+        >
+          {ungrouped.map((i) => card(i))}
+          <button
+            onClick={onAdd}
+            className={`order-last flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
+              compact ? "min-h-[52px] flex-row gap-1.5 text-sm" : "aspect-square"
+            }`}
+          >
+            <Plus size={compact ? 16 : 22} />
+            <span className="text-sm">{tr("instances.newInstance")}</span>
+          </button>
+        </Section>
+
         {folders.map((f) => (
           <FolderGroup
             key={f.id}
@@ -316,26 +336,6 @@ export function InstancesView({
             )}
           </FolderGroup>
         ))}
-
-        <Section
-          title={tr("instances.yourInstances")}
-          icon={<Box size={13} />}
-          compact={compact}
-          dropFolderId={null}
-          draggingFrom={draggingFrom}
-          onDropInstance={(id) => assignById(id, null)}
-        >
-          {ungrouped.map((i) => card(i))}
-          <button
-            onClick={onAdd}
-            className={`order-last flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
-              compact ? "min-h-[52px] flex-row gap-1.5 text-sm" : "min-h-[150px]"
-            }`}
-          >
-            <Plus size={compact ? 16 : 22} />
-            <span className="text-sm">{tr("instances.newInstance")}</span>
-          </button>
-        </Section>
       </div>
     </div>
   );
@@ -347,7 +347,7 @@ function DropPlaceholder({ color, compact }: { color: string; compact?: boolean 
   return (
     <div
       className={`density-swap pointer-events-none grid place-items-center rounded-xl border-2 border-dashed text-xs font-medium ${
-        compact ? "min-h-[58px]" : "min-h-[150px]"
+        compact ? "min-h-[58px]" : "aspect-square"
       }`}
       style={{ borderColor: color, color, background: `${color}12` }}
     >
@@ -405,7 +405,7 @@ function Section({
         className={`density-swap stagger grid gap-2 rounded-xl border border-edge bg-ink-900/30 p-3 transition ${
           compact
             ? "grid-cols-[repeat(auto-fill,minmax(215px,1fr))]"
-            : "grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3"
+            : "grid-cols-[repeat(auto-fill,196px)] gap-3"
         } ${showDrop ? "ring-2 ring-brass-500/40 ring-offset-4 ring-offset-ink-950" : ""}`}
       >
         {children}
@@ -637,7 +637,7 @@ function FolderGroup({
           className={`density-swap stagger grid p-3 ${
             compact
               ? "grid-cols-[repeat(auto-fill,minmax(215px,1fr))] gap-2"
-              : "grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3"
+              : "grid-cols-[repeat(auto-fill,196px)] gap-3"
           }`}
         >
           {children}
@@ -1014,7 +1014,7 @@ function InstanceCard({
       onClick={installing || editingName ? undefined : onSelect}
       {...dragProps}
       style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-ink-900/40 transition-opacity ${stateCls} ${
+      className={`group relative flex aspect-square flex-col overflow-hidden rounded-xl border bg-ink-900/40 transition-opacity ${stateCls} ${
         dragging ? "opacity-0" : ""
       }`}
     >
@@ -1158,7 +1158,7 @@ function InstanceCard({
           </div>
         )}
 
-        <div className="mt-3 flex items-center gap-1.5">
+        <div className="mt-auto flex items-center gap-1.5 pt-3">
           <button
             onClick={(e) => {
               e.stopPropagation();
