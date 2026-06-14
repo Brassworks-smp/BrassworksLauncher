@@ -521,9 +521,17 @@ export default function Home() {
       api.onModpackProgress((p) => {
         setMaintainingIds((s) => withId(s, p.instance_id));
         setProgressById((m) => ({ ...m, [p.instance_id]: p }));
+        const pct =
+          p.total > 0 ? Math.min(100, Math.round((p.current / p.total) * 100)) : null;
+        toastProgress(
+          `modpack:${p.instance_id}`,
+          p.message || tr("page.updatingModpack"),
+          pct,
+        );
       }),
       api.onModpackDone((d) => {
         const id = d.instance_id;
+        dismissToast(`modpack:${id}`);
         setMaintainingIds((s) => withoutId(s, id));
         setProgressById((m) => {
           if (!(id in m)) return m;

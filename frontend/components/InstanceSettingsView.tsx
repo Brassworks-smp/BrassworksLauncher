@@ -27,7 +27,7 @@ import {
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import { toast } from "@/lib/toast";
+import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import {
   buildInstanceIcons,
   currentPalette,
@@ -1139,10 +1139,18 @@ function ExportCard({ instanceId }: { instanceId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const run = (format: "modrinth" | "curseforge") => {
     setBusy(format);
+    const key = `export:${instanceId}:${format}`;
+    toastProgress(key, t("instanceSettings.export.exportingToast"), null);
     api
       .exportModpack(instanceId, format)
-      .then((path) => toast(t("instanceSettings.export.exportedToast", { path }), "success"))
-      .catch((e) => toast(String(e), "error"))
+      .then((path) => {
+        dismissToast(key);
+        toast(t("instanceSettings.export.exportedToast", { path }), "success");
+      })
+      .catch((e) => {
+        dismissToast(key);
+        toast(String(e), "error");
+      })
       .finally(() => setBusy(null));
   };
   const btn =

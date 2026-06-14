@@ -21,7 +21,7 @@ import {
   Download,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import { toast } from "@/lib/toast";
+import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import { useT, type TFunc } from "@/lib/i18n";
 import {
   SegmentedTabs,
@@ -134,16 +134,34 @@ export function WorldsView({
   const [showBackups, setShowBackups] = useState(false);
   const [detail, setDetail] = useState<WorldInfo | null>(null);
 
-  const backup = (w: WorldInfo) =>
-    api
+  const backup = (w: WorldInfo) => {
+    const key = `world-backup:${instanceId}:${w.folder}`;
+    toastProgress(key, t("worlds.backingUp", { name: w.name }), null);
+    return api
       .backupWorld(instanceId, w.folder)
-      .then(() => toast(t("worlds.backedUp", { name: w.name }), "success"))
-      .catch((e) => toast(String(e), "error"));
-  const download = (w: WorldInfo) =>
-    api
+      .then(() => {
+        dismissToast(key);
+        toast(t("worlds.backedUp", { name: w.name }), "success");
+      })
+      .catch((e) => {
+        dismissToast(key);
+        toast(String(e), "error");
+      });
+  };
+  const download = (w: WorldInfo) => {
+    const key = `world-export:${instanceId}:${w.folder}`;
+    toastProgress(key, t("worlds.exportingWorld", { name: w.name }), null);
+    return api
       .exportWorld(instanceId, w.folder)
-      .then((p) => toast(t("worlds.savedTo", { path: p }), "success"))
-      .catch((e) => toast(String(e), "error"));
+      .then((p) => {
+        dismissToast(key);
+        toast(t("worlds.savedTo", { path: p }), "success");
+      })
+      .catch((e) => {
+        dismissToast(key);
+        toast(String(e), "error");
+      });
+  };
 
   const load = useCallback(() => {
     if (!api.isTauri()) {

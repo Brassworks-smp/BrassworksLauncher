@@ -26,6 +26,7 @@ import { OptionalModsPicker } from "@/components/OptionalModsPicker";
 import { FlavorPicker } from "@/components/FlavorPicker";
 import { SegmentedTabs, Dropdown, useClosable } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { toastProgress, dismissToast } from "@/lib/toast";
 
 
 type PendingInstall =
@@ -216,10 +217,15 @@ export function AddInstanceModal({
     const gen = ++inspectGen.current;
     setPending(intent);
     setPicker(null);
+    toastProgress("inspect-optional", t("addInstance.checkingOptional"), null);
+    const doneInspect = () => {
+      if (gen === inspectGen.current) dismissToast("inspect-optional");
+    };
     try {
       if (intent.kind === "packwiz" && intent.unsup) {
         const groups = await api.inspectPackwizFlavors(intent.url);
-        if (gen !== inspectGen.current) return; 
+        if (gen !== inspectGen.current) return;
+        doneInspect();
         if (groups.length === 0) await finalize(intent, []);
         else setPicker({ kind: "flavors", groups });
         return;
@@ -230,7 +236,8 @@ export function AddInstanceModal({
           : intent.kind === "file"
             ? await api.inspectModpackFile(intent.path, intent.source)
             : await api.inspectPackwiz(intent.url);
-      if (gen !== inspectGen.current) return; 
+      if (gen !== inspectGen.current) return;
+      doneInspect();
       if (comps.length === 0) {
         await finalize(intent, []);
       } else {
@@ -238,7 +245,7 @@ export function AddInstanceModal({
       }
     } catch {
       if (gen !== inspectGen.current) return;
-      
+      doneInspect();
       await finalize(intent, []);
     }
   };

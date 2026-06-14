@@ -351,6 +351,7 @@
       "desc": "Bundle this instance's added content into a shareable modpack file (saved to your Downloads folder).",
       "mrpack": "Modrinth .mrpack",
       "cfzip": "CurseForge .zip",
+      "exportingToast": "Exporting modpack…",
       "exportedToast": "Exported to {path}"
     },
     "version": {
@@ -597,6 +598,8 @@
       "daysAgo": "{n}d ago"
     },
     "backedUp": "Backed up “{name}”",
+    "backingUp": "Backing up “{name}”…",
+    "exportingWorld": "Exporting “{name}”…",
     "savedTo": "Saved to {path}",
     "deletedToast": "Deleted “{name}”"
   },
@@ -804,6 +807,7 @@
     "installCancelled": "Install cancelled",
     "installedInstance": "Installed {name}",
     "installingModpack": "Installing modpack…",
+    "updatingModpack": "Updating modpack…",
     "installAndPlay": "Install & play"
   },
   "changelog": {
