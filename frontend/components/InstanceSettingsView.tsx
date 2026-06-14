@@ -800,7 +800,7 @@ function ModpackCard({
             <input
               readOnly
               value={pack.url}
-              className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge transition-colors caret-brass-400 hover:text-ink-400 hover:ring-brass-600/40 focus:text-ink-300 focus:ring-2 focus:ring-brass-500/70"
+              className="min-w-0 flex-1 truncate rounded-md bg-ink-950/70 px-2.5 py-1.5 font-mono text-[11px] text-ink-500 outline-none ring-1 ring-edge transition caret-brass-400 focus:ring-brass-500/60"
             />
             <button
               title={t("instanceSettings.modpack.copyUrl")}
@@ -855,7 +855,7 @@ function ModpackCard({
                   .catch((e) => onError(String(e)))
                   .finally(() => setLoadingBranches(false));
               }}
-              className="flex items-center justify-center gap-2 self-start rounded-md border border-brass-600/40 px-3 py-1.5 text-xs text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center justify-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingBranches ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -886,7 +886,7 @@ function ModpackCard({
                     onError(String(e));
                   });
               }}
-              className="flex items-center justify-center gap-2 self-start rounded-md border border-brass-600/40 px-3 py-1.5 text-xs text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center justify-center gap-2 self-start rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {flavorGroups === "loading" ? (
                 <Loader2 size={14} className="animate-spin" />

@@ -102,7 +102,7 @@ const ACCENTS: Record<Tab, Record<string, string> | undefined> = {
 
 
 const inputCls =
-  "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
+  "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition caret-brass-400 focus:ring-brass-500/60";
 
 export function AddInstanceModal({
   installing,
@@ -533,7 +533,7 @@ export function AddInstanceModal({
                 <button
                   disabled={findingBranches || !packUrl.trim()}
                   onClick={findBranches}
-                  className="flex items-center justify-center gap-2 self-start rounded-lg border border-brass-600/40 px-3 py-2 text-sm text-brass-200 transition hover:bg-brass-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 self-start rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {findingBranches ? (
                     <Loader2 size={15} className="animate-spin" />

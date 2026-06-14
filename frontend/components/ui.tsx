@@ -535,10 +535,21 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<HTMLButtonElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
   const close = useCallback(() => setOpen(false), []);
   useMenuDismiss(open, close, menuRef);
+
+  // When the menu opens, reveal the currently-selected option so it's clear
+  // which one is active in long lists (e.g. Minecraft versions).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    const sel = selectedRef.current;
+    if (!menu || !sel) return;
+    menu.scrollTop = sel.offsetTop - menu.clientHeight / 2 + sel.clientHeight / 2;
+  }, [open]);
 
   const toggle = () => {
     if (disabled) return;
@@ -591,6 +602,7 @@ export function Dropdown({
               {options.map((o) => (
                 <button
                   key={o.value}
+                  ref={o.value === value ? selectedRef : undefined}
                   type="button"
                   onClick={() => {
                     onChange(o.value);
