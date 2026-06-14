@@ -32,7 +32,7 @@ import type {
   ModInfo,
   SearchHit,
 } from "@/lib/types";
-import { AddContentModal } from "./AddContentModal";
+import { AddContentModal, type ProjectType, type Source } from "./AddContentModal";
 
 type CategoryId = "all" | "mods" | "resourcepacks" | "shaderpacks";
 
@@ -49,7 +49,7 @@ function categoryIcon(category: string, size = 16) {
   return <Box size={size} />;
 }
 
-function projectTypeOf(category: string): string {
+function projectTypeOf(category: string): ProjectType {
   if (category === "resourcepacks") return "resourcepack";
   if (category === "shaderpacks") return "shader";
   return "mod";
@@ -483,26 +483,22 @@ export function ModsView({
       </div>
 
       <div className="mb-3 flex items-center gap-2">
-        <div className="flex gap-1 rounded-lg border border-edge bg-ink-900/50 p-1">
-          {CATEGORIES.map((c) => {
-            const active = cat === c.id;
+        <SegmentedTabs
+          value={cat}
+          onChange={(v) => setCat(v as CategoryId)}
+          options={CATEGORIES.map((c) => {
             const n = c.id === "all" ? mods?.length ?? 0 : counts[c.id] ?? 0;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setCat(c.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? "bg-brass-500/15 text-brass-300"
-                    : "text-ink-600 hover:text-brass-300/80"
-                }`}
-              >
-                {t(c.tkey)}
-                <span className="ml-1.5 tabular-nums text-ink-600">{n}</span>
-              </button>
-            );
+            return {
+              id: c.id,
+              label: (
+                <>
+                  {t(c.tkey)}
+                  <span className="ml-1.5 tabular-nums text-ink-600">{n}</span>
+                </>
+              ),
+            };
           })}
-        </div>
+        />
         <div className="relative flex-1">
           <Search
             size={15}
@@ -628,6 +624,14 @@ export function ModsView({
           installed={installedMap}
           lockedIds={lockedIds}
           initial={detail}
+          initialType={projectTypeOf(cat)}
+          initialSource={
+            sourceFilter === "curseforge"
+              ? ("curseforge" as Source)
+              : sourceFilter === "modrinth"
+                ? ("modrinth" as Source)
+                : undefined
+          }
           onClose={() => {
             setAdding(false);
             setDetail(null);

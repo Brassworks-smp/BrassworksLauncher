@@ -30,8 +30,8 @@ import type {
   SearchHit,
 } from "@/lib/types";
 
-type ProjectType = "mod" | "resourcepack" | "shader";
-type Source = "modrinth" | "curseforge";
+export type ProjectType = "mod" | "resourcepack" | "shader";
+export type Source = "modrinth" | "curseforge";
 
 
 const LOADER_TKEY: Record<LoaderKind, string> = {
@@ -98,28 +98,36 @@ export function AddContentModal({
   installed,
   lockedIds,
   initial,
+  initialType,
+  initialSource,
   onClose,
   onInstalled,
   onUnlock,
 }: {
   instanceId: string;
-  
+
   mc: string;
   loader: LoaderKind;
   installed: Record<string, string | null>;
   lockedIds?: string[];
   initial?: SearchHit | null;
+  initialType?: ProjectType;
+  initialSource?: Source;
   onClose: () => void;
   onInstalled: (mod: InstalledMod) => void;
-  
+
   onUnlock?: () => void;
 }) {
   const t = useT();
   const [type, setType] = useState<ProjectType>(
-    (initial?.project_type as ProjectType) || "mod",
+    (initial?.project_type as ProjectType) || initialType || "mod",
   );
   const [source, setSource] = useState<Source>(
-    (initial?.source as Source) === "curseforge" ? "curseforge" : "modrinth",
+    (initial?.source as Source) === "curseforge"
+      ? "curseforge"
+      : initial
+        ? "modrinth"
+        : initialSource ?? "modrinth",
   );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SearchHit | null>(initial ?? null);
