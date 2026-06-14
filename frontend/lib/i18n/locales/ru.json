@@ -35,6 +35,7 @@
     "brandSub": "Лаунчер",
     "instanceLabel": "Сборка",
     "gameRunning": "Игра запущена",
+    "resize": "",
     "logs": "Логи",
     "viewLiveLogs": "Просмотр логов игры",
     "stopGame": "Остановить игру",
@@ -101,6 +102,11 @@
     "oled": "OLED (абсолютно чёрный)",
     "ocean": "Океан",
     "mocha": "Мокко",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "Светлая",
     "accentDefault": "По умолчанию (зелёный)"
   },
@@ -707,6 +713,8 @@
   "quickSettings": {
     "title": "",
     "flavors": "",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "",
     "tagsPlaceholder": "",
     "pickerDesc": "",

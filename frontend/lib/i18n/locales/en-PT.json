@@ -35,6 +35,7 @@
     "brandSub": "Launcher arr",
     "instanceLabel": "Instance arr",
     "gameRunning": "Game runnin'",
+    "resize": "",
     "logs": "Logs arr",
     "viewLiveLogs": "View live game logs arr",
     "stopGame": "Stop the game arr",
@@ -101,6 +102,11 @@
     "oled": "OLED (true black arr)",
     "ocean": "Ocean arr",
     "mocha": "Mocha arr",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "Light arr",
     "accentDefault": "As she lies (green)"
   },
@@ -707,6 +713,8 @@
   "quickSettings": {
     "title": "Quick riggin'",
     "flavors": "Flavors arr",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "Personal notes arr…",
     "tagsPlaceholder": "comma, separated, tags arr",
     "pickerDesc": "Pick the riggin' to reveal on this instance's Set sail screen.",

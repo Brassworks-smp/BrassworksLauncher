@@ -35,6 +35,7 @@
     "brandSub": "",
     "instanceLabel": "",
     "gameRunning": "",
+    "resize": "",
     "logs": "",
     "viewLiveLogs": "",
     "stopGame": "",
@@ -101,6 +102,11 @@
     "oled": "",
     "ocean": "",
     "mocha": "",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "",
     "accentDefault": ""
   },
@@ -707,6 +713,8 @@
   "quickSettings": {
     "title": "",
     "flavors": "",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "",
     "tagsPlaceholder": "",
     "pickerDesc": "",

@@ -35,6 +35,7 @@
     "brandSub": "Launkher",
     "instanceLabel": "Instancez",
     "gameRunning": "Game runnin",
+    "resize": "",
     "logs": "Logz",
     "viewLiveLogs": "View live game logz",
     "stopGame": "Stop teh game",
@@ -101,6 +102,11 @@
     "oled": "OLED (true blak)",
     "ocean": "Oceanz",
     "mocha": "Mokha",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "Lightz",
     "accentDefault": "Default (greenz)"
   },
@@ -707,6 +713,8 @@
   "quickSettings": {
     "title": "Kwik settingz",
     "flavors": "Flavorz",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "Personal notez…",
     "tagsPlaceholder": "komma, separated, tagz",
     "pickerDesc": "Pik teh settingz to show on dis instance'z Play skreen.",
