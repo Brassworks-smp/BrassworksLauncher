@@ -187,6 +187,81 @@
     color: var(--color-fg);
   }
 
+  /* ---- Nord: a crisp arctic blue-grey theme (Polar Night surfaces). */
+  :root.theme-nord {
+    --color-fg: #eceff4;
+    --color-ink-950: #2b303b;
+    --color-ink-900: #2e3440; /* body background */
+    --color-ink-850: #353c4a;
+    --color-ink-800: #3b4252;
+    --color-ink-700: #4c566a;
+    --color-ink-600: #8a93a5; /* muted text */
+    --color-edge: rgba(216, 222, 233, 0.12);
+  }
+  :root.theme-nord body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Rosé: a warm, soft dusty-pink/mauve theme. */
+  :root.theme-rose {
+    --color-fg: #f0e0e6;
+    --color-ink-950: #1e151a;
+    --color-ink-900: #261a20; /* body background */
+    --color-ink-850: #2f2028;
+    --color-ink-800: #382630;
+    --color-ink-700: #4a3340;
+    --color-ink-600: #b591a0; /* muted text */
+    --color-edge: rgba(245, 200, 220, 0.11);
+  }
+  :root.theme-rose body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Amethyst: a deep, cool blue-violet/indigo theme. */
+  :root.theme-amethyst {
+    --color-fg: #e7e6f7;
+    --color-ink-950: #121022;
+    --color-ink-900: #181527; /* body background */
+    --color-ink-850: #1e1a33;
+    --color-ink-800: #251f3f;
+    --color-ink-700: #332c54;
+    --color-ink-600: #948fc0; /* muted text */
+    --color-edge: rgba(180, 175, 255, 0.13);
+  }
+  :root.theme-amethyst body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Crimson: a dramatic deep-red/maroon theme. */
+  :root.theme-crimson {
+    --color-fg: #f3e3e1;
+    --color-ink-950: #1a0f0f;
+    --color-ink-900: #211311; /* body background */
+    --color-ink-850: #2a1714;
+    --color-ink-800: #341c18;
+    --color-ink-700: #452621;
+    --color-ink-600: #b58e88; /* muted text */
+    --color-edge: rgba(255, 180, 170, 0.12);
+  }
+  :root.theme-crimson body {
+    color: var(--color-fg);
+  }
+
+  /* ---- Forest: a deep emerald-green theme. */
+  :root.theme-forest {
+    --color-fg: #e2efe5;
+    --color-ink-950: #0d1611;
+    --color-ink-900: #111c15; /* body background */
+    --color-ink-850: #15231a;
+    --color-ink-800: #1b2c20;
+    --color-ink-700: #263a2d;
+    --color-ink-600: #8aa896; /* muted text */
+    --color-edge: rgba(170, 230, 190, 0.12);
+  }
+  :root.theme-forest body {
+    color: var(--color-fg);
+  }
+
   /* ---- High-contrast mode: an accessibility *overlay* applied on top of any
      theme (it comes after the theme blocks so its edge/fg wins). Pumps border
      visibility and text brightness. The light variant has higher specificity so

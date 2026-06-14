@@ -101,6 +101,11 @@
     "oled": "OLED (true black)",
     "ocean": "Ocean",
     "mocha": "Mocha",
+    "nord": "Nord",
+    "rose": "Rosé",
+    "amethyst": "Amethyst",
+    "crimson": "Crimson",
+    "forest": "Forest",
     "light": "Light",
     "accentDefault": "Default (green)"
   },
@@ -707,6 +712,8 @@
   "quickSettings": {
     "title": "Quick settings",
     "flavors": "Flavors",
+    "fullSettings": "Instance settings",
+    "openFullSettings": "Open full settings",
     "notesPlaceholder": "Personal notes…",
     "tagsPlaceholder": "comma, separated, tags",
     "pickerDesc": "Pick the settings to show on this instance's Play screen.",

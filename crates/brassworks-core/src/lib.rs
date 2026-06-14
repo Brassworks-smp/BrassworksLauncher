@@ -18,6 +18,7 @@ pub mod import;
 pub mod instance;
 pub mod launch;
 pub mod modpack;
+pub mod modrinth_plays;
 pub mod packs;
 pub mod paths;
 pub mod ping;
@@ -246,7 +247,39 @@ impl Launcher {
         updated.last_played = Some(chrono::Utc::now());
         let _ = self.instances().update(&updated);
 
+        self.report_modrinth_server_play(&updated, &account);
+
         Ok(child)
+    }
+
+    /// Best-effort: if a featured pack carries a `modrinth_server_id`, bump that
+    /// Modrinth server's plays counter on launch. Fire-and-forget on a background
+    /// thread so it never blocks or fails the launch. Offline accounts are skipped
+    /// (the Mojang session handshake needs a real Microsoft account).
+    fn report_modrinth_server_play(&self, instance: &Instance, account: &Account) {
+        if !instance.featured || !account.is_microsoft() {
+            return;
+        }
+        let Some(project_id) = featured::featured_packs()
+            .into_iter()
+            .find(|fp| fp.id == instance.id)
+            .and_then(|fp| fp.modrinth_server_id)
+            .filter(|id| !id.trim().is_empty() && id != "REPLACE_WITH_MODRINTH_SERVER_PROJECT_ID")
+        else {
+            return;
+        };
+
+        // Resolve the access token now (refreshing if needed) while we still hold
+        // `&self`, then move owned data into the background thread.
+        let Ok(token) = self.with_token(&account.id, |t| Ok(t.to_string())) else {
+            return;
+        };
+        let uuid = account.uuid.clone();
+        let username = account.username.clone();
+        std::thread::spawn(move || {
+            // Best-effort; a failed analytics ping must never surface to the user.
+            let _ = modrinth_plays::report_server_play(&token, &uuid, &username, &project_id);
+        });
     }
 
 

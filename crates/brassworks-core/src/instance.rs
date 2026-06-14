@@ -228,7 +228,7 @@ impl Instance {
             optional_mods: None,
             unsup_flavors: None,
             unsup_public_key: fp.unsup_public_key.clone(),
-            pinned_settings: Vec::new(),
+                                    pinned_settings: vec!["open_settings".to_string()],
         }
     }
 
@@ -241,6 +241,11 @@ impl Instance {
         pack: PackSource,
     ) -> Self {
         let modpack_locked = !matches!(pack, PackSource::None);
+                                let pinned_settings = if modpack_locked {
+            vec!["open_settings".to_string()]
+        } else {
+            Vec::new()
+        };
         Self {
             id: id.into(),
             name: name.into(),
@@ -275,7 +280,7 @@ impl Instance {
             optional_mods: None,
             unsup_flavors: None,
             unsup_public_key: None,
-            pinned_settings: Vec::new(),
+            pinned_settings,
         }
     }
 

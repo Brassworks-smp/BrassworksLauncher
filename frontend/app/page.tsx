@@ -50,7 +50,7 @@ import { RestartPrompt } from "@/components/RestartPrompt";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
 import { I18nProvider, translate } from "@/lib/i18n";
-import { applyAccent } from "@/lib/colors";
+import { applyAccent, defaultAccentForTheme } from "@/lib/colors";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
   AccountStore,
@@ -210,6 +210,11 @@ export default function Home() {
       "brass-grey": "theme-grey",
       "brass-ocean": "theme-ocean",
       "brass-mocha": "theme-mocha",
+      "brass-nord": "theme-nord",
+      "brass-rose": "theme-rose",
+      "brass-amethyst": "theme-amethyst",
+      "brass-crimson": "theme-crimson",
+      "brass-forest": "theme-forest",
     };
     const allClasses = Object.values(THEME_CLASS);
     const apply = () => {
@@ -825,7 +830,7 @@ export default function Home() {
         label: tr("commands.switchTheme"),
         group: tr("commands.groupActions"),
         icon: <SunMoon size={14} />,
-        keywords: "appearance dark light grey gray oled ocean mocha mode",
+        keywords: "appearance dark light grey gray oled ocean mocha nord rose amethyst crimson forest mode",
         run: () => {
           if (!settings) return;
           const order = [
@@ -834,10 +839,15 @@ export default function Home() {
             "brass-dark",
             "brass-ocean",
             "brass-mocha",
+            "brass-nord",
+            "brass-rose",
+            "brass-amethyst",
+            "brass-crimson",
+            "brass-forest",
             "brass-light",
           ];
           const next = order[(order.indexOf(settings.theme) + 1) % order.length];
-          const s = { ...settings, theme: next };
+          const s = { ...settings, theme: next, accent_color: defaultAccentForTheme(next) };
           setSettings(s);
           api.saveSettings(s).catch(() => {});
         },
@@ -987,6 +997,12 @@ export default function Home() {
               onStop={onStop}
               onCancel={onCancel}
               onSaveInstance={onSaveInstance}
+              onOpenSettings={() => {
+                if (selectedId) {
+                  setGearId(selectedId);
+                  setView("instance-settings");
+                }
+              }}
               launcherSettings={settings}
             />
           )}

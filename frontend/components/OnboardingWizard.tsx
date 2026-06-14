@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Select, Toggle } from "@/components/ui";
-import { ACCENT_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
+import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
 import { useT, LOCALES, type TFunc } from "@/lib/i18n";
 import type { AccountStore, LauncherSettings } from "@/lib/types";
 
@@ -208,6 +208,11 @@ function ThemeStep({
     "brass-grey",
     "brass-ocean",
     "brass-mocha",
+    "brass-nord",
+    "brass-rose",
+    "brass-amethyst",
+    "brass-crimson",
+    "brass-forest",
   ].includes(settings.theme)
     ? settings.theme
     : "system";
@@ -222,13 +227,20 @@ function ThemeStep({
           <div className="mb-1.5 text-sm text-ink-600">{t("onboarding.theme")}</div>
           <Select
             value={themeValue}
-            onChange={(v) => onPatch({ theme: v })}
+            onChange={(v) =>
+              onPatch({ theme: v, accent_color: defaultAccentForTheme(v) })
+            }
             options={[
               { value: "system", label: t("theme.matchSystem") },
               { value: "brass-grey", label: t("theme.grey") },
               { value: "brass-dark", label: t("theme.oled") },
               { value: "brass-ocean", label: t("theme.ocean") },
               { value: "brass-mocha", label: t("theme.mocha") },
+              { value: "brass-nord", label: t("theme.nord") },
+              { value: "brass-rose", label: t("theme.rose") },
+              { value: "brass-amethyst", label: t("theme.amethyst") },
+              { value: "brass-crimson", label: t("theme.crimson") },
+              { value: "brass-forest", label: t("theme.forest") },
               { value: "brass-light", label: t("theme.light") },
             ]}
           />

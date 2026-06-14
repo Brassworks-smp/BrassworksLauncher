@@ -110,6 +110,7 @@ export function PlayView({
   onStop,
   onCancel,
   onSaveInstance,
+  onOpenSettings,
   launcherSettings,
 }: {
   instance: Instance | null;
@@ -134,6 +135,7 @@ export function PlayView({
   onStop: () => void;
   onCancel: () => void;
   onSaveInstance: (i: Instance) => void;
+  onOpenSettings: () => void;
   launcherSettings: LauncherSettings | null;
 }) {
   const t = useT();
@@ -307,6 +309,7 @@ export function PlayView({
           instance={instance}
           settings={launcherSettings}
           onSaveInstance={onSaveInstance}
+          onOpenSettings={onOpenSettings}
         />
         {showPlayers && (
           <ServerCard
@@ -348,10 +351,12 @@ function QuickSettingsCard({
   instance,
   settings,
   onSaveInstance,
+  onOpenSettings,
 }: {
   instance: Instance;
   settings: LauncherSettings | null;
   onSaveInstance: (i: Instance) => void;
+  onOpenSettings: () => void;
 }) {
   const t = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -398,6 +403,7 @@ function QuickSettingsCard({
                   patch={patch}
                   settings={settings}
                   onSaveInstance={onSaveInstance}
+                  onOpenSettings={onOpenSettings}
                 />
               )}
             </div>

@@ -20,7 +20,6 @@ import type {
   FlavorGroup,
 } from "@/lib/types";
 import {
-  MemorySettings,
   Select,
   Toggle,
   NumberField,
@@ -34,6 +33,7 @@ export interface ControlProps {
   patch: (p: Partial<Instance>) => void;
   settings: LauncherSettings;
   onSaveInstance: (i: Instance) => void;
+  onOpenSettings?: () => void;
 }
 
 export interface PinnableSetting {
@@ -46,13 +46,65 @@ export interface PinnableSetting {
   Control: FC<ControlProps>;
 }
 
-const MemoryControl: FC<ControlProps> = ({ instance, patch, settings }) => (
-  <MemorySettings
-    max={instance.max_memory_mb ?? settings.default_max_memory_mb}
-    min={instance.min_memory_mb ?? settings.default_min_memory_mb}
-    onChange={(mx, mn) => patch({ max_memory_mb: mx, min_memory_mb: mn })}
-  />
+
+
+const MemRow: FC<{
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  fallback: number;
+  onChange: (v: number) => void;
+}> = ({ label, value, min, max, fallback, onChange }) => (
+  <div className="flex items-center justify-between gap-3 text-sm">
+    <span className="text-ink-600">{label}</span>
+    <div className="flex items-center gap-1.5">
+      <NumberField
+        value={value}
+        onChange={(v) => onChange(v ?? fallback)}
+        min={min}
+        max={max}
+        step={512}
+        className="w-24"
+      />
+      <span className="font-mc text-[11px] text-ink-600">
+        {(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)} GB
+      </span>
+    </div>
+  </div>
 );
+
+
+
+
+const MemoryControl: FC<ControlProps> = ({ instance, patch, settings }) => {
+  const t = useT();
+  const max = instance.max_memory_mb ?? settings.default_max_memory_mb;
+  const min = instance.min_memory_mb ?? settings.default_min_memory_mb;
+  const HARD_CAP = 65536;
+  return (
+    <div className="flex flex-col gap-2">
+      <MemRow
+        label={t("ui.maxMemory")}
+        value={max}
+        min={1024}
+        max={HARD_CAP}
+        fallback={settings.default_max_memory_mb}
+        onChange={(mx) =>
+          patch(min > mx ? { max_memory_mb: mx, min_memory_mb: mx } : { max_memory_mb: mx })
+        }
+      />
+      <MemRow
+        label={t("ui.minMemory")}
+        value={min}
+        min={512}
+        max={max}
+        fallback={settings.default_min_memory_mb}
+        onChange={(mn) => patch({ min_memory_mb: Math.min(mn, max) })}
+      />
+    </div>
+  );
+};
 
 const JavaControl: FC<ControlProps> = ({ instance, patch }) => {
   const t = useT();
@@ -390,6 +442,21 @@ const PlayerToggle: FC<ControlProps> = ({ instance, patch }) => {
   );
 };
 
+
+const OpenSettingsControl: FC<ControlProps> = ({ onOpenSettings }) => {
+  const t = useT();
+  return (
+    <button
+      onClick={onOpenSettings}
+      disabled={!onOpenSettings}
+      className="flex w-full items-center justify-center gap-1.5 rounded-md border border-edge/60 px-2.5 py-1.5 text-[11px] text-ink-500 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-50"
+    >
+      <SlidersHorizontal size={12} />
+      {t("quickSettings.openFullSettings")}
+    </button>
+  );
+};
+
 const managed = (i: Instance) => i.pack.kind !== "none";
 const isPackwiz = (i: Instance) => i.pack.kind === "packwiz";
 
@@ -419,6 +486,12 @@ export const PINNABLE_SETTINGS: PinnableSetting[] = [
   { id: "post_exit_command", tkey: "instanceSettings.commands.post", applies: () => true, Control: PostCmdControl },
   { id: "notes", tkey: "instanceSettings.details.notes", applies: () => true, Control: NotesControl },
   { id: "tags", tkey: "instanceSettings.details.tags", applies: () => true, Control: TagsControl },
+  {
+    id: "open_settings",
+    tkey: "quickSettings.fullSettings",
+    applies: () => true,
+    Control: OpenSettingsControl,
+  },
 ];
 
 export function appliedPins(instance: Instance): PinnableSetting[] {

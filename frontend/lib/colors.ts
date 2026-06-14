@@ -19,6 +19,30 @@ export const ACCENT_COLORS = [
 
 export const DEFAULT_ACCENT = "#1fbf63";
 
+
+
+
+
+
+
+export const THEME_ACCENTS: Record<string, string | null> = {
+  system: null,
+  "brass-dark": null,
+  "brass-light": null,
+  "brass-grey": null,
+  "brass-ocean": "#06b6d4",
+  "brass-mocha": "#f97316",
+  "brass-nord": "#3b82f6",
+  "brass-rose": "#ec4899",
+  "brass-amethyst": "#8b5cf6",
+  "brass-crimson": "#ef4444",
+  "brass-forest": "#10b981",
+};
+
+export function defaultAccentForTheme(theme: string): string | null {
+  return THEME_ACCENTS[theme] ?? null;
+}
+
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 function hexToHsl(hex: string): [number, number, number] {

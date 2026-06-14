@@ -15,6 +15,8 @@ pub struct FeaturedPack {
     pub logo: Option<String>,
     #[serde(default)]
     pub server: Option<FeaturedServer>,
+                #[serde(default)]
+    pub modrinth_server_id: Option<String>,
     #[serde(default)]
     pub news_url: Option<String>,
     #[serde(default)]

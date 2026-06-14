@@ -26,7 +26,7 @@ import {
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useT, LOCALES } from "@/lib/i18n";
-import { ACCENT_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
+import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
 import type { JavaReport, JavaInstall, LauncherSettings, UpdateInfo } from "@/lib/types";
 import {
   Card,
@@ -340,17 +340,29 @@ export function SettingsView({
                       "brass-grey",
                       "brass-ocean",
                       "brass-mocha",
+                      "brass-nord",
+                      "brass-rose",
+                      "brass-amethyst",
+                      "brass-crimson",
+                      "brass-forest",
                     ].includes(settings.theme)
                       ? settings.theme
                       : "system"
                   }
-                  onChange={(v) => patch({ theme: v })}
+                  onChange={(v) =>
+                    patch({ theme: v, accent_color: defaultAccentForTheme(v) })
+                  }
                   options={[
                     { value: "system", label: t("theme.matchSystem") },
                     { value: "brass-grey", label: t("theme.grey") },
                     { value: "brass-dark", label: t("theme.oled") },
                     { value: "brass-ocean", label: t("theme.ocean") },
                     { value: "brass-mocha", label: t("theme.mocha") },
+                    { value: "brass-nord", label: t("theme.nord") },
+                    { value: "brass-rose", label: t("theme.rose") },
+                    { value: "brass-amethyst", label: t("theme.amethyst") },
+                    { value: "brass-crimson", label: t("theme.crimson") },
+                    { value: "brass-forest", label: t("theme.forest") },
                     { value: "brass-light", label: t("theme.light") },
                   ]}
                 />
