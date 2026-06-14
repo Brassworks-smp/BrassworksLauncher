@@ -195,7 +195,7 @@
       "hint": "English iz teh default and teh fallbak fer anythin not yet translated.",
       "pseudo": "Pseudo-lokalizashun",
       "pseudoDesc": "Replace translated text wif x'z so any untranslated UI standz owt. Fer testin.",
-      "notComplete": ""
+      "notComplete": "nut kompletetedz"
     },
     "replay": {
       "title": "Replay teh welcom tour",
@@ -647,7 +647,7 @@
     "unsupEnable": "Enable unsup extenshunz",
     "unsupDesc1": "Read teh pak'z ",
     "unsupDesc2": " flavor groupz and verify itz signature. Fer pakz built wif ",
-    "unsupDesc3": "",
+    "unsupDesc3": ".",
     "pubKeyLabel": "Publik key (opshunal) - verifiez ",
     "unsupWiki": "Wat iz unsup? Read teh wiki →",
     "packwizWiki": "Wat iz pakwiz? Read teh wiki →",
@@ -804,7 +804,7 @@
     "updatedBanner": "Updated sukcessfully to v{version}. Here'z wat khanged:",
     "loading": "Loadin khangelog…",
     "errorBody1": "Kouldn't load teh khangelog right nao. U kan read it on ",
-    "errorBody2": "",
+    "errorBody2": ".",
     "letsGo": "Let'z go"
   },
   "restartPrompt": {
@@ -886,7 +886,9 @@
     "typeManually": "Type manuallyz",
     "selectVersion": "Selekt vershun…",
     "latestStable": "Latest stable (rekommended)",
-    "betaSuffix": " (betaz)"
+    "betaSuffix": " (betaz)",
+    "loaderUnavailable": "{loader} haz no bildz for Minecrafz {mc}. pik a difrent verzion or loadzer.",
+    "checkingLoader": "Tsheking lowder avilibility…"
   },
   "datapacks": {
     "installed": "Installedz",
