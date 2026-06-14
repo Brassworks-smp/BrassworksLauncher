@@ -1125,6 +1125,7 @@ export default function Home() {
                   localStorage.removeItem(ONBOARDED_KEY);
                 } catch {}
                 resetTabIntros();
+                setTabIntro(null);
                 setView("play");
                 setOnboardingOpen(true);
               }}
