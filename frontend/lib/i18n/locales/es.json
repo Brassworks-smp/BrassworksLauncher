@@ -886,7 +886,9 @@
     "typeManually": "",
     "selectVersion": "",
     "latestStable": "",
-    "betaSuffix": ""
+    "betaSuffix": "",
+    "loaderUnavailable": "",
+    "checkingLoader": ""
   },
   "datapacks": {
     "installed": "",

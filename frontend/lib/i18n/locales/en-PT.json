@@ -886,7 +886,9 @@
     "typeManually": "Type manually arr",
     "selectVersion": "Choose make…",
     "latestStable": "Latest stable (recommended arr)",
-    "betaSuffix": " (beta arr)"
+    "betaSuffix": " (beta arr)",
+    "loaderUnavailable": "",
+    "checkingLoader": ""
   },
   "datapacks": {
     "installed": "Hauled aboard",
