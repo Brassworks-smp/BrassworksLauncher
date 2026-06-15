@@ -35,6 +35,7 @@
     "brandSub": "Launcher",
     "instanceLabel": "Instanz",
     "gameRunning": "Spiel läuft",
+    "resize": "",
     "logs": "Logs",
     "viewLiveLogs": "Echtzeit Logs anzeigen",
     "stopGame": "Spiel beenden",
@@ -101,6 +102,11 @@
     "oled": "OLED (Echtes Schwarz)",
     "ocean": "Ozean",
     "mocha": "Mokka",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "Hell",
     "accentDefault": "Standard (Grün)"
   },
@@ -345,6 +351,7 @@
       "desc": "",
       "mrpack": "",
       "cfzip": "",
+      "exportingToast": "",
       "exportedToast": ""
     },
     "version": {
@@ -591,6 +598,8 @@
       "daysAgo": ""
     },
     "backedUp": "",
+    "backingUp": "",
+    "exportingWorld": "",
     "savedTo": "",
     "deletedToast": ""
   },
@@ -707,6 +716,8 @@
   "quickSettings": {
     "title": "",
     "flavors": "",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "",
     "tagsPlaceholder": "",
     "pickerDesc": "",
@@ -796,6 +807,7 @@
     "installCancelled": "",
     "installedInstance": "",
     "installingModpack": "",
+    "updatingModpack": "",
     "installAndPlay": ""
   },
   "changelog": {
@@ -917,6 +929,7 @@
     "unreachable": ""
   },
   "addContent": {
+    "quickInstall": "",
     "searchPlaceholder": "",
     "noResults": "",
     "startTyping": "",
