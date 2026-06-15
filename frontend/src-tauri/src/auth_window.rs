@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub(crate) const MS_LOGIN_LABEL: &str = "ms-login";
+#[cfg(not(windows))]
 const MS_CLEAR_LABEL: &str = "ms-login-clear";
 
 const MS_STORE_ID: [u8; 16] = *b"bw-ms-login-stre";
@@ -24,23 +25,37 @@ fn with_isolated_store<'a, R: tauri::Runtime, M: tauri::Manager<R>>(
 }
 
 pub(crate) fn clear_ms_login_cookies(app: &AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window(MS_LOGIN_LABEL) {
+        if let Some(win) = app.get_webview_window(MS_LOGIN_LABEL) {
         return win.clear_all_browsing_data().map_err(|e| e.to_string());
     }
-    if let Some(existing) = app.get_webview_window(MS_CLEAR_LABEL) {
-        let _ = existing.close();
+
+    #[cfg(windows)]
+    {
+        if let Some(dir) = ms_login_data_dir(app) {
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
     }
-    let url = "about:blank".parse().map_err(|_| "bad url".to_string())?;
-    let win = with_isolated_store(
-        WebviewWindowBuilder::new(app, MS_CLEAR_LABEL, WebviewUrl::External(url)),
-        app,
-    )
-    .visible(false)
-    .build()
-    .map_err(|e| e.to_string())?;
-    let res = win.clear_all_browsing_data().map_err(|e| e.to_string());
-    let _ = win.close();
-    res
+
+    #[cfg(not(windows))]
+    {
+        if let Some(existing) = app.get_webview_window(MS_CLEAR_LABEL) {
+            let _ = existing.close();
+        }
+        let url = "about:blank".parse().map_err(|_| "bad url".to_string())?;
+        let win = with_isolated_store(
+            WebviewWindowBuilder::new(app, MS_CLEAR_LABEL, WebviewUrl::External(url)),
+            app,
+        )
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+        let res = win.clear_all_browsing_data().map_err(|e| e.to_string());
+        let _ = win.close();
+        res
+    }
 }
 
 pub(crate) fn open_ms_login_window(
