@@ -5,8 +5,8 @@ export function Logo({ size = 28, className = "" }: { size?: number; className?:
       alt="Brassworks"
       width={size}
       height={size}
-      className={`pixelated ${className}`}
-      style={{ width: size, height: size }}
+      className={className}
+      style={{ width: size, height: size, imageRendering: "auto" }}
     />
   );
 }
