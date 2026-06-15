@@ -254,6 +254,16 @@ impl Installer {
             .zip(self.fetch_metafiles(&base, &metafile_paths)?)
             .collect();
 
+                                let unsup_resolution = if opts.unsup {
+            let refs: Vec<crate::unsup::MetafileRef> = metafile_paths
+                .iter()
+                .filter_map(|p| metas.get(p).map(|m| crate::unsup::MetafileRef::new(p.clone(), m)))
+                .collect();
+            Some(crate::unsup::resolve(&unsup_toml, &refs))
+        } else {
+            None
+        };
+
         let mut plan: Vec<Planned> = Vec::with_capacity(index.files.len());
                         let mut selected_optional: Vec<String> = Vec::new();
 
@@ -271,9 +281,11 @@ impl Installer {
                 }
 
                 if opts.unsup {
-                                                            let is_optional = meta.option.as_ref().map(|o| o.optional).unwrap_or(false);
-                    let flavors =
-                        crate::unsup::metafile_flavors_one(&unsup_toml, &entry.file, is_optional);
+                    let flavors = unsup_resolution
+                        .as_ref()
+                        .and_then(|r| r.metafile_flavors.get(&entry.file))
+                        .cloned()
+                        .unwrap_or_default();
                     if !crate::unsup::keep_metafile(&flavors, &opts.flavors) {
                         continue;
                     }
