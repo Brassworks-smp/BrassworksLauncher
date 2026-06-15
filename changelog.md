@@ -1,20 +1,22 @@
 ### **Additions:**
-* **First-launch onboarding** - the first time u open Brassworks u now get a full-screen, interactive setup that walks u through everything: welcome → pick a theme + accent colour → import from other launchers → featured-content toggle → recommended default RAM → Discord Rich Presence → language → sign-in. Every step embeds the *real* live UI (the actual theme picker, the actual import scanner…), and anything it opens stacks on top without closing the wizard. On top of that, each sidebar tab shows a one-time intro card the first time u open it, and u can replay the whole tour (and the per-tab cards) anytime from Settings
-* **Languages / translations** - the entire interface now runs through a proper translation system with English as the default *and* the fallback, built so community translations can be wired up later. A display-language picker lives in Settings (and in onboarding), plus a **pseudo-localization** toggle that swaps every translated character for `x` so any string that isn't translated yet sticks out at a glance
-* **unsup modpack support** - Brassworks now installs packs built with unsup (a packwiz superset). When u add a packwiz pack u can enable unsup to pick its **flavor groups** - toggle variants on/off or choose one of several options per group (shaders, resource packs, addons, whatever the pack exposes) - and optionally verify the pack's **signature** with its public key. U can change flavors later anytime from the instance's Modpack settings without recreating the pack
-* **Optional-content picker** - Modrinth `.mrpack`, CurseForge `.zip` and packwiz packs that mark mods as optional now show an opt-in picker *before* installing, so u choose exactly which extras come along (packwiz packs honour their own defaults)
-* **Native featured-pack detection in search** - featured instances now carry their Modrinth/CurseForge project id(s), so when u search one of those packs in the modpack browser the launcher recognizes it and offers the proper **native featured experience** (preset server, news, the right defaults) instead of a plain install - with a one-click toggle to turn featured content back on if u'd switched it off
-* **Reset-to-default buttons** - every settings card now has a small reset button that restores just that card's fields, on both the launcher Settings tabs *and* each instance's gear, plus a **"reset all launcher settings"** button. Defaults are pulled from the same source the backend uses, so the UI and the engine always agree
+* **Community translations** - the last release shipped the translation *system* but English-only; Brassworks now actually speaks these languages, contributed through Crowdin:
+  * **Dutch** - fully translated
+  * **Russian** - fully translated
+  * **Pirate Speak** - just for fun
+  * **LOLCAT** - just for fun
+
+  More languages are in progress on Crowdin and will land as they're completed. Pick yours from the language selector in Settings (or during onboarding) - anything not translated yet still falls back to English, and the picker shows how complete each language is
 
 ### **Improvements:**
-* **Incremental modpack updates** - switching a packwiz branch or flavor, updating, or repairing now only downloads the files that actually changed (compared by hash) and removes files that left the pack, instead of re-downloading the whole thing every time. Branch/flavor switches are dramatically faster
-* **Parallel downloads** - pack files are now fetched, verified and hashed several at a time, with a configurable concurrency setting in Settings → Downloads (higher = faster, or pick Sequential for slow / unstable connections)
-* **Java settings no longer freeze the launcher** - opening the Java tab used to lock the whole app up while it scanned for installed Java; discovery now runs in the background with skeleton placeholders and stays smooth on macOS, Windows and Linux
-* **Add-content compatibility note** - the "only versions compatible with…" line in the content browser now reflects the instance's *actual* Minecraft version and loader instead of a hardcoded one, and the loader is only shown when browsing mods
+* **Add-content quick install** - search results in the content browser now have a one-click install button that grabs the latest compatible version, no need to open the mod, switch to versions and install
+* **Scroll position is remembered** - opening a mod/modpack/datapack's details and coming back, or switching tabs in the content browser, modpack browser and datapacks picker, now keeps your place in the list instead of jumping to the top
+* **Discord Rich Presence** - the launcher logo is the main icon with the modpack as a small badge, and the status now links straight to the website and Discord
+* **Onboarding polish** - per-page tip cards stay until you actually close them, the "skip all" shortcut was removed, and the language step now comes first
 
 ### **Fixes:**
-* Fixed the download progress bar hitting 100% too early with parallel downloads - a file now only counts as done once its worker result is **joined back** on the main thread, not the moment a worker thread finishes, so the bar reflects truly completed-and-collected work
-* Fixed launches failing because of a single flaky library download - Mojang/library fetches in a batch are now resilient (retry on transient errors) so one bad download no longer hard-aborts the whole launch
-* Fixed old Forge versions (and old Minecraft versions in general) failing to install with `InstallerNotFound` - legacy installer resolution now works for old / Modrinth / CurseForge Forge builds
-* Fixed large modpacks (e.g. Steam 'n' Rails) aborting on launch during mod loading with no visible error - the game was inheriting `DYLD_*` environment variables from the launcher, which made a mod's failed native-library load (via JNA) overflow an internal buffer and hard-crash the JVM on macOS. The launcher now strips those variables before starting the game, captures the game's raw output to `logs/game_output.log` for easier crash diagnosis, and enables runtime Java-agent self-attachment to match Prism/MultiMC
-* Fixed being able to press Escape inside the "select optional content" / flavor prompt, which dismissed the prompt straight through to the instances page behind it - Escape now stays contained to the prompt
+* Fixed disabling a flavor / optional component in an unsup pack not actually removing its mods - removal now uses the exact same flavor resolution the picker shows, so deselecting reliably drops the files
+* Fixed being able to open instance-only pages (and the Skins page without a Microsoft account) through the command palette or the macOS/Linux menu bar
+* Fixed dragging instances into folders not working on Windows
+* Fixed "Clear Microsoft cookies" hanging and freezing the app on Windows
+* Fixed the logo looking jagged - it's now smoothly anti-aliased
+* Per-page onboarding tips now show the first time as intended, and the Skins onboarding card resets properly with "Replay onboarding"
