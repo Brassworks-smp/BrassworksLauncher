@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Users, Star } from "lucide-react";
+import { Box, Users, Star, Download, Loader2, Check } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { SearchHit } from "@/lib/types";
@@ -111,19 +111,45 @@ export function ResultRow({
   featured,
   showSource,
   onOpen,
+  onQuickInstall,
 }: {
   hit: SearchHit;
   installed?: boolean;
   featured?: boolean;
   showSource?: boolean;
   onOpen: () => void;
+  onQuickInstall?: () => Promise<void>;
 }) {
   const t = useT();
   const [iconFailed, setIconFailed] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
+  const isInstalled = installed || justInstalled;
+  const quickInstall = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (installing || isInstalled || !onQuickInstall) return;
+    setInstalling(true);
+    try {
+      await onQuickInstall();
+      setJustInstalled(true);
+    } catch {
+      
+    } finally {
+      setInstalling(false);
+    }
+  };
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="group flex items-center gap-3 rounded-lg border border-edge bg-ink-850/40 p-3 text-left transition hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group flex cursor-pointer items-center gap-3 rounded-lg border border-edge bg-ink-850/40 p-3 text-left transition hover:border-brass-600/40 hover:bg-brass-500/[0.04]"
     >
       <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
         {hit.icon_url && !iconFailed ? (
@@ -148,7 +174,7 @@ export function ResultRow({
               {t("browse.byAuthor", { author: hit.author })}
             </span>
           )}
-          {installed && (
+          {isInstalled && (
             <span className="shrink-0 rounded bg-patina-500/15 px-1.5 text-[9px] font-medium text-patina-400">
               {t("versionList.installed")}
             </span>
@@ -169,6 +195,27 @@ export function ResultRow({
       <span className="shrink-0 text-[11px] text-ink-600 opacity-0 transition group-hover:opacity-100">
         {t("browse.details")}
       </span>
-    </button>
+      {onQuickInstall && !isInstalled && (
+        <button
+          type="button"
+          onClick={quickInstall}
+          disabled={installing}
+          title={t("addContent.quickInstall")}
+          aria-label={t("addContent.quickInstall")}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:bg-brass-500/10 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {installing ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Download size={15} />
+          )}
+        </button>
+      )}
+      {onQuickInstall && isInstalled && (
+        <span className="grid h-8 w-8 shrink-0 place-items-center text-patina-400">
+          <Check size={16} />
+        </span>
+      )}
+    </div>
   );
 }

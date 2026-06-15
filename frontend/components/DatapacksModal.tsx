@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   X,
   Search,
@@ -125,6 +132,21 @@ export function DatapacksModal({
   );
   const { hits, loading, loadingMore, hasMore, error, handleScroll } =
     useInfiniteSearch(fetchPage, query, source, { enabled: tab === "browse" });
+
+  
+  
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const scrollByKey = useRef<Record<string, number>>({});
+  const scrollKey = `${source}:${query}`;
+  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    handleScroll(e);
+    scrollByKey.current[scrollKey] = e.currentTarget.scrollTop;
+  };
+  useLayoutEffect(() => {
+    if (tab !== "browse" || selected || loading) return;
+    const el = listScrollRef.current;
+    if (el) el.scrollTop = scrollByKey.current[scrollKey] ?? 0;
+  }, [tab, selected, loading, scrollKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -283,8 +305,9 @@ export function DatapacksModal({
                 </div>
               )}
               <div
+                ref={listScrollRef}
                 className="flex-1 overflow-y-auto px-5 pb-5"
-                onScroll={handleScroll}
+                onScroll={onListScroll}
               >
                 {loading ? (
                   <div className="grid h-full place-items-center text-ink-600">

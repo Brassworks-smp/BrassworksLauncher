@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Search,
   Loader2,
@@ -66,6 +66,21 @@ export function ModpackBrowser({
   );
   const { hits, loading, loadingMore, hasMore, error, handleScroll } =
     useInfiniteSearch(fetchPage, query, source);
+
+  
+  
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const scrollByKey = useRef<Record<string, number>>({});
+  const scrollKey = `${source}:${query}`;
+  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    handleScroll(e);
+    scrollByKey.current[scrollKey] = e.currentTarget.scrollTop;
+  };
+  useLayoutEffect(() => {
+    if (selected || loading) return;
+    const el = listScrollRef.current;
+    if (el) el.scrollTop = scrollByKey.current[scrollKey] ?? 0;
+  }, [selected, loading, scrollKey]);
 
   useEffect(() => {
     if (!selected) return;
@@ -233,8 +248,9 @@ export function ModpackBrowser({
       {error && <div className="text-xs text-red-300">{error}</div>}
 
       <div
+        ref={listScrollRef}
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
-        onScroll={handleScroll}
+        onScroll={onListScroll}
       >
         {hits.map((h) => (
           <ResultRow

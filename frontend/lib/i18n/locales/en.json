@@ -929,6 +929,7 @@
     "unreachable": "Couldn't reach this server."
   },
   "addContent": {
+    "quickInstall": "Install latest version",
     "searchPlaceholder": "Search {source} for {type}…",
     "noResults": "No results - try a different search.",
     "startTyping": "Start typing to search {source}.",

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   X,
   Search,
@@ -165,6 +172,21 @@ export function AddContentModal({
       enabled: !detailOnly,
     });
 
+  
+  
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const scrollByKey = useRef<Record<string, number>>({});
+  const scrollKey = `${type}:${source}:${query}`;
+  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    handleScroll(e);
+    scrollByKey.current[scrollKey] = e.currentTarget.scrollTop;
+  };
+  useLayoutEffect(() => {
+    if (selected || loading) return;
+    const el = listScrollRef.current;
+    if (el) el.scrollTop = scrollByKey.current[scrollKey] ?? 0;
+  }, [selected, loading, scrollKey]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
       e.key === "Escape" &&
@@ -282,8 +304,9 @@ export function AddContentModal({
             )}
 
             <div
+              ref={listScrollRef}
               className="flex-1 overflow-y-auto px-5 pb-5"
-              onScroll={handleScroll}
+              onScroll={onListScroll}
             >
               {loading ? (
                 <div className="grid h-full place-items-center text-ink-600">
@@ -303,6 +326,27 @@ export function AddContentModal({
                       hit={hit}
                       installed={keyOf(hit) in installed}
                       onOpen={() => openDetail(hit)}
+                      onQuickInstall={async () => {
+                        try {
+                          const res = await api.installContent(
+                            instanceId,
+                            hit.project_id,
+                            type,
+                            hit.source,
+                          );
+                          const n = res.dependencies.length;
+                          toast(
+                            n
+                              ? t("addContent.installedDeps", { name: res.item.name, n })
+                              : t("addContent.installedToast", { name: res.item.name }),
+                            "success",
+                          );
+                          onInstalled(res.item);
+                        } catch (e) {
+                          toast(String(e), "error");
+                          throw e;
+                        }
+                      }}
                     />
                   ))}
                   {loadingMore && (

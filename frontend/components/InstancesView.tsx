@@ -640,7 +640,8 @@ function FolderGroup({
               : "grid-cols-[repeat(auto-fill,196px)] gap-3"
           }`}
         >
-          {children}
+          {}
+          {!(showDrop && count === 0) && children}
           {showDrop && <DropPlaceholder color={color} compact={compact} />}
         </div>
       </Collapse>
