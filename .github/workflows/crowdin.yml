@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   synchronize:
@@ -41,12 +40,15 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 
-      - name: Open translations PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          branch: l10n_crowdin
-          base: main
-          title: New Crowdin translations
-          commit-message: Update Crowdin translations and progress
-          body: Automated translation + progress update from Crowdin.
-          add-paths: frontend/lib/i18n/**
+      - name: Push translations to l10n_crowdin branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B l10n_crowdin
+          git add frontend/lib/i18n/
+          if git diff --cached --quiet; then
+            echo "No translation changes to push."
+            exit 0
+          fi
+          git commit -m "Update Crowdin translations and progress"
+          git push --force origin l10n_crowdin
