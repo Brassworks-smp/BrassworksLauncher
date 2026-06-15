@@ -35,6 +35,7 @@
     "brandSub": "Lanzador",
     "instanceLabel": "Instancia",
     "gameRunning": "",
+    "resize": "",
     "logs": "Registros",
     "viewLiveLogs": "",
     "stopGame": "",
@@ -101,6 +102,11 @@
     "oled": "",
     "ocean": "",
     "mocha": "",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "",
     "accentDefault": ""
   },
@@ -345,6 +351,7 @@
       "desc": "",
       "mrpack": "",
       "cfzip": "CurseForge .zip",
+      "exportingToast": "",
       "exportedToast": "Exportado a {path}"
     },
     "version": {
@@ -591,6 +598,8 @@
       "daysAgo": ""
     },
     "backedUp": "",
+    "backingUp": "",
+    "exportingWorld": "",
     "savedTo": "",
     "deletedToast": ""
   },
@@ -707,6 +716,8 @@
   "quickSettings": {
     "title": "",
     "flavors": "",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "",
     "tagsPlaceholder": "",
     "pickerDesc": "",
@@ -796,6 +807,7 @@
     "installCancelled": "",
     "installedInstance": "",
     "installingModpack": "",
+    "updatingModpack": "",
     "installAndPlay": ""
   },
   "changelog": {
@@ -917,6 +929,7 @@
     "unreachable": ""
   },
   "addContent": {
+    "quickInstall": "",
     "searchPlaceholder": "",
     "noResults": "",
     "startTyping": "",

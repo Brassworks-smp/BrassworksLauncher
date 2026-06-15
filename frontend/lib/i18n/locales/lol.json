@@ -35,6 +35,7 @@
     "brandSub": "Launkher",
     "instanceLabel": "Instancez",
     "gameRunning": "Game runnin",
+    "resize": "",
     "logs": "Logz",
     "viewLiveLogs": "View live game logz",
     "stopGame": "Stop teh game",
@@ -101,6 +102,11 @@
     "oled": "OLED (true blak)",
     "ocean": "Oceanz",
     "mocha": "Mokha",
+    "nord": "",
+    "rose": "",
+    "amethyst": "",
+    "crimson": "",
+    "forest": "",
     "light": "Lightz",
     "accentDefault": "Default (greenz)"
   },
@@ -345,6 +351,7 @@
       "desc": "Bundle dis instance'z added kontent into a shareable modpak file (saved to ur Downloadz folder).",
       "mrpack": "Modrinth .mrpak",
       "cfzip": "Kurseforge .zip",
+      "exportingToast": "",
       "exportedToast": "Exported toz {path}"
     },
     "version": {
@@ -591,6 +598,8 @@
       "daysAgo": "{n}d agoz"
     },
     "backedUp": "Baked uppy “{name}”",
+    "backingUp": "",
+    "exportingWorld": "",
     "savedTo": "Saved toz {path}",
     "deletedToast": "Deletedz “{name}”"
   },
@@ -707,6 +716,8 @@
   "quickSettings": {
     "title": "Kwik settingz",
     "flavors": "Flavorz",
+    "fullSettings": "",
+    "openFullSettings": "",
     "notesPlaceholder": "Personal notez…",
     "tagsPlaceholder": "komma, separated, tagz",
     "pickerDesc": "Pik teh settingz to show on dis instance'z Play skreen.",
@@ -796,6 +807,7 @@
     "installCancelled": "Install kancelled",
     "installedInstance": "Installedz {name}",
     "installingModpack": "Installin modpak…",
+    "updatingModpack": "",
     "installAndPlay": "Install & playz"
   },
   "changelog": {
@@ -917,6 +929,7 @@
     "unreachable": "Kouldn't reakh dis server."
   },
   "addContent": {
+    "quickInstall": "",
     "searchPlaceholder": "Searkh {source} fer {type}…",
     "noResults": "Noes resultz - try a different searkh.",
     "startTyping": "Start typin to searkh {source}.",
