@@ -86,6 +86,11 @@ const byPinned = (a: Instance, b: Instance) =>
 
 const COMPACT_KEY = "bw-instances-compact";
 
+
+
+
+let draggedInstanceId: string | null = null;
+
 const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `f${Date.now()}${Math.random()}`).slice(
     0,
@@ -389,7 +394,10 @@ function Section({
         onDrop: (e: React.DragEvent) => {
           e.preventDefault();
           setOver(false);
-          const id = e.dataTransfer.getData("text/instance");
+          const id =
+            e.dataTransfer.getData("text/instance") ||
+            e.dataTransfer.getData("text/plain") ||
+            draggedInstanceId;
           if (id) onDropInstance(id);
         },
       }
@@ -473,7 +481,10 @@ function FolderGroup({
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        const id = e.dataTransfer.getData("text/instance");
+        const id =
+          e.dataTransfer.getData("text/instance") ||
+          e.dataTransfer.getData("text/plain") ||
+          draggedInstanceId;
         if (id) onDropInstance(id);
       }}
     >
@@ -730,11 +741,14 @@ function InstanceCard({
     draggable: !instance.featured && !installing,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.setData("text/instance", instance.id);
+      e.dataTransfer.setData("text/plain", instance.id);
       e.dataTransfer.effectAllowed = "move";
+      draggedInstanceId = instance.id;
       setDragging(true);
       onDragStateChange?.(instance.folder_id ?? null);
     },
     onDragEnd: () => {
+      draggedInstanceId = null;
       setDragging(false);
       onDragStateChange?.(undefined);
     },

@@ -89,6 +89,14 @@ const defaultInstanceId = (
   return pool.find((i) => i.featured)?.id ?? pool[0]?.id ?? null;
 };
 
+const isNavDisabled = (
+  v: View,
+  hasSelected: boolean,
+  skinsAvailable: boolean,
+): boolean =>
+  (INSTANCE_VIEWS.includes(v) && !hasSelected) ||
+  (v === "skin" && !skinsAvailable);
+
 export default function Home() {
   const [view, setView] = useState<View>("play");
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -152,6 +160,7 @@ export default function Home() {
   selectedRef.current = selectedId;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const skinsAvailableRef = useRef(false);
 
   
   
@@ -366,7 +375,11 @@ export default function Home() {
         else if (action === "palette") setPaletteOpen(true);
         else if (action === "add-instance") setAddOpen(true);
         else if (action === "view-log") setLogView(false);
-        else if (NAV[action]) setView(NAV[action]);
+        else if (NAV[action]) {
+          const v = NAV[action];
+          if (!isNavDisabled(v, !!selectedRef.current, skinsAvailableRef.current))
+            setView(v);
+        }
       })
       .then((u) => (un = u));
     return () => un?.();
@@ -777,6 +790,7 @@ export default function Home() {
     accounts.accounts[0];
   
   const skinsAvailable = activeAccount?.kind === "microsoft";
+  skinsAvailableRef.current = skinsAvailable;
   const canPlay = accounts.accounts.length > 0;
   const running = !!selectedId && runningIds.has(selectedId);
   const working = !!selectedId && workingIds.has(selectedId);
@@ -796,16 +810,21 @@ export default function Home() {
       keywords: "open go to tab",
       run: () => setView(v),
     });
-    const cmds: Command[] = [
-      go("nav-play", tr("sidebar.play"), "play", <Play size={14} />),
-      go("nav-instances", tr("sidebar.instances"), "instances", <LayoutGrid size={14} />),
-      go("nav-content", tr("sidebar.content"), "mods", <Package size={14} />),
-      go("nav-worlds", tr("sidebar.worlds"), "worlds", <Globe2 size={14} />),
-      go("nav-servers", tr("sidebar.servers"), "servers", <Server size={14} />),
-      go("nav-skins", tr("sidebar.skins"), "skin", <Shirt size={14} />),
-      go("nav-screenshots", tr("sidebar.screenshots"), "screenshots", <ImageIcon size={14} />),
-      go("nav-settings", tr("sidebar.settings"), "settings", <SettingsIcon size={14} />),
+    
+    
+    const nav: { id: string; label: string; v: View; icon: React.ReactNode }[] = [
+      { id: "nav-play", label: tr("sidebar.play"), v: "play", icon: <Play size={14} /> },
+      { id: "nav-instances", label: tr("sidebar.instances"), v: "instances", icon: <LayoutGrid size={14} /> },
+      { id: "nav-content", label: tr("sidebar.content"), v: "mods", icon: <Package size={14} /> },
+      { id: "nav-worlds", label: tr("sidebar.worlds"), v: "worlds", icon: <Globe2 size={14} /> },
+      { id: "nav-servers", label: tr("sidebar.servers"), v: "servers", icon: <Server size={14} /> },
+      { id: "nav-skins", label: tr("sidebar.skins"), v: "skin", icon: <Shirt size={14} /> },
+      { id: "nav-screenshots", label: tr("sidebar.screenshots"), v: "screenshots", icon: <ImageIcon size={14} /> },
+      { id: "nav-settings", label: tr("sidebar.settings"), v: "settings", icon: <SettingsIcon size={14} /> },
     ];
+    const cmds: Command[] = nav
+      .filter((n) => !isNavDisabled(n.v, !!selectedId, skinsAvailable))
+      .map((n) => go(n.id, n.label, n.v, n.icon));
     if (canPlay && !running)
       cmds.push({
         id: "play-launch",
@@ -885,7 +904,7 @@ export default function Home() {
       });
     }
     return cmds;
-  }, [instances, selectedId, canPlay, running, instance?.name, settings, featuredEnabled, onPlay, selectInstance, tr]);
+  }, [instances, selectedId, skinsAvailable, canPlay, running, instance?.name, settings, featuredEnabled, onPlay, selectInstance, tr]);
 
   return (
     <I18nProvider
