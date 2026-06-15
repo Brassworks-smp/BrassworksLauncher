@@ -11,6 +11,9 @@ const APP_ID: &str = match option_env!("DISCORD_APP_ID") {
     None => "1513659845818060981",
 };
 
+const WEBSITE_URL: &str = "https://brassworks.opnsoc.org";
+const DISCORD_URL: &str = "https://brassworks.opnsoc.org/discord";
+
 pub(crate) struct Discord {
     client: Mutex<Option<DiscordIpcClient>>,
 }
@@ -65,7 +68,11 @@ impl Discord {
                         Assets::new()
                             .large_image("logo")
                             .large_text("Brassworks Launcher"),
-                    ),
+                    )
+                    .buttons(vec![
+                        Button::new("Website", WEBSITE_URL),
+                        Button::new("Discord", DISCORD_URL),
+                    ]),
             )
         });
     }
@@ -76,27 +83,35 @@ impl Discord {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         let details = format!("Playing {pack}");
-        let large_image = match image {
-            Some(url) if url.starts_with("http") => url.to_string(),
-            _ => "logo".to_string(),
+                        let modpack_image = match image {
+            Some(url) if url.starts_with("http") => Some(url.to_string()),
+            _ => None,
         };
         let pack = pack.to_string();
         let link = link.map(|s| s.to_string());
         self.with_client(move |client| {
             let mut assets = Assets::new()
-                .large_image(&large_image)
-                .large_text(&pack);
-            if large_image != "logo" {
-                assets = assets.small_image("logo").small_text("Brassworks Launcher");
+                .large_image("logo")
+                .large_text("Brassworks Launcher");
+            if let Some(mp) = modpack_image.as_deref() {
+                assets = assets.small_image(mp).small_text(&pack);
             }
             let mut activity = Activity::new()
                 .details(&details)
                 .state("In game")
                 .timestamps(Timestamps::new().start(now))
                 .assets(assets);
-            if let Some(url) = link.as_deref() {
-                activity = activity.buttons(vec![Button::new("View modpack", url)]);
-            }
+                                    let buttons = match link.as_deref() {
+                Some(url) => vec![
+                    Button::new("View modpack", url),
+                    Button::new("Discord", DISCORD_URL),
+                ],
+                None => vec![
+                    Button::new("Website", WEBSITE_URL),
+                    Button::new("Discord", DISCORD_URL),
+                ],
+            };
+            activity = activity.buttons(buttons);
             client.set_activity(activity)
         });
     }
