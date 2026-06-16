@@ -13,7 +13,7 @@
     "next": "Nächste",
     "done": "Fertig",
     "gotIt": "Verstanden",
-    "loading": "Lädt...",
+    "loading": "Lädt…",
     "search": "Suchen",
     "refresh": "Neu laden"
   },
@@ -93,7 +93,7 @@
     "colour": "Farbe",
     "deleteFolder": "Ordner löschen",
     "noFolder": "Kein Ordner",
-    "newFolderDots": "Neuer Ordner...",
+    "newFolderDots": "Neuer Ordner…",
     "launcherDefault": "Launcher Standard"
   },
   "theme": {
@@ -138,7 +138,7 @@
     "rpcToggle": "Discord Rich Presence",
     "rpcToggleDesc": "Zeige dein aktuelles Modpack in Discord an.",
     "languageTitle": "Sprache",
-    "languageBody": "Brassworks unterstützt jetzt mehrere Sprachen, weitere folgen. Du kannst auch beim Übersetzen helfen.",
+    "languageBody": "",
     "displayLanguage": "Anzeigesprache",
     "signInTitle": "Logge dich ein um zu spielen",
     "signInBody": "Melde dich mit Microsoft an, um online zu spielen und Skins zu verwenden, oder füge ein Offline-Konto für den Einzelspielermodus hinzu.",
@@ -267,12 +267,12 @@
     "integrations": {
       "title": "Integrationen",
       "rpc": "Discord Rich Presence",
-      "rpcDesc": "Zeige in deinem Discord Status deine Aktivität"
+      "rpcDesc": "Zeige in deinem Discord Status deine Aktivität."
     },
     "featured": {
       "title": "Vorgestellter Inhalt",
       "toggle": "Vorgestellte Modpacks und Server",
-      "toggleDesc": "Zeige vorgestellte Modpacks in der Instanz Sektion, vorgestellte Server in der Serverliste, Echtzeit Spieler Anzahl und die Neuigkeiten auf dem Spielbild. Schalte es aus für einen sauberen und aufgeräumten Launcher"
+      "toggleDesc": "Zeige vorgestellte Modpacks in der Instanz Sektion, vorgestellte Server in der Serverliste, Echtzeit Spieler Anzahl und die Neuigkeiten auf dem Spielbild. Schalte es aus für einen sauberen und aufgeräumten Launcher."
     },
     "curseforge": {
       "title": "CurseForge",
@@ -304,7 +304,7 @@
       "check": "Nach Updates suchen",
       "upToDate": "Auf dem neusten Stand",
       "changelog": "Änderungshistorie",
-      "whatsNew": "Was ist neu?",
+      "whatsNew": "Was ist neu",
       "latestToast": "Du bist auf der aktuellsten Version",
       "downloadingToast": "",
       "installedToast": ""
