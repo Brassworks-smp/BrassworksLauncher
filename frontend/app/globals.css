@@ -47,6 +47,18 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Monocraft";
+  src: url("/fonts/MonocraftExtended-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monocraft";
+  src: url("/fonts/MonocraftExtended-Bold.woff2") format("woff2");
+  font-weight: bold;
+  font-display: swap;
+}
 @theme {
   /* Dark surfaces (website: bg 5%, card 10%, popover 12%) */
   --color-ink-950: #080808;
@@ -71,7 +83,7 @@
   --color-edge: rgba(229, 231, 235, 0.1);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mc: "minecraft", ui-monospace, monospace;
+  --font-mc: "minecraft", "Monocraft", ui-monospace, monospace;
 
   --radius-xl: 0.5rem;
 }

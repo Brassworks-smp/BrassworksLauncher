@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Brassworks SMP"]
 homepage = "https://github.com/brassworks"
 repository = "https://github.com/brassworks/launcher"

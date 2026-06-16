@@ -540,6 +540,31 @@ export function SkinView({
     setEditor({ mode: "edit", preset: s });
   };
 
+  const newFromCurrent = () => {
+    const url = profile?.skin_url ?? null;
+    if (!url) {
+      fileInput.current?.click();
+      return;
+    }
+    setPending([]);
+    const base = displayName || "Skin";
+    const taken = new Set(library.map((p) => p.name.toLowerCase()));
+    let nm = base;
+    for (let n = 2; taken.has(nm.toLowerCase()); n++) nm = `${base} (${n})`;
+    setEditor({
+      mode: "new",
+      seed: {
+        name: nm,
+        model: previewModel,
+        capeId: selectedSkin
+          ? selectedSkin.cape_id
+          : profile?.capes.find((c) => c.active)?.id ?? null,
+        previewUrl: previewSkin ?? url,
+        texture: { url },
+      },
+    });
+  };
+
   const advanceEditor = () => {
     if (pending.length) {
       setEditor({ mode: "new", seed: pending[0] });
@@ -652,6 +677,13 @@ export function SkinView({
             </div>
           )}
           <div className="mt-3 flex flex-col gap-2 self-stretch">
+            <button
+              onClick={() => selectedSkin && openEdit(selectedSkin)}
+              disabled={!selectedSkin}
+              className={`${BTN} justify-center`}
+            >
+              <Pencil size={15} /> {t("skin.editSkin")}
+            </button>
             <button onClick={saveToDisk} className={`${BTN} justify-center`}>
               <Download size={15} /> {t("skin.saveSkin")}
             </button>
@@ -678,7 +710,7 @@ export function SkinView({
         >
           <Section title={t("skin.yourPresets")} open={savedOpen} onToggle={() => setSavedOpen((v) => !v)}>
             <button
-              onClick={() => fileInput.current?.click()}
+              onClick={newFromCurrent}
               className={`flex h-[210px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-ink-600 transition hover:border-brass-600/50 hover:text-brass-300 ${
                 dragOver ? "border-brass-500/60 text-brass-300" : "border-edge"
               }`}
@@ -732,16 +764,16 @@ export function SkinView({
                       </span>
                     )}
                   </span>
-                  <span className="absolute inset-x-0 bottom-0 z-20 flex justify-center gap-1.5 bg-gradient-to-t from-ink-950/95 to-transparent pb-2 pt-7 opacity-0 transition group-hover:opacity-100">
+                  <span className="absolute inset-x-0 bottom-0 z-20 flex flex-wrap justify-center gap-1.5 bg-gradient-to-t from-ink-950/95 to-transparent px-2 pb-2 pt-7 opacity-0 transition group-hover:opacity-100">
                     <span
                       role="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         openEdit(s);
                       }}
-                      className="flex items-center gap-1 rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
+                      className="flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-edge bg-ink-900/90 px-2 py-1 text-[11px] text-gray-200 transition hover:border-brass-600/50 hover:text-brass-300"
                     >
-                      <Pencil size={11} /> {t("common.edit")}
+                      <Pencil size={11} className="shrink-0" /> {t("common.edit")}
                     </span>
                     <span
                       role="button"
@@ -749,9 +781,9 @@ export function SkinView({
                         e.stopPropagation();
                         void quickApply(s);
                       }}
-                      className="flex items-center gap-1 rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
+                      className="flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-brass-500 px-2 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
                     >
-                      <Check size={11} /> {isSel ? t("skin.reapply") : t("skin.apply")}
+                      <Check size={11} className="shrink-0" /> {isSel ? t("skin.reapply") : t("skin.apply")}
                     </span>
                   </span>
                 </Tile>
