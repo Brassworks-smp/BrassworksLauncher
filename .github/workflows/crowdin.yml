@@ -42,8 +42,8 @@ jobs:
 
       - name: Push translations to l10n_crowdin branch
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           git checkout -B l10n_crowdin
           git add frontend/lib/i18n/
           if git diff --cached --quiet; then

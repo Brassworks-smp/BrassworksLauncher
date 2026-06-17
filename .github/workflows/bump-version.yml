@@ -1,0 +1,42 @@
+name: Bump version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version (e.g. 1.2.3). Leave blank to auto-bump the patch (0.5.1 -> 0.5.2)."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump version
+        id: resolve
+        run: node .github/scripts/bump-version.mjs "${{ github.event.inputs.version }}"
+
+      - name: Commit and push
+        env:
+          CURRENT: ${{ steps.resolve.outputs.current }}
+          NEW: ${{ steps.resolve.outputs.new }}
+        run: |
+          set -euo pipefail
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+
+          git add frontend/src-tauri/tauri.conf.json frontend/package.json Cargo.toml
+          git commit -m "chore: bump version $CURRENT -> $NEW"
+          git push
