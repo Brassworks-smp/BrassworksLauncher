@@ -138,7 +138,7 @@
     "rpcToggle": "Uitgebreide Discord-status",
     "rpcToggleDesc": "Laat je huidige modpack zien in Discord.",
     "languageTitle": "Taal",
-    "languageBody": "",
+    "languageBody": "Brassworks spreekt nu verschillende talen, en er zijn er nog meer onderweg. Je kunt zelf ook helpen met vertalen.",
     "displayLanguage": "Laat taal zien",
     "signInTitle": "Meld je aan om te spelen",
     "signInBody": "Meld je aan met Microsoft om online te spelen en skins te gebruiken, of voeg een offline account toe voor singleplayer.",
@@ -351,7 +351,7 @@
       "desc": "Bundel de toegevoegde content van deze instantie in een deelbaar modpack-bestand (opgeslagen in je Downloads-map).",
       "mrpack": "Modrinth .mrpack",
       "cfzip": "Curseforge .zip",
-      "exportingToast": "",
+      "exportingToast": "Modpack exporteren…",
       "exportedToast": "Geëxporteerd naar {path}"
     },
     "version": {
@@ -598,8 +598,8 @@
       "daysAgo": "{n}d geleden"
     },
     "backedUp": "“{name}” is geback-upt",
-    "backingUp": "",
-    "exportingWorld": "",
+    "backingUp": "Back-up maken van “{name}\"…",
+    "exportingWorld": "“{name}” exporteren…",
     "savedTo": "Opgeslagen naar {path}",
     "deletedToast": "“{name}” verwijderd"
   },
@@ -807,7 +807,7 @@
     "installCancelled": "Installatie geannuleerd",
     "installedInstance": "{name} geïnstalleerd",
     "installingModpack": "Modpack aan het installeren…",
-    "updatingModpack": "",
+    "updatingModpack": "Modpack bijwerken…",
     "installAndPlay": "Installeer en speel"
   },
   "changelog": {
@@ -929,7 +929,7 @@
     "unreachable": "Kan deze server niet bereiken."
   },
   "addContent": {
-    "quickInstall": "",
+    "quickInstall": "Nieuwste versie installeren",
     "searchPlaceholder": "{source} doorzoeken naar {type}…",
     "noResults": "Geen resultaten - probeer een andere zoekopdracht.",
     "startTyping": "Begin met typen om te zoeken in {source}.",
