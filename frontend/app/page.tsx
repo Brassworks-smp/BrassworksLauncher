@@ -16,7 +16,10 @@ import {
   SunMoon,
   Loader2,
 } from "lucide-react";
-import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { CommandPalette } from "@/components/CommandPalette";
+import type { CommandContext, CmdState } from "@/lib/cmd/types";
+import { runScript } from "@/lib/cmd/parser";
+import { REGISTRY } from "@/lib/cmd/registry";
 
 import { Sidebar, INSTANCE_VIEWS, type View } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
@@ -49,7 +52,7 @@ import { RestartPrompt } from "@/components/RestartPrompt";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
 import { I18nProvider, translate } from "@/lib/i18n";
-import { applyAccent, defaultAccentForTheme } from "@/lib/colors";
+import { applyAccent } from "@/lib/colors";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
   AccountStore,
@@ -801,110 +804,94 @@ export default function Home() {
   const locked = instance?.modpack_locked ?? true;
   const managed = instance ? instance.pack.kind !== "none" : false;
 
-  const commands = useMemo<Command[]>(() => {
-    const go = (id: string, label: string, v: View, icon: React.ReactNode): Command => ({
-      id,
-      label,
-      group: tr("commands.groupNavigate"),
-      icon,
-      keywords: "open go to tab",
-      run: () => setView(v),
-    });
-    
-    
-    const nav: { id: string; label: string; v: View; icon: React.ReactNode }[] = [
-      { id: "nav-play", label: tr("sidebar.play"), v: "play", icon: <Play size={14} /> },
-      { id: "nav-instances", label: tr("sidebar.instances"), v: "instances", icon: <LayoutGrid size={14} /> },
-      { id: "nav-content", label: tr("sidebar.content"), v: "mods", icon: <Package size={14} /> },
-      { id: "nav-worlds", label: tr("sidebar.worlds"), v: "worlds", icon: <Globe2 size={14} /> },
-      { id: "nav-servers", label: tr("sidebar.servers"), v: "servers", icon: <Server size={14} /> },
-      { id: "nav-skins", label: tr("sidebar.skins"), v: "skin", icon: <Shirt size={14} /> },
-      { id: "nav-screenshots", label: tr("sidebar.screenshots"), v: "screenshots", icon: <ImageIcon size={14} /> },
-      { id: "nav-settings", label: tr("sidebar.settings"), v: "settings", icon: <SettingsIcon size={14} /> },
-    ];
-    const cmds: Command[] = nav
-      .filter((n) => !isNavDisabled(n.v, !!selectedId, skinsAvailable))
-      .map((n) => go(n.id, n.label, n.v, n.icon));
-    if (canPlay && !running)
-      cmds.push({
-        id: "play-launch",
-        label: tr("commands.launchGame"),
-        group: tr("commands.groupActions"),
-        icon: <Play size={14} className="fill-current" />,
-        keywords: "start run play",
-        hint: instance?.name,
-        run: () => void onPlay(),
+  const cmdEnvRef = useRef({
+    instances,
+    selectedId,
+    instance,
+    settings,
+    accounts,
+    runningIds,
+    skinsAvailable,
+    featuredEnabled,
+    onPlay,
+    onStop,
+    selectInstance,
+    onSaveInstance,
+    refreshInstances,
+    onMicrosoftLogin,
+  });
+  cmdEnvRef.current = {
+    instances,
+    selectedId,
+    instance,
+    settings,
+    accounts,
+    runningIds,
+    skinsAvailable,
+    featuredEnabled,
+    onPlay,
+    onStop,
+    selectInstance,
+    onSaveInstance,
+    refreshInstances,
+    onMicrosoftLogin,
+  };
+
+  const cmdCtx = useMemo<CommandContext>(() => {
+    const env = () => cmdEnvRef.current;
+    return {
+      api,
+      toast,
+      state: (): CmdState => {
+        const e = env();
+        return {
+          instances: e.instances,
+          selectedId: e.selectedId,
+          instance: e.instance,
+          settings: e.settings,
+          accounts: e.accounts,
+          runningIds: e.runningIds,
+          skinsAvailable: e.skinsAvailable,
+          featuredEnabled: e.featuredEnabled,
+        };
+      },
+      nav: (v) => setView(v),
+      selectInstance: (id) => env().selectInstance(id),
+      play: (id, qp) => env().onPlay(id, qp),
+      stop: () => void env().onStop(),
+      applySettings: (patch) => {
+        const s = settingsRef.current;
+        if (!s) return;
+        const next = { ...s, ...patch } as LauncherSettings;
+        setSettings(next);
+        api.saveSettings(next).catch(() => {});
+      },
+      saveInstance: (i) => env().onSaveInstance(i),
+      refreshInstances: () => env().refreshInstances(),
+      openModal: (m) => {
+        if (m === "add-instance") setAddOpen(true);
+        else if (m === "about") setAboutOpen(true);
+        else if (m === "log") setLogView(false);
+        else if (m === "ms-login") env().onMicrosoftLogin();
+      },
+      startMsLogin: () => env().onMicrosoftLogin(),
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!api.isTauri()) return;
+    let un: (() => void) | undefined;
+    api
+      .onCliCommand((cmd) => {
+        getCurrentWindow().setFocus().catch(() => {});
+        void runScript(cmd, REGISTRY, cmdCtx);
+      })
+      .then((u) => {
+        un = u;
+        api.cliReady().catch(() => {});
       });
-    cmds.push(
-      {
-        id: "add-instance",
-        label: tr("commands.addInstance"),
-        group: tr("commands.groupActions"),
-        icon: <Plus size={14} />,
-        keywords: "new create modpack",
-        run: () => setAddOpen(true),
-      },
-      {
-        id: "view-log",
-        label: tr("sidebar.viewLastLog"),
-        group: tr("commands.groupActions"),
-        icon: <ScrollText size={14} />,
-        keywords: "console output crash",
-        run: () => setLogView(false),
-      },
-      {
-        id: "open-folder",
-        label: tr("instances.openGameFolder"),
-        group: tr("commands.groupActions"),
-        icon: <FolderOpen size={14} />,
-        keywords: "files directory explorer finder",
-        run: () => selectedId && api.openDir(selectedId).catch(() => {}),
-      },
-      {
-        id: "cycle-theme",
-        label: tr("commands.switchTheme"),
-        group: tr("commands.groupActions"),
-        icon: <SunMoon size={14} />,
-        keywords: "appearance dark light grey gray oled ocean mocha nord rose amethyst crimson forest mode",
-        run: () => {
-          if (!settings) return;
-          const order = [
-            "system",
-            "brass-grey",
-            "brass-dark",
-            "brass-ocean",
-            "brass-mocha",
-            "brass-nord",
-            "brass-rose",
-            "brass-amethyst",
-            "brass-crimson",
-            "brass-forest",
-            "brass-light",
-          ];
-          const next = order[(order.indexOf(settings.theme) + 1) % order.length];
-          const s = { ...settings, theme: next, accent_color: defaultAccentForTheme(next) };
-          setSettings(s);
-          api.saveSettings(s).catch(() => {});
-        },
-      },
-    );
-    for (const i of instances) {
-      if (i.id === selectedId) continue;
-      if (i.featured && !featuredEnabled) continue;
-      cmds.push({
-        id: `switch-${i.id}`,
-        label: tr("commands.switchTo", { name: i.name }),
-        group: tr("sidebar.instances"),
-        icon: <LayoutGrid size={14} />,
-        keywords: "instance select pack",
-        run: () => {
-          void selectInstance(i.id);
-          setView("play");
-        },
-      });
-    }
-    return cmds;
-  }, [instances, selectedId, skinsAvailable, canPlay, running, instance?.name, settings, featuredEnabled, onPlay, selectInstance, tr]);
+    return () => un?.();
+  }, [cmdCtx]);
 
   return (
     <I18nProvider
@@ -1300,7 +1287,7 @@ export default function Home() {
         />
       )}
       {paletteOpen && (
-        <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
+        <CommandPalette ctx={cmdCtx} onClose={() => setPaletteOpen(false)} />
       )}
       <ToastHost />
       <TooltipLayer />
