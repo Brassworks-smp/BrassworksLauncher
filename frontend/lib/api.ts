@@ -625,6 +625,15 @@ export const onMenuAction = (
 ): Promise<UnlistenFn> =>
   listen<string>("menu://action", (e) => cb(e.payload));
 
+export const onCliCommand = (
+  cb: (command: string) => void,
+): Promise<UnlistenFn> =>
+  listen<string>("cli://command", (e) => cb(e.payload));
+
+export const cliReady = (): Promise<void> => invoke("cli_ready");
+
+export const installCli = (): Promise<string> => invoke("install_cli");
+
 
 export const BRASSWORKS_WEBSITE = "https://brassworks.opnsoc.org";
 export const BRASSWORKS_GITHUB = "https://github.com/Brassworks-smp";
