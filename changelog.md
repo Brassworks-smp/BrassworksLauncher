@@ -1,12 +1,7 @@
 ### **Additions:**
-* **More community translations** - two more languages are now fully translated on Crowdin and ready to pick from the language selector in Settings (or during onboarding):
-  * **French** - fully translated
-  * **Arabic** - fully translated
+* **Command palette + slash commands** - press ⌘K (Ctrl+K on Windows/Linux) to open the command palette and run anything in the launcher. Type `/` for Discord-style slash commands with autocomplete and live hints for each argument - launch instances, search/install/toggle content, sync the modpack, manage worlds, servers, skins, accounts, themes and settings. You can chain commands with `;`, pin the ones you use most, and type `/help` to browse everything.
+* **`brassworks` command-line tool** - drive the launcher straight from your terminal with the same commands (for example `brassworks instance launch survival` or `brassworks go settings`). Install or remove the command from Settings → Launcher; `brassworks help` and `brassworks --version` run without opening the app.
+* **Custom accent colours** - a new colour picker lets you dial in any colour you like by dragging the gradient or pasting a hex code, now available for the launcher accent, instance folder colours, and during onboarding. Your custom colour sticks around even when you switch to a preset, and clearing the hex resets it.
 
 ### **Improvements:**
-* **The Minecraft font now speaks Russian and European languages** - Russian and many European languages (Czech, Polish, German and more) used to fall back to a mismatched system font on screens that use the Minecraft font; they now render in a matching pixel font that keeps the in-game look
-* **Skins page tweaks** - "Add skin" now opens the editor pre-filled from your currently equipped skin (texture, model and cape) so you can tweak and save in one step, and there's a new "Edit skin" button to jump straight into editing the selected preset
-
-### **Fixes:**
-* **Translation polish** - fixed punctuation, capitalization, spacing and a batch of spelling/typo issues flagged across the translated languages on Crowdin
-* Fixed the action buttons on skin presets clipping outside the card when a language's labels were long - they now wrap and stack neatly instead of being cut off
+* **Reworked command palette** - it now fuzzy-searches every action in the launcher (grouped by area), shows each command's signature and description as you type, and lets you pin your favourite commands to the top. List commands like "show worlds" jump straight to the matching screen.
