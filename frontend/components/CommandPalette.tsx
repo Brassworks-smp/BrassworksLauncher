@@ -434,8 +434,8 @@ export function CommandPalette({
               {t("commandPalette.noMatch", { query })}
             </div>
           ) : (
-            sections.map((g) => (
-              <div key={g.name} className="px-2 pb-1">
+            sections.map((g, gi) => (
+              <div key={`${gi}-${g.name}`} className="px-2 pb-1">
                 <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-600">
                   {g.name}
                 </div>
