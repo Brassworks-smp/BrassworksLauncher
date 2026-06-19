@@ -255,6 +255,11 @@ export function CommandPalette({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "/" && !compose) {
+      e.preventDefault();
+      setQuery("/");
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSel((s) => (rowCount ? (s + 1) % rowCount : 0));
