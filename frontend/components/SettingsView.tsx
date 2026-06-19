@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Trash2,
   Loader2,
@@ -24,6 +24,7 @@ import {
   Languages,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { CustomColorChip, swatchBg } from "@/components/ColorPicker";
 import { toast } from "@/lib/toast";
 import { useT, LOCALES } from "@/lib/i18n";
 import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
@@ -845,22 +846,27 @@ function AccentPicker({
   onChange: (c: string | null) => void;
 }) {
   const t = useT();
+  const presets = ACCENT_COLORS.map((c) => c.toLowerCase());
+  const isCustomActive =
+    value != null && !presets.includes(value.toLowerCase());
+
   const swatches: { color: string; key: string; isDefault?: boolean }[] = [
     { color: DEFAULT_ACCENT, key: "default", isDefault: true },
     ...ACCENT_COLORS.map((c) => ({ color: c, key: c })),
   ];
+
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       {swatches.map((s) => {
-        const active = s.isDefault ? value === null : value === s.color;
+        const active = s.isDefault
+          ? value === null
+          : value?.toLowerCase() === s.color.toLowerCase();
         return (
           <button
             key={s.key}
             onClick={() => onChange(s.isDefault ? null : s.color)}
             title={s.isDefault ? t("theme.accentDefault") : s.color}
-            style={{
-              backgroundImage: `linear-gradient(to bottom right, color-mix(in srgb, ${s.color} 88%, #fff), color-mix(in srgb, ${s.color} 78%, #000))`,
-            }}
+            style={{ backgroundImage: swatchBg(s.color) }}
             className={`grid h-7 w-7 place-items-center rounded-md shadow-sm transition hover:scale-110 ${
               active ? "scale-110" : ""
             }`}
@@ -875,6 +881,13 @@ function AccentPicker({
           </button>
         );
       })}
+
+      <CustomColorChip
+        selected={value}
+        active={isCustomActive}
+        onPick={onChange}
+        storageKey="bw.accent.custom"
+      />
     </div>
   );
 }

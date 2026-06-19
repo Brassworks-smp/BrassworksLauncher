@@ -17,6 +17,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { Select, Toggle } from "@/components/ui";
 import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
+import { CustomColorChip } from "@/components/ColorPicker";
 import { useT, LOCALES, type TFunc } from "@/lib/i18n";
 import type { AccountStore, LauncherSettings } from "@/lib/types";
 
@@ -247,7 +248,7 @@ function ThemeStep({
         </div>
         <div>
           <div className="mb-2 text-sm text-ink-600">{t("onboarding.accentColour")}</div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {[{ color: DEFAULT_ACCENT, isDefault: true }, ...ACCENT_COLORS.map((c) => ({ color: c, isDefault: false }))].map(
               (s) => {
                 const active = s.isDefault
@@ -276,6 +277,15 @@ function ThemeStep({
                 );
               },
             )}
+            <CustomColorChip
+              selected={settings.accent_color}
+              active={
+                settings.accent_color != null &&
+                !ACCENT_COLORS.includes(settings.accent_color)
+              }
+              onPick={(c) => onPatch({ accent_color: c })}
+              storageKey="bw.accent.custom"
+            />
           </div>
         </div>
         <Toggle

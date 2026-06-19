@@ -108,7 +108,8 @@
     "crimson": "Crimson",
     "forest": "Forest",
     "light": "Light",
-    "accentDefault": "Default (green)"
+    "accentDefault": "Default (green)",
+    "accentCustom": "Custom color"
   },
   "onboarding": {
     "skipSetup": "Skip setup",

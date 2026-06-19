@@ -26,6 +26,7 @@ import { Collapse, placeMenu, useMenuDismiss, Toggle } from "./ui";
 
 type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
+import { CustomColorChip } from "@/components/ColorPicker";
 import { iconSrc } from "@/lib/instanceIcons";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
@@ -601,7 +602,7 @@ function FolderGroup({
                   onChange={(checked) => onColor(checked ? null : FOLDER_COLORS[0])}
                 />
               </div>
-              <div className="flex flex-wrap gap-1.5 transition-opacity">
+              <div className="flex flex-wrap items-center gap-1.5 transition-opacity">
                 {FOLDER_COLORS.map((c) => {
                   const active = folder.color === c;
                   return (
@@ -626,6 +627,16 @@ function FolderGroup({
                     </button>
                   );
                 })}
+                <CustomColorChip
+                  selected={folder.color}
+                  active={
+                    folder.color != null && !FOLDER_COLORS.includes(folder.color)
+                  }
+                  onPick={onColor}
+                  storageKey="bw.folder.custom"
+                  compact
+                  fullWidth
+                />
               </div>
               <button
                 onClick={() => {
