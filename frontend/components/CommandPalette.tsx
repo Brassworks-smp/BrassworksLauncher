@@ -254,12 +254,15 @@ export function CommandPalette({
     inputRef.current?.focus();
   };
 
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "/" && !compose) {
-      e.preventDefault();
-      setQuery("/");
+  const onChange = (raw: string) => {
+    if (!norm.startsWith("/") && !query.includes("/") && raw.includes("/")) {
+      setQuery(`/${raw.slice(raw.indexOf("/") + 1)}`);
       return;
     }
+    setQuery(raw);
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSel((s) => (rowCount ? (s + 1) % rowCount : 0));
@@ -314,7 +317,7 @@ export function CommandPalette({
             ref={inputRef}
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKey}
             placeholder={t("commandPalette.searchPlaceholder")}
             className="flex-1 bg-transparent py-3.5 font-mono text-sm outline-none placeholder:font-sans placeholder:text-ink-600"
