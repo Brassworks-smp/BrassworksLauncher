@@ -267,6 +267,10 @@ pub fn run() {
             print_cli_help();
             return;
         }
+        if matches!(first.as_str(), "--version" | "-V" | "version") {
+            println!("Brassworks Launcher {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
     }
 
     let mut builder = tauri::Builder::default();

@@ -79,4 +79,14 @@ export const appCommands: CommandSpec[] = [
       return { ok: true, message: `CLI installed: ${where}` };
     },
   },
+  {
+    path: ["app", "version"],
+    group: GROUP,
+    summary: "Show the launcher version",
+    keywords: "about build number release",
+    run: async (_a, ctx) => {
+      const v = await ctx.api.appVersion();
+      return { ok: true, message: `Brassworks Launcher ${v}` };
+    },
+  },
 ];
