@@ -88,9 +88,14 @@ const BROWSE_POOL = REGISTRY.filter(
 );
 
 interface Row {
-  c: CommandSpec;
-  group: string;
   idx: number;
+  group: string;
+  pin: string;
+  label: string;
+  pathHint: string;
+  iconGroup: string;
+  needsArgs: boolean;
+  mono: boolean;
 }
 
 export function CommandPalette({
@@ -157,19 +162,43 @@ export function CommandPalette({
         .sort((a, b) => a.s - b.s)
         .map((r) => r.c);
     }
-    const showPinned = !q && pins.length > 0;
     const rows: Row[] = [];
     let i = 0;
+    const argLabel = (c: CommandSpec) =>
+      cmdArgsLabel(c) ? `${cmdPath(c)} ${cmdArgsLabel(c)}` : cmdPath(c);
+    const specRow = (c: CommandSpec): Row => ({
+      idx: i++,
+      group: c.group,
+      pin: cmdPath(c),
+      label: c.summary,
+      pathHint: argLabel(c),
+      iconGroup: c.group,
+      needsArgs: hasRequiredArgs(c),
+      mono: false,
+    });
+    const pinRow = (pin: string): Row => {
+      const p = parse(pin, REGISTRY);
+      const spec = p && !("error" in p) ? p.spec : null;
+      const bare = spec ? cmdPath(spec) : "";
+      const isBare = !!spec && pin.trim().toLowerCase() === bare.toLowerCase();
+      return {
+        idx: i++,
+        group: "Pinned",
+        pin,
+        label: isBare && spec ? spec.summary : pin.replace(/^\//, ""),
+        pathHint: isBare && spec ? argLabel(spec) : "",
+        iconGroup: spec ? spec.group : "Help",
+        needsArgs: !(p && !("error" in p) && !missingArgs(p)),
+        mono: !isBare,
+      };
+    };
+    const showPinned = !q && pins.length > 0;
     if (showPinned) {
-      const pinned = pins
-        .map((p) => list.find((c) => cmdPath(c) === p))
-        .filter((c): c is CommandSpec => !!c);
-      for (const c of pinned) rows.push({ c, group: "Pinned", idx: i++ });
+      for (const pin of pins) rows.push(pinRow(pin));
       for (const c of list)
-        if (!pins.includes(cmdPath(c)))
-          rows.push({ c, group: c.group, idx: i++ });
+        if (!pins.includes(cmdPath(c))) rows.push(specRow(c));
     } else {
-      for (const c of list) rows.push({ c, group: c.group, idx: i++ });
+      for (const c of list) rows.push(specRow(c));
     }
     return rows;
   }, [browseFilter, pins]);
@@ -184,24 +213,31 @@ export function CommandPalette({
       ?.scrollIntoView({ block: "nearest" });
   }, [sel]);
 
-  const togglePin = (path: string) => {
+  const togglePin = (pin: string) => {
     setPins((p) => {
-      const next = p.includes(path) ? p.filter((x) => x !== path) : [...p, path];
+      const next = p.includes(pin) ? p.filter((x) => x !== pin) : [...p, pin];
       savePins(next);
       return next;
     });
   };
 
-  const pickBrowse = (c?: CommandSpec) => {
-    if (!c) return;
-    if (hasRequiredArgs(c)) {
-      setQuery(`${cmdPath(c)} `);
+  const runRow = (row?: Row) => {
+    if (!row) return;
+    if (row.needsArgs) {
+      setQuery(row.pin.endsWith(" ") ? row.pin : `${row.pin} `);
       inputRef.current?.focus();
       return;
     }
     close();
-    setTimeout(() => void runScript(cmdPath(c), REGISTRY, ctx), 0);
+    setTimeout(() => void runScript(row.pin, REGISTRY, ctx), 0);
   };
+
+  // The command currently being composed, normalised for pinning.
+  const composeCmd = `/${body.trim()}`;
+  const composeParsed =
+    compose && !helpMode && body.trim() ? parse(composeCmd, REGISTRY) : null;
+  const canPin = !!composeParsed && !("error" in composeParsed);
+  const composePinned = pins.includes(composeCmd);
 
   const exec = () => {
     const q = query;
@@ -231,7 +267,7 @@ export function CommandPalette({
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (browseMode) {
-        pickBrowse(browseRows[sel]?.c);
+        runRow(browseRows[sel]);
       } else if (runnable || query.includes(";")) {
         exec();
       } else {
@@ -279,6 +315,22 @@ export function CommandPalette({
             autoCapitalize="off"
             autoComplete="off"
           />
+          {compose && canPin && (
+            <button
+              onClick={() => togglePin(composeCmd)}
+              title={composePinned ? "Unpin this command" : "Pin this command"}
+              className="shrink-0 rounded p-1 transition hover:bg-brass-500/10"
+            >
+              <Star
+                size={14}
+                className={
+                  composePinned
+                    ? "fill-current text-brass-300"
+                    : "text-ink-600 hover:text-brass-300"
+                }
+              />
+            </button>
+          )}
           <kbd className="hidden shrink-0 items-center gap-1 rounded border border-edge px-1.5 py-0.5 font-mono text-[10px] text-ink-600 sm:flex">
             {IS_MAC ? <CommandIcon size={10} /> : "Ctrl"} K
           </kbd>
@@ -374,16 +426,14 @@ export function CommandPalette({
                 <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-600">
                   {g.name}
                 </div>
-                {g.items.map(({ c, idx }) => {
-                  const active = idx === sel;
-                  const path = cmdPath(c);
-                  const pinned = pins.includes(path);
-                  const argsLabel = cmdArgsLabel(c);
+                {g.items.map((row) => {
+                  const active = row.idx === sel;
+                  const pinned = pins.includes(row.pin);
                   return (
                     <div
-                      key={path}
-                      data-idx={idx}
-                      onMouseMove={() => setSel(idx)}
+                      key={row.idx}
+                      data-idx={row.idx}
+                      onMouseMove={() => setSel(row.idx)}
                       className={`group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
                         active
                           ? "bg-brass-500/15 text-brass-200"
@@ -391,7 +441,7 @@ export function CommandPalette({
                       }`}
                     >
                       <button
-                        onClick={() => pickBrowse(c)}
+                        onClick={() => runRow(row)}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       >
                         <span
@@ -399,20 +449,23 @@ export function CommandPalette({
                             active ? "text-brass-300" : "text-ink-600"
                           }`}
                         >
-                          {groupIcon(c.group)}
+                          {groupIcon(row.iconGroup)}
                         </span>
-                        <span className="min-w-0 flex-1 truncate">{c.summary}</span>
-                        <span className="shrink-0 truncate font-mono text-[11px] text-ink-600">
-                          {path}
-                          {argsLabel && (
-                            <span className="text-brass-400/70"> {argsLabel}</span>
-                          )}
+                        <span
+                          className={`min-w-0 flex-1 truncate ${row.mono ? "font-mono" : ""}`}
+                        >
+                          {row.label}
                         </span>
+                        {row.pathHint && (
+                          <span className="shrink-0 truncate font-mono text-[11px] text-ink-600">
+                            {row.pathHint}
+                          </span>
+                        )}
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          togglePin(path);
+                          togglePin(row.pin);
                         }}
                         title={pinned ? "Unpin" : "Pin"}
                         className={`shrink-0 rounded p-0.5 transition ${

@@ -1,4 +1,4 @@
-import { REGISTRY, cmdPath } from "./registry";
+import { REGISTRY, cmdPath, parse } from "./registry";
 
 const PINS_KEY = "bw.cmd.pins";
 const EVENT = "bw:cmd-pins";
@@ -30,12 +30,18 @@ export function onPinsChanged(cb: () => void): () => void {
   };
 }
 
-/** Pinned command paths resolved to {id, label} for the native menu. */
+/** Pinned commands (paths or full command strings) resolved for the native menu. */
 export function pinnedMenuItems(): { id: string; label: string }[] {
   return loadPins()
-    .map((p) => {
-      const spec = REGISTRY.find((s) => cmdPath(s) === p);
-      return spec ? { id: p, label: spec.summary } : null;
+    .map((pin) => {
+      const parsed = parse(pin, REGISTRY);
+      if (!parsed || "error" in parsed) return null;
+      const bare = cmdPath(parsed.spec);
+      const label =
+        pin.trim().toLowerCase() === bare.toLowerCase()
+          ? parsed.spec.summary
+          : pin.replace(/^\//, "");
+      return { id: pin, label };
     })
     .filter((x): x is { id: string; label: string } => x !== null);
 }
