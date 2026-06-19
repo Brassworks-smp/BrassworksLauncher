@@ -113,8 +113,10 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const compose = query.startsWith("/");
-  const body = compose ? query.slice(1) : query;
+  const norm = query.replace(/^\s+/, "");
+  const compose = norm.startsWith("/");
+  const cmd = compose ? norm : query;
+  const body = compose ? norm.slice(1) : query;
   const helpMatch = compose ? /^help(\s+(.*))?$/i.exec(body) : null;
   const helpMode = !!helpMatch;
   const browseMode = !compose || helpMode;
@@ -131,7 +133,7 @@ export function CommandPalette({
       return;
     }
     let alive = true;
-    complete(query, REGISTRY, ctx)
+    complete(cmd, REGISTRY, ctx)
       .then((c) => {
         if (!alive) return;
         setSugg(c.suggestions);
@@ -148,7 +150,7 @@ export function CommandPalette({
     return () => {
       alive = false;
     };
-  }, [query, compose, helpMode, ctx]);
+  }, [cmd, compose, helpMode, ctx]);
 
   const browseRows = useMemo<Row[]>(() => {
     const q = browseFilter.trim().toLowerCase();
@@ -203,7 +205,7 @@ export function CommandPalette({
     return rows;
   }, [browseFilter, pins]);
 
-  const runnable = compose && !helpMode && isRunnable(query);
+  const runnable = compose && !helpMode && isRunnable(cmd);
   const rowCount = browseMode ? browseRows.length : sugg.length;
 
   useEffect(() => setSel(0), [query]);
@@ -240,7 +242,7 @@ export function CommandPalette({
   const composePinned = pins.includes(composeCmd);
 
   const exec = () => {
-    const q = query;
+    const q = cmd;
     close();
     setTimeout(() => void runScript(q, REGISTRY, ctx), 0);
   };
@@ -248,7 +250,7 @@ export function CommandPalette({
   const accept = (s?: Suggestion) => {
     const pick = s ?? sugg[sel];
     if (!pick) return;
-    setQuery((q) => `/${applySuggestion(q.slice(1), pick.value)}`);
+    setQuery(`/${applySuggestion(body, pick.value)}`);
     inputRef.current?.focus();
   };
 
