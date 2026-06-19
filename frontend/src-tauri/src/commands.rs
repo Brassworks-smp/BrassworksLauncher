@@ -1873,3 +1873,64 @@ pub(crate) async fn export_world(
     .await
     .map_err(err)?
 }
+
+#[tauri::command]
+pub(crate) fn cli_ready(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
+    let cmd = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
+    if let Some(cmd) = cmd {
+        app.emit("cli://command", cmd).map_err(err)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn install_cli() -> CmdResult<String> {
+    let exe = std::env::current_exe().map_err(err)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let base = std::env::var("LOCALAPPDATA").map_err(err)?;
+        let bin = std::path::PathBuf::from(base)
+            .join("BrassworksLauncher")
+            .join("bin");
+        std::fs::create_dir_all(&bin).map_err(err)?;
+        let shim = bin.join("brassworks.cmd");
+        let content = format!("@echo off\r\n\"{}\" %*\r\n", exe.display());
+        std::fs::write(&shim, content).map_err(err)?;
+        Ok(format!(
+            "{} - add this folder to your PATH, then run `brassworks <command>`",
+            bin.display()
+        ))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::symlink;
+        use std::path::PathBuf;
+
+        let mut candidates: Vec<PathBuf> = vec![PathBuf::from("/usr/local/bin/brassworks")];
+        if let Ok(home) = std::env::var("HOME") {
+            candidates.push(PathBuf::from(home).join(".local/bin/brassworks"));
+        }
+
+        let mut last_err = String::from("no writable location on PATH");
+        for target in candidates {
+            if let Some(parent) = target.parent() {
+                if std::fs::create_dir_all(parent).is_err() {
+                    continue;
+                }
+            }
+            let _ = std::fs::remove_file(&target);
+            match symlink(&exe, &target) {
+                Ok(_) => {
+                    return Ok(format!(
+                        "{} - run `brassworks <command>`",
+                        target.display()
+                    ))
+                }
+                Err(e) => last_err = e.to_string(),
+            }
+        }
+        Err(last_err)
+    }
+}

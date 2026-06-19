@@ -15,6 +15,7 @@ pub(crate) struct AppState {
     pub(crate) children: Arc<Mutex<HashMap<String, Child>>>,
     pub(crate) cancels: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     pub(crate) discord: Arc<Discord>,
+    pub(crate) pending_cli: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {

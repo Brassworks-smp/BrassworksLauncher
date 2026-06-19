@@ -15,6 +15,65 @@ use tauri::{Emitter, Manager, WindowEvent};
 use discord::Discord;
 use state::AppState;
 
+fn reveal_main(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+}
+
+fn command_from_argv(args: &[String]) -> Option<String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut started = false;
+    for a in args.iter().skip(1) {
+        if !started && a.starts_with('-') {
+            continue;
+        }
+        started = true;
+        tokens.push(a.clone());
+    }
+    let joined = tokens.join(" ");
+    let trimmed = joined.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn print_cli_help() {
+    println!(
+        "Brassworks Launcher - command-line interface
+
+USAGE:
+    brassworks <command> [arguments]
+
+Runs a launcher command. If the app is already open the command is sent to that
+window; otherwise the app starts and runs it once ready. Quote multi-word
+arguments, e.g. brassworks \"world backup My Base\".
+
+COMMON COMMANDS:
+    instance launch <name> [--world W] [--server S]   launch (optionally into a world/server)
+    instance list | stop <name> | select <name>       manage instances
+    instance set <name> <key> <value>                 change an instance setting
+    content search <query> | install <query>          find & add mods
+    content list | enable <name> | disable <name>     manage installed content
+    modpack sync | repair | status | export <fmt>     modpack maintenance
+    world list | play <name> | backup <name>          worlds
+    server list | join <name> | ping <name>           servers
+    skin list | apply <name> | cape <name>            skins & capes
+    account list | select <name> | login              accounts
+    settings set <key> <value> | get <key>            launcher settings
+    theme <name> | accent <hex>                        appearance
+    go <view>                                          navigate (play, worlds, settings, …)
+
+Open the app and press {} K, then type / to browse every command with
+autocomplete, or run `brassworks help` again any time.",
+        if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" }
+    );
+}
+
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "tray-show", "Open Brassworks", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "tray-hide", "Hide to tray", true, None::<&str>)?;
@@ -143,7 +202,26 @@ fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    if let Some(first) = std::env::args().nth(1) {
+        if matches!(first.as_str(), "help" | "--help" | "-h") {
+            print_cli_help();
+            return;
+        }
+    }
+
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            reveal_main(app);
+            if let Some(cmd) = command_from_argv(&argv) {
+                let _ = app.emit("cli://command", cmd);
+            }
+        }));
+    }
+
+    builder = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
 
@@ -164,12 +242,15 @@ pub fn run() {
                 discord.set_idle();
             }
 
+            let cold_cli = command_from_argv(&std::env::args().collect::<Vec<_>>());
+
             app.manage(AppState {
                 launcher,
                 running: Arc::new(Mutex::new(HashSet::new())),
                 children: Arc::new(Mutex::new(HashMap::new())),
                 cancels: Arc::new(Mutex::new(HashMap::new())),
                 discord,
+                pending_cli: Arc::new(Mutex::new(cold_cli)),
             });
 
             setup_tray(app.handle())?;
@@ -305,6 +386,8 @@ pub fn run() {
             commands::backup_world,
             commands::list_world_backups,
             commands::export_world,
+            commands::cli_ready,
+            commands::install_cli,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");
