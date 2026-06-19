@@ -1934,3 +1934,62 @@ pub(crate) fn install_cli() -> CmdResult<String> {
         Err(last_err)
     }
 }
+
+fn cli_targets() -> Vec<std::path::PathBuf> {
+    use std::path::PathBuf;
+    #[cfg(target_os = "windows")]
+    {
+        let mut v = Vec::new();
+        if let Ok(base) = std::env::var("LOCALAPPDATA") {
+            v.push(
+                PathBuf::from(base)
+                    .join("BrassworksLauncher")
+                    .join("bin")
+                    .join("brassworks.cmd"),
+            );
+        }
+        v
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut v = vec![PathBuf::from("/usr/local/bin/brassworks")];
+        if let Ok(home) = std::env::var("HOME") {
+            v.push(PathBuf::from(home).join(".local/bin/brassworks"));
+        }
+        v
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct CliStatus {
+    installed: bool,
+    path: Option<String>,
+}
+
+#[tauri::command]
+pub(crate) fn cli_status() -> CliStatus {
+    for target in cli_targets() {
+        if std::fs::symlink_metadata(&target).is_ok() {
+            return CliStatus {
+                installed: true,
+                path: Some(target.display().to_string()),
+            };
+        }
+    }
+    CliStatus {
+        installed: false,
+        path: None,
+    }
+}
+
+#[tauri::command]
+pub(crate) fn uninstall_cli() -> CmdResult<String> {
+    let mut removed: Option<String> = None;
+    for target in cli_targets() {
+        if std::fs::symlink_metadata(&target).is_ok() {
+            std::fs::remove_file(&target).map_err(err)?;
+            removed = Some(target.display().to_string());
+        }
+    }
+    removed.ok_or_else(|| "the brassworks command isn't installed".to_string())
+}

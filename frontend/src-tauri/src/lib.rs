@@ -388,6 +388,8 @@ pub fn run() {
             commands::export_world,
             commands::cli_ready,
             commands::install_cli,
+            commands::uninstall_cli,
+            commands::cli_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

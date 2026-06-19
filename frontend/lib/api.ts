@@ -634,6 +634,14 @@ export const cliReady = (): Promise<void> => invoke("cli_ready");
 
 export const installCli = (): Promise<string> => invoke("install_cli");
 
+export const uninstallCli = (): Promise<string> => invoke("uninstall_cli");
+
+export interface CliStatus {
+  installed: boolean;
+  path: string | null;
+}
+export const cliStatus = (): Promise<CliStatus> => invoke("cli_status");
+
 
 export const BRASSWORKS_WEBSITE = "https://brassworks.opnsoc.org";
 export const BRASSWORKS_GITHUB = "https://github.com/Brassworks-smp";

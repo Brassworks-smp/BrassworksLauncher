@@ -296,8 +296,13 @@
     "cli": {
       "title": "Command-line tool",
       "desc": "Install the `brassworks` command so you can drive the launcher from a terminal - e.g. `brassworks instance launch survival` or `brassworks go settings`. Same commands as the ⌘K palette.",
+      "status": "Status",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
       "install": "Install `brassworks` command",
-      "done": "CLI installed"
+      "uninstall": "Remove `brassworks` command",
+      "done": "CLI installed",
+      "removed": "CLI removed"
     },
     "updates": {
       "title": "Updates",

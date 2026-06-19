@@ -79,8 +79,8 @@ export function SettingsView({
   );
   const [cacheBytes, setCacheBytes] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
-  const [installingCli, setInstallingCli] = useState(false);
-  const [cliPath, setCliPath] = useState<string | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
+  const [cli, setCli] = useState<api.CliStatus | null>(null);
   
   
   const [defaults, setDefaults] = useState<LauncherSettings | null>(null);
@@ -92,8 +92,10 @@ export function SettingsView({
     if (api.isTauri()) api.defaultSettings().then(setDefaults).catch(() => {});
   }, []);
   useEffect(() => {
-    if (tab === "launcher" && api.isTauri())
+    if (tab === "launcher" && api.isTauri()) {
       api.cacheSize().then(setCacheBytes).catch(() => {});
+      api.cliStatus().then(setCli).catch(() => {});
+    }
   }, [tab]);
 
   if (!settings) {
@@ -542,34 +544,55 @@ export function SettingsView({
 
             <Card title={t("settings.cli.title")} icon={<Terminal size={14} />}>
               <p className="text-xs text-ink-600">{t("settings.cli.desc")}</p>
-              {cliPath && (
+              <Row
+                label={t("settings.cli.status")}
+                value={
+                  cli === null
+                    ? "…"
+                    : cli.installed
+                      ? t("settings.cli.installed")
+                      : t("settings.cli.notInstalled")
+                }
+              />
+              {cli?.installed && cli.path && (
                 <p className="break-all rounded-lg border border-edge bg-ink-950/40 px-3 py-2 font-mono text-xs text-brass-200">
-                  {cliPath}
+                  {cli.path}
                 </p>
               )}
               <ActionButton
                 icon={
-                  installingCli ? (
+                  cliBusy ? (
                     <Loader2 size={15} className="animate-spin" />
+                  ) : cli?.installed ? (
+                    <Trash2 size={15} />
                   ) : (
                     <Terminal size={15} />
                   )
                 }
-                disabled={installingCli}
+                disabled={cliBusy || cli === null}
+                danger={cli?.installed}
                 onClickAsync={async () => {
-                  setInstallingCli(true);
+                  setCliBusy(true);
                   try {
-                    const where = await api.installCli();
-                    setCliPath(where);
-                    toast(t("settings.cli.done"), "success");
+                    if (cli?.installed) {
+                      await api.uninstallCli();
+                      setCli({ installed: false, path: null });
+                      toast(t("settings.cli.removed"), "success");
+                    } else {
+                      const where = await api.installCli();
+                      setCli({ installed: true, path: where.split(" - ")[0] });
+                      toast(t("settings.cli.done"), "success");
+                    }
                   } catch (e) {
                     onError(String(e));
                   } finally {
-                    setInstallingCli(false);
+                    setCliBusy(false);
                   }
                 }}
               >
-                {t("settings.cli.install")}
+                {cli?.installed
+                  ? t("settings.cli.uninstall")
+                  : t("settings.cli.install")}
               </ActionButton>
             </Card>
 
