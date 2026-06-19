@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import rehypeHighlight from "rehype-highlight";
 import * as api from "@/lib/api";
 
 export function Markdown({
@@ -16,7 +17,10 @@ export function Markdown({
     <div className={`markdown ${className ?? ""}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeHighlight, { detect: true, ignoreMissing: true }],
+        ]}
         components={{
           a: ({ href, children, ...props }) => (
             <a

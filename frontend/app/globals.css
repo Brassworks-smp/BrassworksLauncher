@@ -825,6 +825,55 @@ a:focus-visible,
   line-height: 1.5;
 }
 .markdown pre code { background: none; border: none; padding: 0; color: #ddd; font-size: 0.85em; }
+.markdown pre code.hljs { color: #d6deeb; }
+:root.theme-light .markdown pre code,
+:root.theme-light .markdown pre code.hljs { color: #24292f; }
+
+/* Syntax highlighting — accent-derived tokens, each nudged toward a different
+   hue so shades vary while staying tied to the current accent (custom accents
+   and per-source panel accents flow through automatically via --color-brass-*). */
+.markdown {
+  --hl-comment: color-mix(in srgb, var(--color-brass-400) 28%, var(--color-ink-600));
+  --hl-keyword: var(--color-brass-400);
+  --hl-string: color-mix(in srgb, var(--color-brass-400) 72%, #7cff6b);
+  --hl-number: color-mix(in srgb, var(--color-brass-400) 70%, #ffb14e);
+  --hl-func: color-mix(in srgb, var(--color-brass-300) 74%, #6fd3ff);
+  --hl-attr: color-mix(in srgb, var(--color-brass-400) 68%, #ffd24a);
+  --hl-tag: color-mix(in srgb, var(--color-brass-400) 68%, #ff6fa5);
+  --hl-meta: color-mix(in srgb, var(--color-brass-400) 66%, #5fe0ff);
+}
+.markdown .hljs-comment,
+.markdown .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.markdown .hljs-keyword,
+.markdown .hljs-selector-tag,
+.markdown .hljs-literal,
+.markdown .hljs-meta .hljs-keyword { color: var(--hl-keyword); }
+.markdown .hljs-string,
+.markdown .hljs-regexp,
+.markdown .hljs-addition { color: var(--hl-string); }
+.markdown .hljs-number,
+.markdown .hljs-symbol,
+.markdown .hljs-bullet,
+.markdown .hljs-link { color: var(--hl-number); }
+.markdown .hljs-title,
+.markdown .hljs-section,
+.markdown .hljs-built_in,
+.markdown .hljs-title.function_ { color: var(--hl-func); }
+.markdown .hljs-attr,
+.markdown .hljs-attribute,
+.markdown .hljs-variable,
+.markdown .hljs-template-variable,
+.markdown .hljs-type,
+.markdown .hljs-params { color: var(--hl-attr); }
+.markdown .hljs-name,
+.markdown .hljs-tag,
+.markdown .hljs-selector-id,
+.markdown .hljs-selector-class,
+.markdown .hljs-deletion { color: var(--hl-tag); }
+.markdown .hljs-meta,
+.markdown .hljs-doctag { color: var(--hl-meta); }
+.markdown .hljs-emphasis { font-style: italic; }
+.markdown .hljs-strong { font-weight: 700; }
 
 .markdown hr { border: none; border-top: 1px solid var(--color-edge); margin: 1.4em 0; }
 
