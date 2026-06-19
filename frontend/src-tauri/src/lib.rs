@@ -48,25 +48,85 @@ fn print_cli_help() {
 
 USAGE:
     brassworks <command> [arguments]
+    brassworks help | --version
 
 Runs a launcher command. If the app is already open the command is sent to that
 window; otherwise the app starts and runs it once ready. Quote multi-word
 arguments, e.g. brassworks \"world backup My Base\".
 
-COMMON COMMANDS:
+COMMANDS:
+  Navigate
+    go <view>                                navigate (play, instances, mods, worlds, servers, skin, screenshots, settings)
+
+  Instance
+    instance list                            show all instances
     instance launch <name> [--world W] [--server S]   launch (optionally into a world/server)
-    instance list | stop <name> | select <name>       manage instances
-    instance set <name> <key> <value>                 change an instance setting
-    content search <query> | install <query>          find & add mods
-    content list | enable <name> | disable <name>     manage installed content
-    modpack sync | repair | status | export <fmt>     modpack maintenance
-    world list | play <name> | backup <name>          worlds
-    server list | join <name> | ping <name>           servers
-    skin list | apply <name> | cape <name>            skins & capes
-    account list | select <name> | login              accounts
-    settings set <key> <value> | get <key>            launcher settings
-    theme <name> | accent <hex>                        appearance
-    go <view>                                          navigate (play, worlds, settings, …)
+    instance stop <name>                     stop a running instance
+    instance select <name>                   switch to an instance
+    instance create                          add a new instance
+    instance delete <name>                   delete an instance
+    instance open <name>                     open the game folder
+    instance info <name>                     show instance details
+    instance set <name> <key> <value>        change an instance setting
+
+  Content
+    content list                             show installed content
+    content search <query> [--source S]      search for mods
+    content install <query> [--source S]     install the top match
+    content remove <name>                    remove installed content
+    content enable <name>                    enable a mod
+    content disable <name>                   disable a mod
+    content update-all                       update all added content
+
+  Modpack
+    modpack status                           show modpack status
+    modpack sync                             sync / update the modpack
+    modpack repair                           repair the modpack files
+    modpack reinstall                        reinstall from scratch
+    modpack lock | unlock                    lock / unlock the modpack
+    modpack export <modrinth|curseforge>     export to Downloads
+
+  World
+    world list                               show singleplayer worlds
+    world play <name>                        launch directly into a world
+    world backup <name>                      back up a world
+    world delete <name>                      delete a world
+
+  Server
+    server list                              show saved servers
+    server join <name>                       launch and join a server
+    server ping <name>                       ping a server
+
+  Skin
+    skin list                                show saved skins
+    skin apply <name>                        apply a saved skin
+    skin delete <name>                       delete a saved skin
+    skin cape <name|none>                    equip a cape
+
+  Account
+    account list                             show accounts
+    account select <name>                    switch active account
+    account login                            sign in with Microsoft
+    account remove <name>                    remove an account
+
+  Settings
+    settings set <key> <value>               change a launcher setting
+    settings get <key>                       read a launcher setting
+    theme <name>                             set the theme
+    accent <hex|default>                     set the accent color
+
+  Launcher
+    app check-update                         check for a launcher update
+    app update                               download and install the update
+    app restart                              restart the launcher
+    app about                                about Brassworks Launcher
+    app view-log                             open the log viewer
+    app upload-log                           upload the latest log to mclo.gs
+    app install-cli                          install this command-line tool
+    app version                              print the launcher version
+
+  Help
+    help [area]                              browse every command
 
 Open the app and press {} K, then type / to browse every command with
 autocomplete, or run `brassworks help` again any time.",
