@@ -893,8 +893,12 @@ export default function Home() {
       });
     api
       .onMenuAction((action) => {
-        if (action.startsWith("cmd:"))
-          void runScript(action.slice(4), REGISTRY, cmdCtx);
+        if (!action.startsWith("cmd:")) return;
+        const command = action.slice(4);
+        const win = getCurrentWindow();
+        win.show().catch(() => {});
+        win.setFocus().catch(() => {});
+        setTimeout(() => void runScript(command, REGISTRY, cmdCtx), 60);
       })
       .then((u) => unsubs.push(u));
     const syncMenu = () =>
