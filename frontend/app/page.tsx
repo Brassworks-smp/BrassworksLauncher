@@ -20,6 +20,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import type { CommandContext, CmdState } from "@/lib/cmd/types";
 import { runScript } from "@/lib/cmd/parser";
 import { REGISTRY } from "@/lib/cmd/registry";
+import { pinnedMenuItems, onPinsChanged } from "@/lib/cmd/pins";
 
 import { Sidebar, INSTANCE_VIEWS, type View } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
@@ -880,17 +881,30 @@ export default function Home() {
 
   useEffect(() => {
     if (!api.isTauri()) return;
-    let un: (() => void) | undefined;
+    const unsubs: Array<() => void> = [];
     api
       .onCliCommand((cmd) => {
         getCurrentWindow().setFocus().catch(() => {});
         void runScript(cmd, REGISTRY, cmdCtx);
       })
       .then((u) => {
-        un = u;
+        unsubs.push(u);
         api.cliReady().catch(() => {});
       });
-    return () => un?.();
+    api
+      .onMenuAction((action) => {
+        if (action.startsWith("cmd:"))
+          void runScript(action.slice(4), REGISTRY, cmdCtx);
+      })
+      .then((u) => unsubs.push(u));
+    const syncMenu = () =>
+      api.setMenuCommands(pinnedMenuItems()).catch(() => {});
+    syncMenu();
+    const offPins = onPinsChanged(syncMenu);
+    return () => {
+      unsubs.forEach((u) => u());
+      offPins();
+    };
   }, [cmdCtx]);
 
   return (

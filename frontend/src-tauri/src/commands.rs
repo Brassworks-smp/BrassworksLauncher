@@ -10,7 +10,7 @@ use brassworks_core::{
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::auth_window::{open_ms_login_window, MS_LOGIN_LABEL};
@@ -1980,6 +1980,28 @@ pub(crate) fn cli_status() -> CliStatus {
         installed: false,
         path: None,
     }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MenuCommand {
+    id: String,
+    label: String,
+}
+
+#[tauri::command]
+pub(crate) fn set_menu_commands(app: AppHandle, items: Vec<MenuCommand>) -> CmdResult<()> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let pinned: Vec<(String, String)> =
+            items.into_iter().map(|c| (c.id, c.label)).collect();
+        let menu = crate::build_menu(&app, &pinned).map_err(err)?;
+        app.set_menu(menu).map_err(err)?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (&app, &items);
+    }
+    Ok(())
 }
 
 #[tauri::command]

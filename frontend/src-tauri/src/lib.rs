@@ -186,9 +186,15 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 /// the webview so the frontend can react (open About, switch tab, etc.). Edit and
 /// Window menus use predefined items so standard shortcuts (copy/paste/minimise)
 /// behave natively.
+/// Build the full native menu. `pinned` is a list of (command-path, label)
+/// pairs surfaced under a "Commands" submenu so pinned palette commands can be
+/// run straight from the menu bar; each emits `menu://action` with a `cmd:` id.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::menu::{MenuBuilder, SubmenuBuilder};
+pub(crate) fn build_menu(
+    app: &tauri::AppHandle,
+    pinned: &[(String, String)],
+) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 
     let app_menu = SubmenuBuilder::new(app, "Brassworks")
         .text("about", "About Brassworks Launcher")
@@ -225,6 +231,28 @@ fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .text("view-log", "View Last Log")
         .build()?;
 
+    let mut commands = SubmenuBuilder::new(app, "Commands");
+    if pinned.is_empty() {
+        commands = commands.item(&MenuItem::with_id(
+            app,
+            "cmd-none",
+            "No pinned commands",
+            false,
+            None::<&str>,
+        )?);
+    } else {
+        for (path, label) in pinned {
+            commands = commands.item(&MenuItem::with_id(
+                app,
+                format!("cmd:{path}"),
+                label,
+                true,
+                None::<&str>,
+            )?);
+        }
+    }
+    let commands_menu = commands.build()?;
+
     let window_menu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize()
@@ -232,28 +260,34 @@ fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .fullscreen()
         .build()?;
 
-    let menu = MenuBuilder::new(app)
-        .items(&[&app_menu, &edit_menu, &go_menu, &window_menu])
-        .build()?;
+    MenuBuilder::new(app)
+        .items(&[&app_menu, &edit_menu, &go_menu, &commands_menu, &window_menu])
+        .build()
+}
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let menu = build_menu(app, &[])?;
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| {
         let id = event.id().as_ref();
-        if matches!(
-            id,
-            "about"
-                | "palette"
-                | "add-instance"
-                | "view-log"
-                | "nav-play"
-                | "nav-instances"
-                | "nav-mods"
-                | "nav-worlds"
-                | "nav-servers"
-                | "nav-skin"
-                | "nav-screenshots"
-                | "nav-settings"
-        ) {
+        if id.starts_with("cmd:")
+            || matches!(
+                id,
+                "about"
+                    | "palette"
+                    | "add-instance"
+                    | "view-log"
+                    | "nav-play"
+                    | "nav-instances"
+                    | "nav-mods"
+                    | "nav-worlds"
+                    | "nav-servers"
+                    | "nav-skin"
+                    | "nav-screenshots"
+                    | "nav-settings"
+            )
+        {
             let _ = app.emit("menu://action", id.to_string());
         }
     });
@@ -454,6 +488,7 @@ pub fn run() {
             commands::install_cli,
             commands::uninstall_cli,
             commands::cli_status,
+            commands::set_menu_commands,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brassworks Launcher");

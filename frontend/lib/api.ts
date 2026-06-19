@@ -642,6 +642,10 @@ export interface CliStatus {
 }
 export const cliStatus = (): Promise<CliStatus> => invoke("cli_status");
 
+export const setMenuCommands = (
+  items: { id: string; label: string }[],
+): Promise<void> => invoke("set_menu_commands", { items });
+
 
 export const BRASSWORKS_WEBSITE = "https://brassworks.opnsoc.org";
 export const BRASSWORKS_GITHUB = "https://github.com/Brassworks-smp";

@@ -33,27 +33,11 @@ import {
 } from "@/lib/cmd/registry";
 import { type Signature, type ActiveArgInfo } from "@/lib/cmd/parser";
 import { runScript } from "@/lib/cmd/parser";
+import { loadPins, savePins } from "@/lib/cmd/pins";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
   /mac/i.test(navigator.platform || navigator.userAgent);
-
-const PINS_KEY = "bw.cmd.pins";
-const loadPins = (): string[] => {
-  try {
-    const raw = localStorage.getItem(PINS_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-};
-const savePins = (p: string[]) => {
-  try {
-    localStorage.setItem(PINS_KEY, JSON.stringify(p));
-  } catch {
-    return;
-  }
-};
 
 const GROUP_ICON: Record<string, React.ReactNode> = {
   Navigate: <Compass size={14} />,
