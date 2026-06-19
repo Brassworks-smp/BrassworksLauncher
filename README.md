@@ -94,6 +94,45 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 
 ---
 
+## Command palette & CLI
+
+Press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> to open the command palette. Start typing to
+fuzzy-find any action, or type <kbd>/</kbd> to enter **command mode** - Discord-style
+slash commands with per-argument autocomplete for everything the UI can do:
+
+```
+/instance launch survival --world "My Base"
+/content install sodium --source modrinth
+/modpack sync
+/world backup survival
+/skin apply knight
+/settings set max-memory 8192
+/theme brass-ocean
+```
+
+Press <kbd>Tab</kbd> to accept a suggestion, <kbd>Enter</kbd> to run. As you fill each
+argument the palette shows its name and description, Discord-style. Type `/help` to
+browse every command, ⭐ pin the ones you use most, and chain several with `;` to
+script them in sequence (`/go worlds ; /world backup survival`).
+
+The same commands work from your terminal. Run **Settings → Launcher → Install
+`brassworks` command** once, then:
+
+```bash
+brassworks help
+brassworks instance launch survival
+brassworks go settings
+brassworks "content install sodium"
+```
+
+If the launcher is already running the command is forwarded to that window;
+otherwise it starts the app and runs once the UI is ready. On macOS/Linux the
+installer symlinks the executable onto your `PATH`; on Windows it writes a
+`brassworks.cmd` shim you add to `PATH`. Settings → Launcher shows whether the
+command is installed and lets you remove it again at any time.
+
+---
+
 ## Make it yours
 
 A handful of built-in themes and a customisable accent colour let you set the mood. Pick a look that matches how you play.
