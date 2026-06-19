@@ -208,7 +208,10 @@ export function CommandPalette({
   const runnable = compose && !helpMode && isRunnable(cmd);
   const rowCount = browseMode ? browseRows.length : sugg.length;
 
-  useEffect(() => setSel(0), [query]);
+  useEffect(() => {
+    setSel(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [query]);
   useEffect(() => {
     listRef.current
       ?.querySelector<HTMLElement>(`[data-idx="${sel}"]`)
