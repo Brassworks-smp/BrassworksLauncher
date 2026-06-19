@@ -293,6 +293,12 @@
       "desc": "Modrinth & CurseForge data the launcher re-downloads as needed. Safe to clear.",
       "clear": "Clear cache"
     },
+    "cli": {
+      "title": "Command-line tool",
+      "desc": "Install the `brassworks` command so you can drive the launcher from a terminal - e.g. `brassworks instance launch survival` or `brassworks go settings`. Same commands as the ⌘K palette.",
+      "install": "Install `brassworks` command",
+      "done": "CLI installed"
+    },
     "updates": {
       "title": "Updates",
       "current": "Current version",

@@ -79,6 +79,8 @@ export function SettingsView({
   );
   const [cacheBytes, setCacheBytes] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [installingCli, setInstallingCli] = useState(false);
+  const [cliPath, setCliPath] = useState<string | null>(null);
   
   
   const [defaults, setDefaults] = useState<LauncherSettings | null>(null);
@@ -536,6 +538,39 @@ export function SettingsView({
                   ]}
                 />
               </Field>
+            </Card>
+
+            <Card title={t("settings.cli.title")} icon={<Terminal size={14} />}>
+              <p className="text-xs text-ink-600">{t("settings.cli.desc")}</p>
+              {cliPath && (
+                <p className="break-all rounded-lg border border-edge bg-ink-950/40 px-3 py-2 font-mono text-xs text-brass-200">
+                  {cliPath}
+                </p>
+              )}
+              <ActionButton
+                icon={
+                  installingCli ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Terminal size={15} />
+                  )
+                }
+                disabled={installingCli}
+                onClickAsync={async () => {
+                  setInstallingCli(true);
+                  try {
+                    const where = await api.installCli();
+                    setCliPath(where);
+                    toast(t("settings.cli.done"), "success");
+                  } catch (e) {
+                    onError(String(e));
+                  } finally {
+                    setInstallingCli(false);
+                  }
+                }}
+              >
+                {t("settings.cli.install")}
+              </ActionButton>
             </Card>
 
             <Card title={t("settings.cache.title")} icon={<HardDrive size={14} />}>
