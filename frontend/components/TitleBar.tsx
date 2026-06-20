@@ -13,7 +13,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="relative flex h-9 shrink-0 items-center justify-center border-b border-edge bg-ink-850"
+      className="relative flex h-7 shrink-0 items-center justify-center border-b border-edge bg-ink-850"
     >
       <span className="pointer-events-none font-mc text-[11px] tracking-[0.25em] text-gray-500">
         BRASSWORKS
