@@ -203,7 +203,7 @@ export function PlayView({
     <div className={`flex min-h-0 flex-1 ${resizing ? "cursor-col-resize select-none" : ""}`}>
       {}
       <div className="play-hero-glass relative flex flex-1 overflow-hidden rounded-lg border border-edge">
-        <div className="play-hero-overlay pointer-events-none absolute inset-0" />
+        <div className="play-hero-overlay pointer-events-none absolute inset-0 z-[2]" />
 
         <div className="relative z-10 flex h-full w-full flex-col p-7">
           {}
