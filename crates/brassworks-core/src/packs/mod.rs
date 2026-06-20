@@ -451,3 +451,55 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
+
+#[cfg(test)]
+mod packs_more {
+    use super::{capitalize_first, optional_set, prettify_name};
+
+    #[test]
+    fn capitalize_first_basic() {
+        assert_eq!(capitalize_first("foo"), "Foo");
+        assert_eq!(capitalize_first("f"), "F");
+        assert_eq!(capitalize_first(""), "");
+        assert_eq!(capitalize_first("ABC"), "ABC");
+        assert_eq!(capitalize_first("123"), "123");
+    }
+
+    #[test]
+    fn prettify_strips_loader_and_version_noise() {
+        assert_eq!(prettify_name("mods/sodium-fabric-0.5.8+mc1.21.jar"), "Sodium");
+        assert_eq!(prettify_name("jei_1.21.1-19.0.0.jar"), "Jei");
+        assert_eq!(prettify_name("create-1.20.1-0.5.1.f.jar"), "Create");
+    }
+
+    #[test]
+    fn prettify_keeps_clean_names() {
+        assert_eq!(prettify_name("iris.jar"), "Iris");
+        assert_eq!(prettify_name("Some Cool Mod.jar"), "Some Cool Mod");
+        assert_eq!(prettify_name("my_cool_mod.jar"), "My Cool Mod");
+    }
+
+    #[test]
+    fn prettify_handles_zip_and_no_extension() {
+        assert_eq!(prettify_name("packs/Faithful.zip"), "Faithful");
+        assert_eq!(prettify_name("MyMod"), "MyMod");
+    }
+
+    #[test]
+    fn prettify_takes_last_path_segment() {
+        assert_eq!(prettify_name("a/b/c/cool-mod.jar"), "Cool Mod");
+    }
+
+    #[test]
+    fn optional_set_none_is_empty() {
+        assert!(optional_set(&None).is_empty());
+    }
+
+    #[test]
+    fn optional_set_collects_ids() {
+        let set = optional_set(&Some(vec!["a".to_string(), "b".to_string(), "a".to_string()]));
+        assert_eq!(set.len(), 2);
+        assert!(set.contains("a"));
+        assert!(set.contains("b"));
+    }
+}

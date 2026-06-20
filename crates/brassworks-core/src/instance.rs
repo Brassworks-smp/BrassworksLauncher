@@ -576,3 +576,249 @@ mod tests {
         assert_eq!(legacy, PackSource::Packwiz { url: "u".into(), unsup: false });
     }
 }
+
+#[cfg(test)]
+mod instance_more {
+    use super::*;
+    use crate::featured::featured_packs;
+    use crate::paths::Paths;
+
+    fn manager() -> (tempfile::TempDir, InstanceManager) {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::with_root(dir.path());
+        paths.ensure_base().unwrap();
+        (dir, InstanceManager::new(paths))
+    }
+
+    fn custom(id: &str, name: &str) -> Instance {
+        Instance::new_custom(
+            id,
+            name,
+            "1.21.1",
+            LoaderKind::Vanilla,
+            LoaderVersion::Stable,
+            PackSource::None,
+        )
+    }
+
+    #[test]
+    fn loader_kind_roundtrip_strings() {
+        for (text, kind) in [
+            ("vanilla", LoaderKind::Vanilla),
+            ("neoforge", LoaderKind::NeoForge),
+            ("neo_forge", LoaderKind::NeoForge),
+            ("forge", LoaderKind::Forge),
+            ("fabric", LoaderKind::Fabric),
+            ("quilt", LoaderKind::Quilt),
+        ] {
+            assert_eq!(LoaderKind::parse(text), kind);
+        }
+        assert_eq!(LoaderKind::parse("UNKNOWN"), LoaderKind::Vanilla);
+    }
+
+    #[test]
+    fn loader_kind_str_and_label() {
+        assert_eq!(LoaderKind::Vanilla.as_str(), "vanilla");
+        assert_eq!(LoaderKind::NeoForge.as_str(), "neoforge");
+        assert_eq!(LoaderKind::Forge.as_str(), "forge");
+        assert_eq!(LoaderKind::Fabric.as_str(), "fabric");
+        assert_eq!(LoaderKind::Quilt.as_str(), "quilt");
+        assert_eq!(LoaderKind::NeoForge.label(), "NeoForge");
+        assert_eq!(LoaderKind::Forge.label(), "Forge");
+    }
+
+    #[test]
+    fn loader_kind_content_loader() {
+        assert_eq!(LoaderKind::Vanilla.content_loader(), None);
+        assert_eq!(LoaderKind::NeoForge.content_loader(), Some("neoforge"));
+        assert_eq!(LoaderKind::Forge.content_loader(), Some("forge"));
+        assert_eq!(LoaderKind::Fabric.content_loader(), Some("fabric"));
+        assert_eq!(LoaderKind::Quilt.content_loader(), Some("quilt"));
+    }
+
+    #[test]
+    fn loader_version_channels() {
+        assert_eq!(LoaderVersion::parse(""), LoaderVersion::Stable);
+        assert_eq!(LoaderVersion::parse("stable"), LoaderVersion::Stable);
+        assert_eq!(LoaderVersion::parse("latest"), LoaderVersion::Stable);
+        assert_eq!(LoaderVersion::parse("recommended"), LoaderVersion::Stable);
+        assert_eq!(LoaderVersion::parse("unstable"), LoaderVersion::Unstable);
+        assert_eq!(LoaderVersion::parse("snapshot"), LoaderVersion::Unstable);
+        assert_eq!(LoaderVersion::parse("latest-unstable"), LoaderVersion::Unstable);
+    }
+
+    #[test]
+    fn loader_version_exact_is_lowercased_and_trimmed() {
+        assert_eq!(
+            LoaderVersion::parse("  0.16.0  "),
+            LoaderVersion::Exact("0.16.0".to_string())
+        );
+        assert_eq!(
+            LoaderVersion::parse("Beta1"),
+            LoaderVersion::Exact("beta1".to_string())
+        );
+    }
+
+    #[test]
+    fn loader_version_default_is_stable() {
+        assert_eq!(LoaderVersion::default(), LoaderVersion::Stable);
+    }
+
+    #[test]
+    fn pack_source_managed_flag() {
+        assert!(!PackSource::None.is_managed());
+        assert!(PackSource::Packwiz { url: "u".into(), unsup: false }.is_managed());
+        assert!(PackSource::Modrinth { project_id: None, version_id: "v".into() }.is_managed());
+        assert!(PackSource::Curseforge { project_id: "1".into(), file_id: "2".into() }.is_managed());
+    }
+
+    #[test]
+    fn pack_source_serde_variants() {
+        let m = PackSource::Modrinth { project_id: Some("p".into()), version_id: "v".into() };
+        let json = serde_json::to_string(&m).unwrap();
+        let back: PackSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(m, back);
+
+        let c: PackSource =
+            serde_json::from_str(r#"{"kind":"curseforge","project_id":"1","file_id":"2"}"#).unwrap();
+        assert_eq!(c, PackSource::Curseforge { project_id: "1".into(), file_id: "2".into() });
+    }
+
+    #[test]
+    fn new_custom_lock_and_pins() {
+        let plain = custom("a", "A");
+        assert!(!plain.modpack_locked);
+        assert!(plain.pinned_settings.is_empty());
+
+        let managed = Instance::new_custom(
+            "b",
+            "B",
+            "1.21.1",
+            LoaderKind::Fabric,
+            LoaderVersion::Stable,
+            PackSource::Modrinth { project_id: None, version_id: "v".into() },
+        );
+        assert!(managed.modpack_locked);
+        assert_eq!(managed.pinned_settings, vec!["open_settings".to_string()]);
+    }
+
+    #[test]
+    fn from_featured_marks_featured() {
+        let packs = featured_packs();
+        let fp = packs.first().expect("a bundled featured pack");
+        let inst = Instance::from_featured(fp);
+        assert!(inst.featured);
+        assert_eq!(inst.id, fp.id);
+        assert_eq!(inst.name, fp.name);
+        assert!(inst.pack.is_managed());
+    }
+
+    #[test]
+    fn create_get_update_delete() {
+        let (_d, m) = manager();
+        let inst = m.create(custom("x", "X")).unwrap();
+        assert_eq!(m.get("x").unwrap().name, "X");
+        let mut updated = inst.clone();
+        updated.name = "Renamed".to_string();
+        m.update(&updated).unwrap();
+        assert_eq!(m.get("x").unwrap().name, "Renamed");
+        m.delete("x").unwrap();
+        assert!(m.get("x").is_err());
+    }
+
+    #[test]
+    fn create_rejects_duplicate_id() {
+        let (_d, m) = manager();
+        m.create(custom("x", "X")).unwrap();
+        assert!(m.create(custom("x", "Y")).is_err());
+    }
+
+    #[test]
+    fn list_sorts_pinned_then_name() {
+        let (_d, m) = manager();
+        let mut zebra = custom("zebra", "Zebra");
+        zebra.pinned = true;
+        let mut mango = custom("mango", "Mango");
+        mango.pinned = true;
+        let apple = custom("apple", "apple");
+        m.create(zebra).unwrap();
+        m.create(apple).unwrap();
+        m.create(mango).unwrap();
+        let ids: Vec<String> = m.list().unwrap().into_iter().map(|i| i.id).collect();
+        assert_eq!(ids, vec!["mango", "zebra", "apple"]);
+    }
+
+    #[test]
+    fn default_id_prefers_first() {
+        let (_d, m) = manager();
+        assert!(m.default_id().is_none());
+        m.create(custom("only", "Only")).unwrap();
+        assert_eq!(m.default_id(), Some("only".to_string()));
+    }
+
+    #[test]
+    fn unique_id_slugs_names() {
+        let (_d, m) = manager();
+        assert_eq!(m.unique_id("My Cool Pack!!"), "my-cool-pack");
+        assert_eq!(m.unique_id("   "), "instance");
+        assert_eq!(m.unique_id("***"), "instance");
+        assert_eq!(m.unique_id("Already-Good"), "already-good");
+    }
+
+    #[test]
+    fn unique_id_avoids_collision() {
+        let (_d, m) = manager();
+        m.create(custom("my-pack", "My Pack")).unwrap();
+        assert_eq!(m.unique_id("My Pack"), "my-pack-2");
+    }
+
+    #[test]
+    fn unique_name_avoids_collision() {
+        let (_d, m) = manager();
+        m.create(custom("p", "Pack")).unwrap();
+        assert_eq!(m.unique_name("Pack"), "Pack (2)");
+        assert_eq!(m.unique_name("Other"), "Other");
+    }
+
+    #[test]
+    fn import_branding_copies_into_instance() {
+        let (dir, m) = manager();
+        m.create(custom("x", "X")).unwrap();
+        let src = dir.path().join("source.png");
+        std::fs::write(&src, b"img").unwrap();
+        let dest = m.import_branding("x", "icon", &src).unwrap();
+        let dest_path = std::path::Path::new(&dest);
+        assert!(dest_path.is_file());
+        assert!(dest_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("icon-"));
+        assert!(dest.ends_with(".png"));
+    }
+
+    #[test]
+    fn import_branding_falls_back_extension() {
+        let (dir, m) = manager();
+        m.create(custom("x", "X")).unwrap();
+        let src = dir.path().join("source.txt");
+        std::fs::write(&src, b"img").unwrap();
+        let dest = m.import_branding("x", "banner", &src).unwrap();
+        assert!(dest.ends_with(".png"));
+        assert!(std::path::Path::new(&dest)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("banner-"));
+    }
+
+    #[test]
+    fn import_branding_rejects_bad_kind_and_missing_instance() {
+        let (dir, m) = manager();
+        m.create(custom("x", "X")).unwrap();
+        let src = dir.path().join("source.png");
+        std::fs::write(&src, b"img").unwrap();
+        assert!(m.import_branding("x", "bogus", &src).is_err());
+        assert!(m.import_branding("nope", "icon", &src).is_err());
+    }
+}

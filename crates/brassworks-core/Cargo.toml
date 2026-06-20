@@ -28,3 +28,4 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 [dev-dependencies]
 
 sha1.workspace = true
+tempfile = "3"

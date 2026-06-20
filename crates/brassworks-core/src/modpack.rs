@@ -1317,3 +1317,124 @@ fn project_type_for_category(category: &str) -> &'static str {
         _ => "mod",
     }
 }
+
+#[cfg(test)]
+mod modpack_tests {
+    use super::*;
+
+    fn settings() -> LauncherSettings {
+        serde_json::from_str::<LauncherSettings>("{}").unwrap()
+    }
+
+    #[test]
+    fn resolve_ids_curseforge_from_ids() {
+        let (source, id, file) = resolve_ids("", None, None, Some(7), Some(9));
+        assert_eq!(source, "curseforge");
+        assert_eq!(id, Some("7".to_string()));
+        assert_eq!(file, Some("9".to_string()));
+    }
+
+    #[test]
+    fn resolve_ids_curseforge_from_source() {
+        let (source, id, file) = resolve_ids("curseforge", None, None, None, None);
+        assert_eq!(source, "curseforge");
+        assert_eq!(id, None);
+        assert_eq!(file, None);
+    }
+
+    #[test]
+    fn resolve_ids_modrinth() {
+        let (source, id, version) = resolve_ids(
+            "",
+            Some("abc".to_string()),
+            Some("v1".to_string()),
+            None,
+            None,
+        );
+        assert_eq!(source, "modrinth");
+        assert_eq!(id, Some("abc".to_string()));
+        assert_eq!(version, Some("v1".to_string()));
+    }
+
+    #[test]
+    fn resolve_ids_local_fallback() {
+        let (source, id, version) = resolve_ids("", None, None, None, None);
+        assert_eq!(source, "local");
+        assert_eq!(id, None);
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn resolve_ids_curseforge_takes_priority_over_modrinth() {
+        let (source, _, _) = resolve_ids("", Some("m".to_string()), None, Some(1), None);
+        assert_eq!(source, "curseforge");
+    }
+
+    #[test]
+    fn resolve_pack_url_default() {
+        assert_eq!(resolve_pack_url(&settings()), PACK_URL);
+    }
+
+    #[test]
+    fn resolve_pack_url_custom_overrides() {
+        let mut s = settings();
+        s.pack_url = Some("https://example.com/pack.toml".to_string());
+        assert_eq!(resolve_pack_url(&s), "https://example.com/pack.toml");
+    }
+
+    #[test]
+    fn resolve_pack_url_ignores_blank_custom() {
+        let mut s = settings();
+        s.pack_url = Some("   ".to_string());
+        assert_eq!(resolve_pack_url(&s), PACK_URL);
+    }
+
+    #[test]
+    fn resolve_pack_url_dev_mode_switches_branch() {
+        let mut s = settings();
+        s.dev_mode = true;
+        assert_eq!(resolve_pack_url(&s), PACK_URL.replace("/master/", "/dev/"));
+    }
+
+    #[test]
+    fn resolve_pack_url_custom_beats_dev_mode() {
+        let mut s = settings();
+        s.dev_mode = true;
+        s.pack_url = Some("https://custom".to_string());
+        assert_eq!(resolve_pack_url(&s), "https://custom");
+    }
+
+    #[test]
+    fn optional_choice_default_when_none() {
+        assert!(matches!(optional_choice(&None), OptionalChoice::Default));
+    }
+
+    #[test]
+    fn optional_choice_explicit_set() {
+        let choice = optional_choice(&Some(vec!["a".to_string(), "b".to_string()]));
+        match choice {
+            OptionalChoice::Explicit(set) => {
+                assert!(set.contains("a"));
+                assert!(set.contains("b"));
+                assert_eq!(set.len(), 2);
+            }
+            _ => panic!("expected explicit"),
+        }
+    }
+
+    #[test]
+    fn optional_choice_empty_is_explicit_empty() {
+        match optional_choice(&Some(vec![])) {
+            OptionalChoice::Explicit(set) => assert!(set.is_empty()),
+            _ => panic!("expected explicit"),
+        }
+    }
+
+    #[test]
+    fn project_type_mapping() {
+        assert_eq!(project_type_for_category("resourcepacks"), "resourcepack");
+        assert_eq!(project_type_for_category("shaderpacks"), "shader");
+        assert_eq!(project_type_for_category("mods"), "mod");
+        assert_eq!(project_type_for_category("anything"), "mod");
+    }
+}

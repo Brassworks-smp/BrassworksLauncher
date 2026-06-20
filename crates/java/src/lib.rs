@@ -318,3 +318,196 @@ mod tests {
         assert_eq!(provisionable_major(21), 21);
     }
 }
+
+#[cfg(test)]
+mod java_more {
+    use super::*;
+
+    #[test]
+    fn major_for_minecraft_modern() {
+        assert_eq!(major_for_minecraft("1.21.4"), 21);
+        assert_eq!(major_for_minecraft("1.21"), 21);
+        assert_eq!(major_for_minecraft("1.22.0"), 21);
+    }
+
+    #[test]
+    fn major_for_minecraft_seventeen_era() {
+        assert_eq!(major_for_minecraft("1.20.4"), 17);
+        assert_eq!(major_for_minecraft("1.19.2"), 17);
+        assert_eq!(major_for_minecraft("1.18"), 17);
+    }
+
+    #[test]
+    fn major_for_minecraft_sixteen_and_eight() {
+        assert_eq!(major_for_minecraft("1.17.1"), 16);
+        assert_eq!(major_for_minecraft("1.16.5"), 8);
+        assert_eq!(major_for_minecraft("1.15.2"), 8);
+        assert_eq!(major_for_minecraft("1.8.9"), 8);
+        assert_eq!(major_for_minecraft("1.7.10"), 8);
+    }
+
+    #[test]
+    fn major_for_minecraft_non_one_major() {
+        assert_eq!(major_for_minecraft("2.0"), 21);
+        assert_eq!(major_for_minecraft("garbage"), 21);
+    }
+
+    #[test]
+    fn major_for_minecraft_bare_one() {
+        assert_eq!(major_for_minecraft("1"), 8);
+    }
+
+    #[test]
+    fn provisionable_major_passthrough() {
+        assert_eq!(provisionable_major(8), 8);
+        assert_eq!(provisionable_major(11), 11);
+        assert_eq!(provisionable_major(17), 17);
+        assert_eq!(provisionable_major(21), 21);
+        assert_eq!(provisionable_major(16), 17);
+    }
+
+    #[test]
+    fn parse_major_modern() {
+        assert_eq!(parse_major("21.0.3"), Some(21));
+        assert_eq!(parse_major("17.0.10"), Some(17));
+        assert_eq!(parse_major("11.0.2+9"), Some(11));
+        assert_eq!(parse_major("17"), Some(17));
+    }
+
+    #[test]
+    fn parse_major_legacy_one_dot() {
+        assert_eq!(parse_major("1.8.0_392"), Some(8));
+        assert_eq!(parse_major("1.7.0"), Some(7));
+    }
+
+    #[test]
+    fn parse_major_trimmed() {
+        assert_eq!(parse_major("   21.0.1   "), Some(21));
+    }
+
+    #[test]
+    fn parse_major_rejects_garbage() {
+        assert_eq!(parse_major("garbage"), None);
+        assert_eq!(parse_major(""), None);
+        assert_eq!(parse_major("v17"), None);
+    }
+
+    #[test]
+    fn parse_version_extracts_quoted() {
+        let out = "openjdk version \"17.0.2\" 2022-01-18\nOpenJDK Runtime Environment";
+        let (major, version) = parse_version(out);
+        assert_eq!(major, Some(17));
+        assert_eq!(version.as_deref(), Some("17.0.2"));
+    }
+
+    #[test]
+    fn parse_version_legacy() {
+        let out = "java version \"1.8.0_392\"";
+        let (major, version) = parse_version(out);
+        assert_eq!(major, Some(8));
+        assert_eq!(version.as_deref(), Some("1.8.0_392"));
+    }
+
+    #[test]
+    fn parse_version_without_quotes() {
+        let (major, version) = parse_version("no version line here");
+        assert_eq!(major, None);
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn label_for_with_and_without_major() {
+        assert_eq!(label_for("System", Some(17)), "System Java 17");
+        assert_eq!(label_for("Bundled", Some(21)), "Bundled Java 21");
+        assert_eq!(label_for("System", None), "System Java");
+    }
+
+    #[test]
+    fn find_java_exe_direct() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join(exec_name());
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(find_java_exe(dir.path()), Some(exe));
+    }
+
+    #[test]
+    fn find_java_exe_nested() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("temurin-21").join("Contents").join("Home").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join(exec_name());
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(find_java_exe(dir.path()), Some(exe));
+    }
+
+    #[test]
+    fn find_java_exe_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(find_java_exe(dir.path()), None);
+    }
+
+    #[test]
+    fn list_runtimes_empty_for_missing_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+        assert!(list_runtimes(&missing).is_empty());
+    }
+
+    #[test]
+    fn list_runtimes_finds_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("temurin-21").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join(exec_name()), b"").unwrap();
+        let found = list_runtimes(dir.path());
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, JavaKind::Bundled);
+        assert!(found[0].path.ends_with(exec_name()));
+    }
+
+    #[test]
+    fn delete_runtime_removes_managed_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = dir.path().join("temurin-21");
+        let bin = runtime.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join(exec_name());
+        std::fs::write(&exe, b"").unwrap();
+        delete_runtime(dir.path(), &exe).unwrap();
+        assert!(!runtime.exists());
+    }
+
+    #[test]
+    fn delete_runtime_rejects_outside() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = dir.path().join("elsewhere").join("java");
+        std::fs::create_dir_all(outside.parent().unwrap()).unwrap();
+        std::fs::write(&outside, b"").unwrap();
+        let jvm = dir.path().join("jvm");
+        std::fs::create_dir_all(&jvm).unwrap();
+        assert!(delete_runtime(&jvm, &outside).is_err());
+    }
+
+    #[test]
+    fn java_kind_equality() {
+        assert_eq!(JavaKind::System, JavaKind::System);
+        assert_ne!(JavaKind::System, JavaKind::Bundled);
+        assert_ne!(JavaKind::Bundled, JavaKind::Custom);
+    }
+
+    #[test]
+    fn parse_version_picks_first_quoted() {
+        let out = "Picked up JAVA_TOOL_OPTIONS\nopenjdk version \"21.0.1\" 2023-10-17";
+        let (major, version) = parse_version(out);
+        assert_eq!(major, Some(21));
+        assert_eq!(version.as_deref(), Some("21.0.1"));
+    }
+
+    #[test]
+    fn parse_major_handles_plus_build() {
+        assert_eq!(parse_major("17.0.9+9"), Some(17));
+        assert_eq!(parse_major("21+35"), Some(21));
+    }
+}

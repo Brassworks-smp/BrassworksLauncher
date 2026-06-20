@@ -599,3 +599,51 @@ impl moj::Handler for MojOnly<'_, '_> {
         self.0.handle_moj(&event);
     }
 }
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+    use crate::instance::LoaderVersion;
+    use portablemc::fabric;
+    use portablemc::forge::Version as ForgeV;
+
+    #[test]
+    fn forge_version_stable_uses_mc_version() {
+        match forge_version(&LoaderVersion::Stable, "1.21.1") {
+            ForgeV::Stable(v) => assert_eq!(v, "1.21.1"),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forge_version_unstable_uses_mc_version() {
+        match forge_version(&LoaderVersion::Unstable, "1.20.4") {
+            ForgeV::Unstable(v) => assert_eq!(v, "1.20.4"),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forge_version_exact_uses_name() {
+        match forge_version(&LoaderVersion::Exact("47.1.0".to_string()), "1.20.1") {
+            ForgeV::Name(v) => assert_eq!(v, "47.1.0"),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fabric_loader_version_channels() {
+        assert_eq!(
+            fabric_loader_version(&LoaderVersion::Stable),
+            fabric::LoaderVersion::Stable
+        );
+        assert_eq!(
+            fabric_loader_version(&LoaderVersion::Unstable),
+            fabric::LoaderVersion::Unstable
+        );
+        assert_eq!(
+            fabric_loader_version(&LoaderVersion::Exact("0.16.0".to_string())),
+            fabric::LoaderVersion::Name("0.16.0".to_string())
+        );
+    }
+}

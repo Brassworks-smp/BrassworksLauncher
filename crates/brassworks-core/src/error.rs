@@ -50,6 +50,69 @@ pub enum CoreError {
     Cancelled,
 }
 
+#[cfg(test)]
+mod error_tests {
+    use super::CoreError;
+
+    #[test]
+    fn instance_messages() {
+        assert_eq!(
+            CoreError::InstanceNotFound("survival".into()).to_string(),
+            "instance 'survival' was not found"
+        );
+        assert_eq!(
+            CoreError::InstanceExists("creative".into()).to_string(),
+            "an instance with id 'creative' already exists"
+        );
+        assert_eq!(
+            CoreError::AlreadyRunning("hardcore".into()).to_string(),
+            "instance 'hardcore' is already running"
+        );
+    }
+
+    #[test]
+    fn unit_variant_messages() {
+        assert_eq!(
+            CoreError::NoAccount.to_string(),
+            "no account is configured; add an account before launching"
+        );
+        assert_eq!(
+            CoreError::NoDataDir.to_string(),
+            "could not resolve a data directory for the launcher"
+        );
+        assert_eq!(CoreError::Unauthorized.to_string(), "session expired");
+        assert_eq!(CoreError::Cancelled.to_string(), "the operation was cancelled");
+    }
+
+    #[test]
+    fn wrapped_string_messages() {
+        assert_eq!(CoreError::Launch("boom".into()).to_string(), "the launcher process failed: boom");
+        assert_eq!(CoreError::Auth("bad token".into()).to_string(), "authentication failed: bad token");
+        assert_eq!(CoreError::Modpack("missing".into()).to_string(), "modpack error: missing");
+        assert_eq!(CoreError::Remote("timeout".into()).to_string(), "remote request failed: timeout");
+    }
+
+    #[test]
+    fn io_helper_carries_path() {
+        let err = CoreError::io(
+            "some/file.json",
+            std::io::Error::new(std::io::ErrorKind::NotFound, "nope"),
+        );
+        let msg = err.to_string();
+        assert!(msg.contains("some/file.json"));
+        assert!(msg.starts_with("i/o error on"));
+    }
+
+    #[test]
+    fn serde_helper_carries_what() {
+        let parse: Result<i32, _> = serde_json::from_str("not a number");
+        let err = CoreError::serde("settings", parse.unwrap_err());
+        let msg = err.to_string();
+        assert!(msg.contains("settings"));
+        assert!(msg.starts_with("failed to (de)serialize"));
+    }
+}
+
 impl CoreError {
     pub fn is_cancelled(&self) -> bool {
         matches!(self, CoreError::Cancelled)

@@ -74,3 +74,95 @@ impl Manifest {
         std::fs::write(path, json).map_err(|e| PackwizError::io(path.display().to_string(), e))
     }
 }
+
+#[cfg(test)]
+mod manifest_tests {
+    use super::*;
+
+    #[test]
+    fn default_is_empty() {
+        let m = Manifest::default();
+        assert_eq!(m.pack_version, "");
+        assert_eq!(m.index_hash, "");
+        assert!(m.minecraft_version.is_none());
+        assert!(m.neoforge_version.is_none());
+        assert!(!m.complete);
+        assert!(m.failed.is_empty());
+        assert!(m.files.is_empty());
+        assert!(m.mods.is_empty());
+        assert!(m.optional.is_empty());
+        assert!(m.flavors.is_empty());
+    }
+
+    #[test]
+    fn load_missing_returns_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does-not-exist.json");
+        let m = Manifest::load(&path).unwrap();
+        assert_eq!(m.pack_version, "");
+        assert!(m.mods.is_empty());
+    }
+
+    #[test]
+    fn save_then_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("packwiz.json");
+        let mut m = Manifest::default();
+        m.pack_version = "2024.1".to_string();
+        m.index_hash = "deadbeef".to_string();
+        m.minecraft_version = Some("1.21.1".to_string());
+        m.neoforge_version = Some("21.1.0".to_string());
+        m.complete = true;
+        m.failed = vec!["bad.jar".to_string()];
+        m.optional = vec!["opt1".to_string()];
+        m.flavors = vec!["server".to_string()];
+        m.files.insert(
+            "config/foo.toml".to_string(),
+            FileRecord { hash: "abc".to_string(), hash_format: "sha256".to_string() },
+        );
+        m.mods.push(ManagedMod {
+            name: "Sodium".to_string(),
+            filename: "sodium.jar".to_string(),
+            path: "mods/sodium.jar".to_string(),
+            side: "client".to_string(),
+            category: "mod".to_string(),
+            modrinth_id: Some("AANobbMI".to_string()),
+            modrinth_version: Some("v".to_string()),
+            source: "modrinth".to_string(),
+            curseforge_id: None,
+            curseforge_file: None,
+        });
+        m.save(&path).unwrap();
+
+        let loaded = Manifest::load(&path).unwrap();
+        assert_eq!(loaded.pack_version, "2024.1");
+        assert_eq!(loaded.index_hash, "deadbeef");
+        assert_eq!(loaded.minecraft_version.as_deref(), Some("1.21.1"));
+        assert_eq!(loaded.neoforge_version.as_deref(), Some("21.1.0"));
+        assert!(loaded.complete);
+        assert_eq!(loaded.failed, vec!["bad.jar".to_string()]);
+        assert_eq!(loaded.optional, vec!["opt1".to_string()]);
+        assert_eq!(loaded.flavors, vec!["server".to_string()]);
+        assert_eq!(loaded.files.len(), 1);
+        assert_eq!(loaded.files["config/foo.toml"].hash, "abc");
+        assert_eq!(loaded.mods.len(), 1);
+        assert_eq!(loaded.mods[0].name, "Sodium");
+        assert_eq!(loaded.mods[0].modrinth_id.as_deref(), Some("AANobbMI"));
+    }
+
+    #[test]
+    fn save_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a").join("b").join("c").join("m.json");
+        Manifest::default().save(&path).unwrap();
+        assert!(path.is_file());
+    }
+
+    #[test]
+    fn load_rejects_invalid_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, b"{ not json").unwrap();
+        assert!(Manifest::load(&path).is_err());
+    }
+}

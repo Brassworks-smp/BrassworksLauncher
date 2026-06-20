@@ -347,3 +347,145 @@ fn read_string<R: Read>(r: &mut R) -> io::Result<String> {
     r.read_exact(&mut buf)?;
     String::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
+
+#[cfg(test)]
+mod ping_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn split_host_port_plain() {
+        assert_eq!(
+            split_host_port("example.com"),
+            ("example.com".to_string(), 25565, false)
+        );
+    }
+
+    #[test]
+    fn split_host_port_with_port() {
+        assert_eq!(
+            split_host_port("example.com:25566"),
+            ("example.com".to_string(), 25566, true)
+        );
+        assert_eq!(
+            split_host_port("1.2.3.4:25577"),
+            ("1.2.3.4".to_string(), 25577, true)
+        );
+    }
+
+    #[test]
+    fn split_host_port_trims_whitespace() {
+        assert_eq!(
+            split_host_port("   host  "),
+            ("host".to_string(), 25565, false)
+        );
+    }
+
+    #[test]
+    fn split_host_port_ipv6_bracketed() {
+        assert_eq!(
+            split_host_port("[::1]:25599"),
+            ("::1".to_string(), 25599, true)
+        );
+        assert_eq!(
+            split_host_port("[fe80::1]"),
+            ("fe80::1".to_string(), 25565, false)
+        );
+    }
+
+    #[test]
+    fn split_host_port_bad_port_falls_back() {
+        assert_eq!(
+            split_host_port("host:notaport"),
+            ("host:notaport".to_string(), 25565, false)
+        );
+    }
+
+    #[test]
+    fn split_host_port_multiple_colons_unbracketed() {
+        assert_eq!(
+            split_host_port("a:b:c"),
+            ("a:b:c".to_string(), 25565, false)
+        );
+    }
+
+    #[test]
+    fn named_colors_map_to_codes() {
+        assert_eq!(named_color_code("black"), Some("0"));
+        assert_eq!(named_color_code("dark_blue"), Some("1"));
+        assert_eq!(named_color_code("gold"), Some("6"));
+        assert_eq!(named_color_code("blue"), Some("9"));
+        assert_eq!(named_color_code("green"), Some("a"));
+        assert_eq!(named_color_code("red"), Some("c"));
+        assert_eq!(named_color_code("yellow"), Some("e"));
+        assert_eq!(named_color_code("white"), Some("f"));
+    }
+
+    #[test]
+    fn named_colors_unknown_is_none() {
+        assert_eq!(named_color_code("rainbow"), None);
+        assert_eq!(named_color_code(""), None);
+        assert_eq!(named_color_code("#ff0000"), None);
+    }
+
+    #[test]
+    fn strip_formatting_removes_section_codes() {
+        assert_eq!(strip_formatting("§aHello §rWorld"), "Hello World");
+        assert_eq!(strip_formatting("§l§nBold"), "Bold");
+        assert_eq!(strip_formatting("plain text"), "plain text");
+    }
+
+    #[test]
+    fn strip_formatting_trims() {
+        assert_eq!(strip_formatting("   spaced   "), "spaced");
+        assert_eq!(strip_formatting("§r§r"), "");
+    }
+
+    #[test]
+    fn write_varint_known_encodings() {
+        let enc = |v: i32| {
+            let mut buf = Vec::new();
+            write_varint(&mut buf, v);
+            buf
+        };
+        assert_eq!(enc(0), vec![0x00]);
+        assert_eq!(enc(1), vec![0x01]);
+        assert_eq!(enc(127), vec![0x7F]);
+        assert_eq!(enc(128), vec![0x80, 0x01]);
+        assert_eq!(enc(255), vec![0xFF, 0x01]);
+        assert_eq!(enc(300), vec![0xAC, 0x02]);
+    }
+
+    #[test]
+    fn varint_roundtrips() {
+        for v in [0, 1, 2, 127, 128, 255, 300, 16384, 2_097_151, i32::MAX] {
+            let mut buf = Vec::new();
+            write_varint(&mut buf, v);
+            let mut cur = Cursor::new(buf);
+            assert_eq!(read_varint(&mut cur).unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn string_roundtrips() {
+        for s in ["", "hello", "a longer server name", "héllo wörld", "§agreen"] {
+            let mut buf = Vec::new();
+            write_string(&mut buf, s);
+            let mut cur = Cursor::new(buf);
+            assert_eq!(read_string(&mut cur).unwrap(), s);
+        }
+    }
+
+    #[test]
+    fn write_string_prefixes_length() {
+        let mut buf = Vec::new();
+        write_string(&mut buf, "abc");
+        assert_eq!(buf, vec![0x03, b'a', b'b', b'c']);
+    }
+
+    #[test]
+    fn read_string_rejects_truncated() {
+        let mut cur = Cursor::new(vec![0x05, b'a', b'b']);
+        assert!(read_string(&mut cur).is_err());
+    }
+}

@@ -551,3 +551,294 @@ mod tests {
     }
 
 }
+
+#[cfg(test)]
+mod gav_more {
+
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use super::Gav;
+
+    fn p(parts: &[&str]) -> PathBuf {
+        PathBuf::from(parts.join(std::path::MAIN_SEPARATOR_STR))
+    }
+
+    #[test]
+    fn file_plain() {
+        let gav = Gav::from_str("net.fabricmc:fabric-loader:0.16.0").unwrap();
+        assert_eq!(
+            gav.file(),
+            p(&["net", "fabricmc", "fabric-loader", "0.16.0", "fabric-loader-0.16.0.jar"])
+        );
+    }
+
+    #[test]
+    fn file_with_classifier() {
+        let gav = Gav::from_str("org.lwjgl:lwjgl:3.3.3:natives-macos").unwrap();
+        assert_eq!(
+            gav.file(),
+            p(&["org", "lwjgl", "lwjgl", "3.3.3", "lwjgl-3.3.3-natives-macos.jar"])
+        );
+    }
+
+    #[test]
+    fn file_with_extension() {
+        let gav = Gav::from_str("com.example:thing:1.0@txt").unwrap();
+        assert_eq!(gav.file(), p(&["com", "example", "thing", "1.0", "thing-1.0.txt"]));
+    }
+
+    #[test]
+    fn file_with_classifier_and_extension() {
+        let gav = Gav::from_str("com.example:thing:1.0:data@zip").unwrap();
+        assert_eq!(
+            gav.file(),
+            p(&["com", "example", "thing", "1.0", "thing-1.0-data.zip"])
+        );
+    }
+
+    #[test]
+    fn file_single_group_segment() {
+        let gav = Gav::from_str("foo:bar:1").unwrap();
+        assert_eq!(gav.file(), p(&["foo", "bar", "1", "bar-1.jar"]));
+    }
+
+    #[test]
+    fn url_plain() {
+        let gav = Gav::from_str("net.fabricmc:fabric-loader:0.16.0").unwrap();
+        assert_eq!(
+            gav.url().to_string(),
+            "net/fabricmc/fabric-loader/0.16.0/fabric-loader-0.16.0.jar"
+        );
+    }
+
+    #[test]
+    fn url_with_classifier() {
+        let gav = Gav::from_str("org.lwjgl:lwjgl:3.3.3:natives-macos").unwrap();
+        assert_eq!(
+            gav.url().to_string(),
+            "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-macos.jar"
+        );
+    }
+
+    #[test]
+    fn url_with_extension() {
+        let gav = Gav::from_str("com.example:thing:1.0@txt").unwrap();
+        assert_eq!(gav.url().to_string(), "com/example/thing/1.0/thing-1.0.txt");
+    }
+
+    #[test]
+    fn url_uses_forward_slashes_always() {
+        let gav = Gav::from_str("a.b.c.d:e:1.2.3").unwrap();
+        assert_eq!(gav.url().to_string(), "a/b/c/d/e/1.2.3/e-1.2.3.jar");
+    }
+
+    #[test]
+    fn accessors() {
+        let gav = Gav::from_str("a.b:c:1.0:cls@ext").unwrap();
+        assert_eq!(gav.group(), "a.b");
+        assert_eq!(gav.artifact(), "c");
+        assert_eq!(gav.version(), "1.0");
+        assert_eq!(gav.classifier(), Some("cls"));
+        assert_eq!(gav.extension(), "ext");
+        assert_eq!(gav.as_str(), "a.b:c:1.0:cls@ext");
+    }
+
+    #[test]
+    fn default_extension_is_jar() {
+        let gav = Gav::from_str("a.b:c:1.0").unwrap();
+        assert_eq!(gav.extension(), "jar");
+        assert_eq!(gav.classifier(), None);
+    }
+
+    #[test]
+    fn jar_extension_is_stripped_from_raw() {
+        let gav = Gav::from_str("a.b:c:1.0@jar").unwrap();
+        assert_eq!(gav.as_str(), "a.b:c:1.0");
+        assert_eq!(gav.extension(), "jar");
+    }
+
+    #[test]
+    fn equality_ignores_explicit_jar() {
+        let a = Gav::from_str("a.b:c:1.0").unwrap();
+        let b = Gav::from_str("a.b:c:1.0@jar").unwrap();
+        assert_eq!(a, b);
+        let mut ha = DefaultHasher::new();
+        let mut hb = DefaultHasher::new();
+        a.hash(&mut ha);
+        b.hash(&mut hb);
+        assert_eq!(ha.finish(), hb.finish());
+    }
+
+    #[test]
+    fn ordering_is_by_string() {
+        let a = Gav::from_str("a:a:1").unwrap();
+        let b = Gav::from_str("a:b:1").unwrap();
+        let c = Gav::from_str("b:a:1").unwrap();
+        assert!(a < b);
+        assert!(b < c);
+        let mut v = vec![c.clone(), a.clone(), b.clone()];
+        v.sort();
+        assert_eq!(v, vec![a, b, c]);
+    }
+
+    #[test]
+    fn with_methods_preserve_other_parts() {
+        let gav = Gav::from_str("a.b:c:1.0:cls@ext").unwrap();
+        assert_eq!(gav.with_group("x.y").unwrap().as_str(), "x.y:c:1.0:cls@ext");
+        assert_eq!(gav.with_artifact("z").unwrap().as_str(), "a.b:z:1.0:cls@ext");
+        assert_eq!(gav.with_version("2.0").unwrap().as_str(), "a.b:c:2.0:cls@ext");
+        assert_eq!(
+            gav.with_classifier(None).unwrap().as_str(),
+            "a.b:c:1.0@ext"
+        );
+        assert_eq!(
+            gav.with_classifier(Some("other")).unwrap().as_str(),
+            "a.b:c:1.0:other@ext"
+        );
+    }
+
+    #[test]
+    fn with_extension_none_and_jar_drop_suffix() {
+        let gav = Gav::from_str("a.b:c:1.0@ext").unwrap();
+        assert_eq!(gav.with_extension(None).unwrap().as_str(), "a.b:c:1.0");
+        assert_eq!(gav.with_extension(Some("jar")).unwrap().as_str(), "a.b:c:1.0");
+        assert_eq!(gav.with_extension(Some("zip")).unwrap().as_str(), "a.b:c:1.0@zip");
+    }
+
+    #[test]
+    fn new_matches_from_str() {
+        let made = Gav::new("a.b", "c", "1.0", Some("cls"), Some("ext")).unwrap();
+        let parsed = Gav::from_str("a.b:c:1.0:cls@ext").unwrap();
+        assert_eq!(made, parsed);
+    }
+
+    #[test]
+    fn new_rejects_empty_and_bad_chars() {
+        assert!(Gav::new("", "c", "1", None, None).is_none());
+        assert!(Gav::new("a", "", "1", None, None).is_none());
+        assert!(Gav::new("a", "c", "", None, None).is_none());
+        assert!(Gav::new("a..b", "c", "1", None, None).is_none());
+        assert!(Gav::new("a", "c/d", "1", None, None).is_none());
+        assert!(Gav::new("a", "c", "1 0", None, None).is_none());
+    }
+
+    #[test]
+    fn from_str_rejects_extra_separators() {
+        assert!(Gav::from_str("a:b:c:d:e").is_err());
+        assert!(Gav::from_str("a:b:c@d@e").is_err());
+        assert!(Gav::from_str("a:b:c:").is_err());
+        assert!(Gav::from_str("a:b:c@").is_err());
+    }
+
+    #[test]
+    fn allows_plus_and_star_and_underscore() {
+        assert!(Gav::from_str("a_b:c:1.0+build").is_ok());
+        assert!(Gav::from_str("a.b:c:*").is_ok());
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let gav = Gav::from_str("a.b:c:1.0:cls@ext").unwrap();
+        let json = serde_json::to_string(&gav).unwrap();
+        assert_eq!(json, "\"a.b:c:1.0:cls@ext\"");
+        let back: Gav = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, gav);
+    }
+
+    #[test]
+    fn serde_rejects_garbage() {
+        let bad: Result<Gav, _> = serde_json::from_str("\"not a gav\"");
+        assert!(bad.is_err());
+    }
+
+    #[test]
+    fn display_is_as_str() {
+        let gav = Gav::from_str("a.b:c:1.0").unwrap();
+        assert_eq!(format!("{gav}"), "a.b:c:1.0");
+    }
+
+    #[test]
+    fn url_with_classifier_and_extension() {
+        let gav = Gav::from_str("a.b:c:1.0:linux@tar.gz").unwrap();
+        assert_eq!(gav.url().to_string(), "a/b/c/1.0/c-1.0-linux.tar.gz");
+    }
+
+    #[test]
+    fn file_deep_group() {
+        let gav = Gav::from_str("com.mojang.brigadier:lib:1.2.3").unwrap();
+        assert_eq!(
+            gav.file(),
+            p(&["com", "mojang", "brigadier", "lib", "1.2.3", "lib-1.2.3.jar"])
+        );
+    }
+
+    #[test]
+    fn hashset_dedups_equal_gavs() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(Gav::from_str("a:b:1").unwrap());
+        set.insert(Gav::from_str("a:b:1@jar").unwrap());
+        set.insert(Gav::from_str("a:b:2").unwrap());
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn serde_vec_roundtrip() {
+        let gavs = vec![
+            Gav::from_str("a:b:1").unwrap(),
+            Gav::from_str("c.d:e:2.0:cls").unwrap(),
+        ];
+        let json = serde_json::to_string(&gavs).unwrap();
+        assert_eq!(json, "[\"a:b:1\",\"c.d:e:2.0:cls\"]");
+        let back: Vec<Gav> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, gavs);
+    }
+
+    #[test]
+    fn sort_orders_by_string() {
+        let mut gavs = vec![
+            Gav::from_str("z:z:1").unwrap(),
+            Gav::from_str("a:b:2").unwrap(),
+            Gav::from_str("a:b:1").unwrap(),
+        ];
+        gavs.sort();
+        let as_strings: Vec<&str> = gavs.iter().map(|g| g.as_str()).collect();
+        assert_eq!(as_strings, vec!["a:b:1", "a:b:2", "z:z:1"]);
+    }
+
+    #[test]
+    fn with_chains_preserve_value() {
+        let gav = Gav::from_str("a:b:1").unwrap();
+        let chained = gav
+            .with_group("x.y")
+            .unwrap()
+            .with_version("9.9")
+            .unwrap()
+            .with_classifier(Some("native"))
+            .unwrap();
+        assert_eq!(chained.as_str(), "x.y:b:9.9:native");
+        assert_eq!(chained.group(), "x.y");
+        assert_eq!(chained.version(), "9.9");
+        assert_eq!(chained.classifier(), Some("native"));
+    }
+
+    #[test]
+    fn extension_jar_is_default_after_clearing() {
+        let gav = Gav::from_str("a:b:1@zip").unwrap();
+        let cleared = gav.with_extension(None).unwrap();
+        assert_eq!(cleared.extension(), "jar");
+        assert_eq!(cleared.as_str(), "a:b:1");
+    }
+
+    #[test]
+    fn classifier_none_yields_no_classifier() {
+        let gav = Gav::from_str("a:b:1").unwrap();
+        assert_eq!(gav.classifier(), None);
+        let with = gav.with_classifier(Some("x")).unwrap();
+        assert_eq!(with.classifier(), Some("x"));
+        let without = with.with_classifier(None).unwrap();
+        assert_eq!(without.classifier(), None);
+    }
+}

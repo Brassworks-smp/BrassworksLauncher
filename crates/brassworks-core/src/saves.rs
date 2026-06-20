@@ -557,3 +557,141 @@ fn dir_size(dir: &Path) -> u64 {
     }
     total
 }
+
+#[cfg(test)]
+mod saves_tests {
+    use super::*;
+
+    #[test]
+    fn server_key_uses_unit_separator() {
+        assert_eq!(server_key("Home", "1.2.3.4"), "Home\u{1}1.2.3.4");
+        assert_ne!(server_key("a", "bc"), server_key("ab", "c"));
+    }
+
+    #[test]
+    fn safe_name_accepts_plain_names() {
+        assert!(safe_name("world"));
+        assert!(safe_name("My World 1"));
+        assert!(safe_name("ok-name_1"));
+    }
+
+    #[test]
+    fn safe_name_rejects_traversal() {
+        assert!(!safe_name(""));
+        assert!(!safe_name("a/b"));
+        assert!(!safe_name("a\\b"));
+        assert!(!safe_name(".."));
+        assert!(!safe_name("a..b"));
+    }
+
+    #[test]
+    fn is_hidden_dotfiles() {
+        assert!(is_hidden(Path::new(".git")));
+        assert!(is_hidden(Path::new("dir/.hidden")));
+        assert!(!is_hidden(Path::new("visible")));
+        assert!(!is_hidden(Path::new("dir/visible.txt")));
+    }
+
+    #[test]
+    fn is_hidden_empty_path() {
+        assert!(is_hidden(Path::new("")));
+    }
+
+    #[test]
+    fn datapacks_dir_layout() {
+        let saves = Path::new("root").join("saves");
+        assert_eq!(
+            datapacks_dir(&saves, "world1"),
+            saves.join("world1").join("datapacks")
+        );
+    }
+
+    #[test]
+    fn read_servers_missing_file_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("servers.dat");
+        assert!(read_servers(&file).is_empty());
+    }
+
+    #[test]
+    fn write_then_read_servers_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("nested").join("servers.dat");
+        let entries = vec![
+            ServerEntry {
+                name: "Alpha".to_string(),
+                ip: "alpha.example:25565".to_string(),
+                icon: Some("iconA".to_string()),
+                accept_textures: Some(1),
+                featured: false,
+                starred: false,
+            },
+            ServerEntry {
+                name: "Beta".to_string(),
+                ip: "beta.example".to_string(),
+                icon: None,
+                accept_textures: None,
+                featured: false,
+                starred: false,
+            },
+        ];
+        write_servers(&file, &entries).unwrap();
+        let read = read_servers(&file);
+        assert_eq!(read.len(), 2);
+        let alpha = read.iter().find(|s| s.name == "Alpha").unwrap();
+        assert_eq!(alpha.ip, "alpha.example:25565");
+        assert_eq!(alpha.icon.as_deref(), Some("iconA"));
+        let beta = read.iter().find(|s| s.name == "Beta").unwrap();
+        assert_eq!(beta.ip, "beta.example");
+        assert!(beta.icon.is_none());
+    }
+
+    #[test]
+    fn write_servers_drops_featured() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("servers.dat");
+        let entries = vec![
+            ServerEntry {
+                name: "Kept".to_string(),
+                ip: "kept".to_string(),
+                icon: None,
+                accept_textures: None,
+                featured: false,
+                starred: false,
+            },
+            ServerEntry {
+                name: "Featured".to_string(),
+                ip: "featured".to_string(),
+                icon: None,
+                accept_textures: None,
+                featured: true,
+                starred: false,
+            },
+        ];
+        write_servers(&file, &entries).unwrap();
+        let read = read_servers(&file);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].name, "Kept");
+    }
+
+    #[test]
+    fn read_servers_defaults_flags_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("servers.dat");
+        write_servers(
+            &file,
+            &[ServerEntry {
+                name: "S".to_string(),
+                ip: "ip".to_string(),
+                icon: None,
+                accept_textures: None,
+                featured: false,
+                starred: true,
+            }],
+        )
+        .unwrap();
+        let read = read_servers(&file);
+        assert!(!read[0].featured);
+        assert!(!read[0].starred);
+    }
+}

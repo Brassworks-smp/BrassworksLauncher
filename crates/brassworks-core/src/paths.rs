@@ -116,3 +116,89 @@ impl Paths {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod paths_tests {
+    use super::Paths;
+    use std::path::Path;
+
+    fn paths() -> Paths {
+        Paths::with_root("root")
+    }
+
+    #[test]
+    fn root_is_preserved() {
+        assert_eq!(paths().root(), Path::new("root"));
+    }
+
+    #[test]
+    fn top_level_dirs() {
+        let p = paths();
+        assert_eq!(p.shared_dir(), Path::new("root").join("shared"));
+        assert_eq!(p.instances_dir(), Path::new("root").join("instances"));
+        assert_eq!(p.thumbnails_dir(), Path::new("root").join("thumbnails"));
+    }
+
+    #[test]
+    fn instance_paths() {
+        let p = paths();
+        let base = Path::new("root").join("instances").join("foo");
+        assert_eq!(p.instance_dir("foo"), base);
+        assert_eq!(p.instance_game_dir("foo"), base.join("minecraft"));
+        assert_eq!(p.instance_config("foo"), base.join("instance.json"));
+        assert_eq!(p.instance_assets_dir("foo"), base.join("assets"));
+        assert_eq!(p.modpack_manifest("foo"), base.join("packwiz.json"));
+        assert_eq!(p.user_content("foo"), base.join("user_content.json"));
+        assert_eq!(p.stars_file("foo"), base.join("stars.json"));
+        assert_eq!(p.datapacks_index("foo"), base.join("datapacks.json"));
+    }
+
+    #[test]
+    fn game_sub_paths() {
+        let p = paths();
+        let game = Path::new("root").join("instances").join("foo").join("minecraft");
+        assert_eq!(p.instance_saves_dir("foo"), game.join("saves"));
+        assert_eq!(p.instance_servers_file("foo"), game.join("servers.dat"));
+        assert_eq!(p.instance_game_subdir("foo", "mods"), game.join("mods"));
+        assert_eq!(p.instance_game_subdir("foo", "config"), game.join("config"));
+    }
+
+    #[test]
+    fn shared_caches_and_jvm() {
+        let p = paths();
+        let shared = Path::new("root").join("shared");
+        assert_eq!(p.modrinth_cache_dir(), shared.join("modrinth-cache"));
+        assert_eq!(p.curseforge_cache_dir(), shared.join("curseforge-cache"));
+        assert_eq!(p.jvm_dir(), shared.join("jvm"));
+        assert_eq!(p.skins_dir(), shared.join("skins"));
+        assert_eq!(p.skins_index(), shared.join("skins").join("skins.json"));
+    }
+
+    #[test]
+    fn root_level_files() {
+        let p = paths();
+        let root = Path::new("root");
+        assert_eq!(p.settings_file(), root.join("settings.json"));
+        assert_eq!(p.accounts_file(), root.join("accounts.json"));
+        assert_eq!(p.msa_db_file(), root.join("msa_accounts.json"));
+    }
+
+    #[test]
+    fn ids_are_kept_distinct() {
+        let p = paths();
+        assert_ne!(p.instance_dir("a"), p.instance_dir("b"));
+        assert_eq!(
+            p.instance_config("with-dashes"),
+            Path::new("root")
+                .join("instances")
+                .join("with-dashes")
+                .join("instance.json")
+        );
+    }
+
+    #[test]
+    fn absolute_root_is_respected() {
+        let p = Paths::with_root("/data/bw");
+        assert_eq!(p.instances_dir(), Path::new("/data/bw").join("instances"));
+    }
+}

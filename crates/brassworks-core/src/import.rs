@@ -559,3 +559,184 @@ fn modrinth_project_titles(
     }
     map
 }
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+
+    #[test]
+    fn base64_known_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64_encode(b"Man"), "TWFu");
+    }
+
+    #[test]
+    fn base64_zero_bytes() {
+        assert_eq!(base64_encode(&[0, 0, 0]), "AAAA");
+        assert_eq!(base64_encode(&[255, 255, 255]), "////");
+    }
+
+    #[test]
+    fn parse_mod_index_modrinth() {
+        let text = "name = \"Sodium\"\nfilename = \"sodium.jar\"\n[update.modrinth]\nmod-id = \"AANobbMI\"\nversion = \"abc123\"\n";
+        let v = parse_mod_index(text).unwrap();
+        assert_eq!(v["name"], "Sodium");
+        assert_eq!(v["filename"], "sodium.jar");
+        assert_eq!(v["path"], "mods/sodium.jar");
+        assert_eq!(v["source"], "modrinth");
+        assert_eq!(v["modrinth_id"], "AANobbMI");
+        assert_eq!(v["modrinth_version"], "abc123");
+        assert!(v["curseforge_id"].is_null());
+    }
+
+    #[test]
+    fn parse_mod_index_curseforge() {
+        let text = "filename = \"jei.jar\"\n[update.curseforge]\nproject-id = 238222\nfile-id = 12345\n";
+        let v = parse_mod_index(text).unwrap();
+        assert_eq!(v["name"], "jei.jar");
+        assert_eq!(v["source"], "curseforge");
+        assert_eq!(v["curseforge_id"], 238222);
+        assert_eq!(v["curseforge_file"], 12345);
+        assert!(v["modrinth_id"].is_null());
+    }
+
+    #[test]
+    fn parse_mod_index_no_source_is_none() {
+        let text = "filename = \"x.jar\"\nname = \"X\"\n";
+        assert!(parse_mod_index(text).is_none());
+    }
+
+    #[test]
+    fn parse_mod_index_missing_filename_is_none() {
+        let text = "name = \"X\"\n[update.modrinth]\nmod-id = \"y\"\n";
+        assert!(parse_mod_index(text).is_none());
+    }
+
+    #[test]
+    fn parse_mmc_pack_neoforge() {
+        let json = "{\"components\":[{\"uid\":\"net.minecraft\",\"version\":\"1.20.1\"},{\"uid\":\"net.neoforged\",\"version\":\"47.1.0\"}]}";
+        assert_eq!(
+            parse_mmc_pack(json),
+            ("1.20.1".to_string(), "neoforge".to_string(), Some("47.1.0".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_mmc_pack_fabric() {
+        let json = "{\"components\":[{\"uid\":\"net.minecraft\",\"version\":\"1.21.1\"},{\"uid\":\"net.fabricmc.fabric-loader\",\"version\":\"0.16.0\"}]}";
+        assert_eq!(
+            parse_mmc_pack(json),
+            ("1.21.1".to_string(), "fabric".to_string(), Some("0.16.0".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_mmc_pack_forge_and_quilt() {
+        let forge = "{\"components\":[{\"uid\":\"net.minecraftforge\",\"version\":\"43.0\"}]}";
+        assert_eq!(parse_mmc_pack(forge).1, "forge");
+        let quilt = "{\"components\":[{\"uid\":\"org.quiltmc.quilt-loader\",\"version\":\"0.2\"}]}";
+        assert_eq!(parse_mmc_pack(quilt).1, "quilt");
+    }
+
+    #[test]
+    fn parse_mmc_pack_defaults_on_garbage() {
+        assert_eq!(
+            parse_mmc_pack("not json"),
+            ("1.21.1".to_string(), "vanilla".to_string(), None)
+        );
+    }
+
+    #[test]
+    fn parse_mmc_pack_vanilla_when_no_loader() {
+        let json = "{\"components\":[{\"uid\":\"net.minecraft\",\"version\":\"1.19.2\"}]}";
+        assert_eq!(
+            parse_mmc_pack(json),
+            ("1.19.2".to_string(), "vanilla".to_string(), None)
+        );
+    }
+
+    #[test]
+    fn parse_ini_section_general_only() {
+        let text = "[General]\nname=My Pack\nnotes=hello\niconKey=\"default\"\n[Other]\nx=1\n";
+        let out = parse_ini_section(text);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0], ("name".to_string(), "My Pack".to_string()));
+        assert_eq!(out[1], ("notes".to_string(), "hello".to_string()));
+        assert_eq!(out[2], ("iconKey".to_string(), "default".to_string()));
+    }
+
+    #[test]
+    fn parse_ini_section_ignores_lines_before_section() {
+        let text = "skipped=1\n[General]\nname=Ok\n";
+        let out = parse_ini_section(text);
+        assert_eq!(out, vec![("name".to_string(), "Ok".to_string())]);
+    }
+
+    #[test]
+    fn parse_ini_section_empty() {
+        assert!(parse_ini_section("").is_empty());
+        assert!(parse_ini_section("[Other]\nfoo=bar\n").is_empty());
+    }
+
+    #[test]
+    fn copy_dir_all_skips_noise() {
+        let src = tempfile::tempdir().unwrap();
+        let dst = tempfile::tempdir().unwrap();
+        std::fs::write(src.path().join("a.txt"), b"hello").unwrap();
+        std::fs::create_dir_all(src.path().join("sub")).unwrap();
+        std::fs::write(src.path().join("sub").join("b.txt"), b"world").unwrap();
+        std::fs::create_dir_all(src.path().join("logs")).unwrap();
+        std::fs::write(src.path().join("logs").join("latest.log"), b"x").unwrap();
+        std::fs::write(src.path().join(".DS_Store"), b"junk").unwrap();
+
+        let into = dst.path().join("out");
+        copy_dir_all(src.path(), &into).unwrap();
+
+        assert!(into.join("a.txt").is_file());
+        assert!(into.join("sub").join("b.txt").is_file());
+        assert!(!into.join("logs").exists());
+        assert!(!into.join(".DS_Store").exists());
+        assert_eq!(std::fs::read(into.join("a.txt")).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn icon_data_uri_png() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("icon.png");
+        std::fs::write(&path, b"\x89PNG\r\n").unwrap();
+        let uri = icon_data_uri(path.to_str().unwrap()).unwrap();
+        assert!(uri.starts_with("data:image/png;base64,"));
+        assert_eq!(uri, format!("data:image/png;base64,{}", base64_encode(b"\x89PNG\r\n")));
+    }
+
+    #[test]
+    fn icon_data_uri_jpeg_mime() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("icon.jpg");
+        std::fs::write(&path, b"\xff\xd8\xff").unwrap();
+        let uri = icon_data_uri(path.to_str().unwrap()).unwrap();
+        assert!(uri.starts_with("data:image/jpeg;base64,"));
+    }
+
+    #[test]
+    fn icon_data_uri_rejects_empty_and_huge() {
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("empty.png");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(icon_data_uri(empty.to_str().unwrap()).is_none());
+        let huge = dir.path().join("huge.png");
+        std::fs::write(&huge, vec![0u8; 300_001]).unwrap();
+        assert!(icon_data_uri(huge.to_str().unwrap()).is_none());
+    }
+
+    #[test]
+    fn icon_data_uri_missing_file() {
+        assert!(icon_data_uri("/no/such/file.png").is_none());
+    }
+}

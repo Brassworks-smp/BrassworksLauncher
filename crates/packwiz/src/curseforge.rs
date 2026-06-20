@@ -460,3 +460,74 @@ impl ApiFile {
         }
     }
 }
+
+#[cfg(test)]
+mod cf_tests {
+    use super::{cdn_url, class_id, encode_filename, loader_type};
+
+    #[test]
+    fn class_ids_by_project_type() {
+        assert_eq!(class_id("mod"), 6);
+        assert_eq!(class_id("resourcepack"), 12);
+        assert_eq!(class_id("shader"), 6552);
+        assert_eq!(class_id("modpack"), 4471);
+        assert_eq!(class_id("datapack"), 6945);
+        assert_eq!(class_id("anything-else"), 6);
+    }
+
+    #[test]
+    fn loader_types_known() {
+        assert_eq!(loader_type("forge"), Some(1));
+        assert_eq!(loader_type("fabric"), Some(4));
+        assert_eq!(loader_type("quilt"), Some(5));
+        assert_eq!(loader_type("neoforge"), Some(6));
+    }
+
+    #[test]
+    fn loader_types_case_insensitive() {
+        assert_eq!(loader_type("Forge"), Some(1));
+        assert_eq!(loader_type("NeoForge"), Some(6));
+        assert_eq!(loader_type("FABRIC"), Some(4));
+    }
+
+    #[test]
+    fn loader_types_unknown() {
+        assert_eq!(loader_type("vanilla"), None);
+        assert_eq!(loader_type(""), None);
+        assert_eq!(loader_type("liteloader"), None);
+    }
+
+    #[test]
+    fn cdn_url_splits_file_id() {
+        assert_eq!(
+            cdn_url(4912345, "jei.jar"),
+            "https://mediafilez.forgecdn.net/files/4912/345/jei.jar"
+        );
+        assert_eq!(
+            cdn_url(7, "a.jar"),
+            "https://mediafilez.forgecdn.net/files/0/7/a.jar"
+        );
+    }
+
+    #[test]
+    fn cdn_url_encodes_filename() {
+        assert_eq!(
+            cdn_url(1000, "a b.jar"),
+            "https://mediafilez.forgecdn.net/files/1/0/a%20b.jar"
+        );
+    }
+
+    #[test]
+    fn encode_filename_keeps_unreserved() {
+        assert_eq!(encode_filename("jei.jar"), "jei.jar");
+        assert_eq!(encode_filename("a-b_c.1~x.jar"), "a-b_c.1~x.jar");
+    }
+
+    #[test]
+    fn encode_filename_escapes_specials() {
+        assert_eq!(encode_filename("a b.jar"), "a%20b.jar");
+        assert_eq!(encode_filename("a+b.jar"), "a%2Bb.jar");
+        assert_eq!(encode_filename("100%cool.jar"), "100%25cool.jar");
+        assert_eq!(encode_filename("a(b).jar"), "a%28b%29.jar");
+    }
+}

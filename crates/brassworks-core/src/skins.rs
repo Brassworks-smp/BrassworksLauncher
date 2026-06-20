@@ -384,3 +384,66 @@ pub fn set_cape(token: &str, cape_id: Option<&str>) -> Result<()> {
     .map_err(|e| CoreError::Remote(e.to_string()))?;
     ok(resp)
 }
+
+#[cfg(test)]
+mod skins_more {
+    use super::*;
+
+    fn skin(id: &str, name: &str) -> SavedSkin {
+        SavedSkin {
+            id: id.to_string(),
+            name: name.to_string(),
+            file: format!("{id}.png"),
+            model: "classic".to_string(),
+            cape_id: None,
+        }
+    }
+
+    #[test]
+    fn https_upgrades_http() {
+        assert_eq!(https("http://textures.example/x.png"), "https://textures.example/x.png");
+    }
+
+    #[test]
+    fn https_leaves_secure_and_other_schemes() {
+        assert_eq!(https("https://already.secure/x"), "https://already.secure/x");
+        assert_eq!(https("data:image/png;base64,AAA"), "data:image/png;base64,AAA");
+        assert_eq!(https(""), "");
+    }
+
+    #[test]
+    fn unique_name_empty_uses_default() {
+        assert_eq!(unique_name(&[], "", None), "Skin");
+        assert_eq!(unique_name(&[], "   ", None), "Skin");
+    }
+
+    #[test]
+    fn unique_name_free_name_kept() {
+        let skins = vec![skin("a", "Knight")];
+        assert_eq!(unique_name(&skins, "Wizard", None), "Wizard");
+    }
+
+    #[test]
+    fn unique_name_collision_appends_number() {
+        let skins = vec![skin("a", "Knight"), skin("b", "Knight 2")];
+        assert_eq!(unique_name(&skins, "Knight", None), "Knight 3");
+    }
+
+    #[test]
+    fn unique_name_is_case_insensitive() {
+        let skins = vec![skin("a", "Knight")];
+        assert_eq!(unique_name(&skins, "knight", None), "knight 2");
+    }
+
+    #[test]
+    fn unique_name_excludes_self() {
+        let skins = vec![skin("a", "Knight")];
+        assert_eq!(unique_name(&skins, "Knight", Some("a")), "Knight");
+    }
+
+    #[test]
+    fn unique_name_trims_desired() {
+        let skins = vec![skin("a", "Hero")];
+        assert_eq!(unique_name(&skins, "  Hero  ", None), "Hero 2");
+    }
+}
