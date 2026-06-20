@@ -295,7 +295,7 @@ export function CustomColorChip({
         title={t("theme.accentCustom")}
         style={effective ? { backgroundImage: swatchBg(effective) } : { backgroundImage: RAINBOW }}
         className={`grid ${dotSize} shrink-0 place-items-center rounded-md shadow-sm transition hover:scale-110 ${
-          fullWidth && active ? "ring-2 ring-brass-500/70" : ""
+          active ? "scale-110" : ""
         }`}
       >
         {active && (
