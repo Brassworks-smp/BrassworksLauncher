@@ -684,6 +684,7 @@ function FolderGroup({
                   storageKey="bw.folder.custom"
                   compact
                   fullWidth
+                  accent={color}
                 />
               </div>
               <button

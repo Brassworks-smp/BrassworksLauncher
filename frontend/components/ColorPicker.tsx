@@ -73,11 +73,13 @@ export function ColorPicker({
   value,
   onChange,
   onClose,
+  accent,
 }: {
   anchor: DOMRect;
   value: string;
   onChange: (hex: string) => void;
   onClose: () => void;
+  accent?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const svRef = useRef<HTMLDivElement>(null);
@@ -133,10 +135,18 @@ export function ColorPicker({
       <div className="fixed inset-0 z-[95]" onClick={onClose} />
       <div
         ref={ref}
-        className="fixed z-[96] w-60 rounded-xl border border-brass-700/40 bg-ink-900/95 p-3 shadow-2xl shadow-black/60 backdrop-blur-sm"
+        className={`fixed z-[96] w-60 rounded-xl border bg-ink-900/95 p-3 shadow-2xl shadow-black/60 backdrop-blur-sm ${
+          accent ? "" : "border-brass-700/40"
+        }`}
         style={{
           left: Math.max(8, Math.min(anchor.left, window.innerWidth - 248)),
           ...(pos.top != null ? { top: pos.top } : { bottom: pos.bottom }),
+          ...(accent
+            ? ({
+                "--cc-accent": accent,
+                borderColor: `color-mix(in srgb, ${accent} 45%, transparent)`,
+              } as React.CSSProperties)
+            : {}),
         }}
       >
         <div
@@ -150,32 +160,39 @@ export function ColorPicker({
           }}
         >
           <span
-            className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-            style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundColor: current }}
+            className="pointer-events-none absolute h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-[5px] ring-2 ring-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55),0_1px_4px_rgba(0,0,0,0.7)]"
+            style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundImage: swatchBg(current) }}
           />
         </div>
 
         <div
           ref={hueRef}
           onPointerDown={drag(hueRef, (x) => emit(x * 360, hsv.s, hsv.v))}
-          className="relative mt-3 h-3 w-full cursor-pointer touch-none rounded-full"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
-          }}
+          className="group relative mt-3 flex h-[18px] w-full cursor-pointer touch-none items-center"
         >
+          <div
+            className="absolute inset-x-0 h-2 overflow-hidden rounded-full border border-edge"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
+            }}
+          />
           <span
-            className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-            style={{ left: `${(hsv.h / 360) * 100}%`, backgroundColor: hueHex }}
+            className="pointer-events-none absolute h-[20px] w-[20px] -translate-x-1/2 rounded-[5px] ring-2 ring-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55),0_1px_4px_rgba(0,0,0,0.7)]"
+            style={{ left: `${(hsv.h / 360) * 100}%`, backgroundImage: swatchBg(hueHex) }}
           />
         </div>
 
         <div className="mt-3 flex items-center gap-2">
           <span
-            className="h-8 w-8 shrink-0 rounded-lg border border-edge shadow-inner"
-            style={{ backgroundColor: current }}
+            className="h-8 w-8 shrink-0 rounded-[5px] shadow-sm"
+            style={{ backgroundImage: swatchBg(current) }}
           />
-          <div className="flex flex-1 items-center rounded-lg border border-edge bg-ink-950/50 px-2 font-mono text-xs">
+          <div
+            className={`flex flex-1 items-center rounded-[5px] bg-ink-950/50 px-2 font-mono text-xs ring-1 ring-edge transition ${
+              accent ? "focus-within:ring-[var(--cc-accent)]" : "focus-within:ring-brass-500/60"
+            }`}
+          >
             <span className="text-ink-600">#</span>
             <input
               value={draft}
@@ -194,7 +211,11 @@ export function ColorPicker({
           <button
             onClick={onClose}
             title="Done"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brass-300 to-brass-600 text-ink-950 shadow ring-1 ring-ink-950/30 transition hover:brightness-110"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[5px] border border-edge text-ink-600 transition ${
+              accent
+                ? "hover:border-[var(--cc-accent)] hover:text-[var(--cc-accent)]"
+                : "hover:border-brass-600/40 hover:text-brass-300"
+            }`}
           >
             <Check size={15} strokeWidth={3} />
           </button>
@@ -212,6 +233,7 @@ export function CustomColorChip({
   storageKey,
   compact = false,
   fullWidth = false,
+  accent,
 }: {
   selected: string | null;
   active: boolean;
@@ -219,6 +241,7 @@ export function CustomColorChip({
   storageKey: string;
   compact?: boolean;
   fullWidth?: boolean;
+  accent?: string;
 }) {
   const t = useT();
   const dotRef = useRef<HTMLButtonElement>(null);
@@ -307,8 +330,13 @@ export function CustomColorChip({
         )}
       </button>
       <div
+        style={accent ? ({ "--cc-accent": accent } as React.CSSProperties) : undefined}
         className={`flex items-center font-mono text-[11px] text-gray-200 ${
-          fullWidth ? "flex-1 rounded-md border border-edge bg-ink-950/40 px-2 py-1" : ""
+          fullWidth
+            ? `flex-1 rounded-md bg-ink-950/40 px-2 py-1 ring-1 ring-edge transition ${
+                accent ? "focus-within:ring-[var(--cc-accent)]" : "focus-within:ring-brass-500/60"
+              }`
+            : ""
         }`}
       >
         <span className="text-ink-600">#</span>
@@ -333,6 +361,7 @@ export function CustomColorChip({
           value={effective || DEFAULT_ACCENT}
           onChange={apply}
           onClose={() => setOpen(false)}
+          accent={accent}
         />
       )}
     </div>
