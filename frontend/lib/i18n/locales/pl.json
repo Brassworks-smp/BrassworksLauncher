@@ -108,7 +108,8 @@
     "crimson": "",
     "forest": "",
     "light": "",
-    "accentDefault": ""
+    "accentDefault": "",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "",
@@ -293,6 +294,17 @@
       "desc": "",
       "clear": ""
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "",
       "current": "",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "",
       "iconUrl": "",
       "iconUrlHint": "",
+      "chooseFile": "",
       "urlPlaceholder": "",
       "bannerUrl": "",
       "bannerUrlHint": "",

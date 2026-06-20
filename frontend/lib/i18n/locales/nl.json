@@ -108,7 +108,8 @@
     "crimson": "Karmozijnrood",
     "forest": "Woud",
     "light": "Licht",
-    "accentDefault": "Standaard (groen)"
+    "accentDefault": "Standaard (groen)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Setup overslaan",
@@ -293,6 +294,17 @@
       "desc": "Modrinth- en CurseForge-gegevens die de launcher indien nodig opnieuw downloadt. Veilig om te wissen.",
       "clear": "Cache wissen"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Updates",
       "current": "Huidige versie",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "Kies snel een ingebouwd instantie icoon.",
       "iconUrl": "Icoon URL",
       "iconUrlHint": "Vierkant logo dat wordt weergegeven op de kaart en de Speel-pagina.",
+      "chooseFile": "",
       "urlPlaceholder": "https://… of /local.png",
       "bannerUrl": "Banner-URL",
       "bannerUrlHint": "Brede afbeelding die achter de Speel-knop wordt weergegeven.",

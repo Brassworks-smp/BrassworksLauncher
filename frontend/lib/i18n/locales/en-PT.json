@@ -108,7 +108,8 @@
     "crimson": "",
     "forest": "",
     "light": "Light arr",
-    "accentDefault": "As she lies (green)"
+    "accentDefault": "As she lies (green)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Skip setup arr",
@@ -293,6 +294,17 @@
       "desc": "Modrinth & CurseForge data the launcher re-plunder as needed. Safe to clear.",
       "clear": "Clear cache arr"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Updates arr",
       "current": "Current make",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "Quick-pick a built-in instance icon arr.",
       "iconUrl": "Icon URL arr",
       "iconUrlHint": "Square logo shown on the card an' Set sail page.",
+      "chooseFile": "",
       "urlPlaceholder": "https://… or /local.png arr",
       "bannerUrl": "Banner URL arr",
       "bannerUrlHint": "Wide image shown behind the Set sail hero.",
