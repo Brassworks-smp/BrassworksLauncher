@@ -96,6 +96,8 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 
 ## Command palette & CLI
 
+<img src="assets/CommandPallete.png" alt="Command palette" width="100%">
+
 Press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> to open the command palette. Start typing to
 fuzzy-find any action, or type <kbd>/</kbd> to enter **command mode** - Discord-style
 slash commands with per-argument autocomplete for everything the UI can do:
@@ -112,7 +114,7 @@ slash commands with per-argument autocomplete for everything the UI can do:
 
 Press <kbd>Tab</kbd> to accept a suggestion, <kbd>Enter</kbd> to run. As you fill each
 argument the palette shows its name and description, Discord-style. Type `/help` to
-browse every command, ⭐ pin the ones you use most, and chain several with `;` to
+browse every command, pin the ones you use most, and chain several with `;` to
 script them in sequence (`/go worlds ; /world backup survival`).
 
 The same commands work from your terminal. Run **Settings → Launcher → Install
@@ -139,17 +141,39 @@ A handful of built-in themes and a customisable accent colour let you set the mo
 
 <table>
 <tr>
-<td width="33%" align="center">
+<td width="25%" align="center">
 <img src="assets/OledTheme.png" alt="OLED theme" width="100%">
 <br><sub><b>OLED</b></sub>
 </td>
-<td width="33%" align="center">
+<td width="25%" align="center">
 <img src="assets/MochaTheme.png" alt="Mocha theme" width="100%">
 <br><sub><b>Mocha</b></sub>
 </td>
-<td width="33%" align="center">
+<td width="25%" align="center">
 <img src="assets/OceanTheme.png" alt="Ocean theme" width="100%">
 <br><sub><b>Ocean</b></sub>
+</td>
+<td width="25%" align="center">
+<img src="assets/NordTheme.png" alt="Nord theme" width="100%">
+<br><sub><b>Nord</b></sub>
+</td>
+</tr>
+<tr>
+<td width="25%" align="center">
+<img src="assets/AmethystTheme.png" alt="Amethyst theme" width="100%">
+<br><sub><b>Amethyst</b></sub>
+</td>
+<td width="25%" align="center">
+<img src="assets/CrimsonTheme.png" alt="Crimson theme" width="100%">
+<br><sub><b>Crimson</b></sub>
+</td>
+<td width="25%" align="center">
+<img src="assets/ForestTheme.png" alt="Forest theme" width="100%">
+<br><sub><b>Forest</b></sub>
+</td>
+<td width="25%" align="center">
+<img src="assets/RoseTheme.png" alt="Rose theme" width="100%">
+<br><sub><b>Rose</b></sub>
 </td>
 </tr>
 </table>
@@ -157,7 +181,7 @@ A handful of built-in themes and a customisable accent colour let you set the mo
 <table>
 <tr>
 <td width="50%" align="center">
-<img src="assets/SettingsCustomizable.png" alt="Customisable settings" width="100%">
+<img src="assets/SettingsCustomization.png" alt="Customisable settings" width="100%">
 <br><sub><b>Customisable settings and accent colours</b></sub>
 </td>
 <td width="50%" align="center">
