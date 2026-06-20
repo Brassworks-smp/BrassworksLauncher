@@ -108,7 +108,8 @@
     "crimson": "قرمزي",
     "forest": "غابة",
     "light": "فاتح",
-    "accentDefault": "افتراضي (أخضر)"
+    "accentDefault": "افتراضي (أخضر)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "تخطّى الإعداد",
@@ -293,6 +294,17 @@
       "desc": "بيانات Modrinth وCurseForge اللي يعيد اللانشر تحميلها وقت الحاجة. آمن تمسحها.",
       "clear": "امسح الكاش"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "التحديثات",
       "current": "الإصدار الحالي",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "اختيار سريع لأيقونة نسخة جاهزة.",
       "iconUrl": "رابط الأيقونة",
       "iconUrlHint": "شعار مربّع يظهر على الكرت وصفحة اللعب.",
+      "chooseFile": "",
       "urlPlaceholder": "https://… أو /local.png",
       "bannerUrl": "رابط البانر",
       "bannerUrlHint": "صورة عريضة تظهر خلف بطل شاشة اللعب.",

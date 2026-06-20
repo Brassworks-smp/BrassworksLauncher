@@ -108,7 +108,8 @@
     "crimson": "Cramoisi",
     "forest": "Forêt",
     "light": "Clair",
-    "accentDefault": "Défaut (vert)"
+    "accentDefault": "Défaut (vert)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Passer la configuration",
@@ -293,6 +294,17 @@
       "desc": "Données Modrinth et CurseForge que le launcher retélécharge au besoin. Sans risque à effacer.",
       "clear": "Vider le cache"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Mises à jour",
       "current": "Version actuelle",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "Choix rapide d'une icône d'instance intégrée.",
       "iconUrl": "URL de l'icône",
       "iconUrlHint": "Logo carré affiché sur la carte et la page Jouer.",
+      "chooseFile": "",
       "urlPlaceholder": "https://… ou /local.png",
       "bannerUrl": "URL de la bannière",
       "bannerUrlHint": "Image large affichée derrière le héros de l'écran Jouer.",

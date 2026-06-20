@@ -108,7 +108,8 @@
     "crimson": "",
     "forest": "",
     "light": "Hell",
-    "accentDefault": "Standard (Grün)"
+    "accentDefault": "Standard (Grün)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Setup überspringen",
@@ -293,6 +294,17 @@
       "desc": "Modrinth und CurseForge Daten werden erneut Heruntergeladen, wenn benötigt sie sind Sicher zum Löschen.",
       "clear": "Cache löschen"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Updates",
       "current": "Aktuelle Version",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "",
       "iconUrl": "",
       "iconUrlHint": "",
+      "chooseFile": "",
       "urlPlaceholder": "",
       "bannerUrl": "",
       "bannerUrlHint": "",

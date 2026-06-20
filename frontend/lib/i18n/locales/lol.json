@@ -108,7 +108,8 @@
     "crimson": "",
     "forest": "",
     "light": "Lightz",
-    "accentDefault": "Default (greenz)"
+    "accentDefault": "Default (greenz)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Skip setupz",
@@ -293,6 +294,17 @@
       "desc": "Modrinth & Kurseforge data teh launkher re-downloadz az needed. Safe to klear.",
       "clear": "Klear kakhe"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Updatez",
       "current": "Kurrent vershun",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "Kwik-pik a built-in instance ikon.",
       "iconUrl": "Ikon URL",
       "iconUrlHint": "Skware logo shown on teh kard and Play page.",
+      "chooseFile": "",
       "urlPlaceholder": "httpz://… or /lokal.png",
       "bannerUrl": "Banner URLz",
       "bannerUrlHint": "Wide image shown behind teh Play hero.",
