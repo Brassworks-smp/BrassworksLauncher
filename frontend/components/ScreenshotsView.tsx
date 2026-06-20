@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { useClosable, StarButton, useProgressive } from "@/components/ui";
+import { useClosable, StarButton, useProgressive, SegmentedTabs } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import type { Screenshot } from "@/lib/types";
 
@@ -209,28 +209,15 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-edge bg-ink-900/50 p-0.5 text-xs">
-            <button
-              onClick={() => setScope("this")}
-              className={`rounded-md px-2.5 py-1 transition ${
-                scope === "this"
-                  ? "bg-brass-500/15 text-brass-300"
-                  : "text-ink-600 hover:text-brass-300/80"
-              }`}
-            >
-              {t("screenshots.thisInstance")}
-            </button>
-            <button
-              onClick={() => setScope("all")}
-              className={`rounded-md px-2.5 py-1 transition ${
-                scope === "all"
-                  ? "bg-brass-500/15 text-brass-300"
-                  : "text-ink-600 hover:text-brass-300/80"
-              }`}
-            >
-              {t("screenshots.all")}
-            </button>
-          </div>
+          <SegmentedTabs
+            size="sm"
+            value={scope}
+            onChange={(v) => setScope(v as "this" | "all")}
+            options={[
+              { id: "this", label: t("screenshots.thisInstance") },
+              { id: "all", label: t("screenshots.all") },
+            ]}
+          />
           <button
             onClick={() => setStarredOnly((v) => !v)}
             title={t("screenshots.showStarred")}

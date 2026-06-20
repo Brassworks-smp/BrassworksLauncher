@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Collapse, placeMenu, useMenuDismiss, Toggle } from "./ui";
+import { Collapse, placeMenu, useMenuDismiss, Toggle, SegmentedTabs } from "./ui";
 
 type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
@@ -229,27 +229,25 @@ export function InstancesView({
       <div className="flex items-center justify-between pb-3">
         <h1 className="font-mc text-2xl tracking-wide text-gray-100">{tr("instances.title")}</h1>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border border-edge p-0.5">
-            {[
-              { c: false, icon: <LayoutGrid size={15} />, label: tr("instances.gridView") },
-              { c: true, icon: <LayoutList size={15} />, label: tr("instances.compactView") },
-            ].map((m) => (
-              <button
-                key={m.label}
-                onClick={() => setDensity(m.c)}
-                title={m.label}
-                aria-label={m.label}
-                aria-pressed={compact === m.c}
-                className={`grid h-7 w-7 place-items-center rounded-md transition ${
-                  compact === m.c
-                    ? "bg-brass-500/20 text-brass-300"
-                    : "text-ink-600 hover:text-brass-300"
-                }`}
-              >
-                {m.icon}
-              </button>
-            ))}
-          </div>
+          <SegmentedTabs
+            size="sm"
+            value={compact ? "compact" : "grid"}
+            onChange={(v) => setDensity(v === "compact")}
+            options={[
+              {
+                id: "grid",
+                label: "",
+                icon: <LayoutGrid size={15} />,
+                title: tr("instances.gridView"),
+              },
+              {
+                id: "compact",
+                label: "",
+                icon: <LayoutList size={15} />,
+                title: tr("instances.compactView"),
+              },
+            ]}
+          />
           <button
             onClick={() => createFolder()}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"

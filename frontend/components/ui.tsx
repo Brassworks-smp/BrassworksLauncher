@@ -332,7 +332,12 @@ export function SegmentedTabs({
 }: {
   value: string;
   onChange: (v: string) => void;
-  options: { id: string; label: React.ReactNode; icon?: React.ReactNode }[];
+  options: {
+    id: string;
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    title?: string;
+  }[];
   size?: "sm" | "md";
   className?: string;
 }) {
@@ -396,6 +401,8 @@ export function SegmentedTabs({
             key={o.id}
             data-seg-active={active}
             onClick={() => onChange(o.id)}
+            title={o.title}
+            aria-label={o.title}
             className={`relative z-10 flex items-center whitespace-nowrap rounded-md font-medium transition-colors ${item} ${
               active ? "text-brass-300" : "text-ink-600 hover:text-brass-300/80"
             }`}
