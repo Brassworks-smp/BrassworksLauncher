@@ -1905,15 +1905,15 @@ pub(crate) fn install_cli() -> CmdResult<String> {
     {
         let base = std::env::var("LOCALAPPDATA").map_err(err)?;
         let bin = std::path::PathBuf::from(base)
-            .join("BrassworksLauncher")
-            .join("bin");
+            .join("Microsoft")
+            .join("WindowsApps");
         std::fs::create_dir_all(&bin).map_err(err)?;
         let shim = bin.join("brassworks.cmd");
         let content = format!("@echo off\r\n\"{}\" %*\r\n", exe.display());
         std::fs::write(&shim, content).map_err(err)?;
         Ok(format!(
-            "{} - add this folder to your PATH, then run `brassworks <command>`",
-            bin.display()
+            "{} - open a new terminal, then run `brassworks <command>`",
+            shim.display()
         ))
     }
 
@@ -1955,9 +1955,14 @@ fn cli_targets() -> Vec<std::path::PathBuf> {
     {
         let mut v = Vec::new();
         if let Ok(base) = std::env::var("LOCALAPPDATA") {
+            let base = PathBuf::from(base);
             v.push(
-                PathBuf::from(base)
-                    .join("BrassworksLauncher")
+                base.join("Microsoft")
+                    .join("WindowsApps")
+                    .join("brassworks.cmd"),
+            );
+            v.push(
+                base.join("BrassworksLauncher")
                     .join("bin")
                     .join("brassworks.cmd"),
             );
