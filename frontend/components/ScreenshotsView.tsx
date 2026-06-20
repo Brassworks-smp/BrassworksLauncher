@@ -130,7 +130,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
   const t = useT();
   const [shots, setShots] = useState<Screenshot[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [active, setActive] = useState<number | null>(null);
+  const [activePath, setActivePath] = useState<string | null>(null);
   const [scope, setScope] = useState<"this" | "all">("this");
   const [starredOnly, setStarredOnly] = useState(false);
 
@@ -153,7 +153,7 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
 
   const remove = (s: Screenshot) => {
     setShots((prev) => (prev ? prev.filter((x) => x.path !== s.path) : prev));
-    setActive(null);
+    setActivePath(null);
     api
       .deleteScreenshot(s.instance, s.name)
       .then(() => toast(t("screenshots.deleted", { name: s.name }), "info"))
@@ -188,8 +188,14 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
 
   const list = (shots ?? [])
     .filter((s) => scope === "all" || s.instance === instanceId)
-    .filter((s) => !starredOnly || s.starred);
+    .filter((s) => !starredOnly || s.starred)
+    .sort(
+      (a, b) =>
+        Number(b.starred) - Number(a.starred) || b.modified - a.modified,
+    );
   const { shown } = useProgressive(list, 48, `${scope}:${starredOnly}`);
+  const active =
+    activePath !== null ? list.findIndex((s) => s.path === activePath) : -1;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -265,10 +271,10 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
         </div>
       ) : (
         <div className="stagger grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
-          {shown.map((s, i) => (
+          {shown.map((s) => (
             <button
               key={s.path}
-              onClick={() => setActive(i)}
+              onClick={() => setActivePath(s.path)}
               className="group relative aspect-video overflow-hidden rounded-lg border border-edge bg-ink-950 transition hover:border-brass-600/50"
             >
               <GridThumb path={s.path} alt={s.name} />
@@ -299,12 +305,12 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
         </div>
       )}
 
-      {active !== null && list[active] && (
+      {active >= 0 && list[active] && (
         <Lightbox
           shots={list}
           index={active}
-          onIndex={setActive}
-          onClose={() => setActive(null)}
+          onIndex={(i) => setActivePath(list[i]?.path ?? null)}
+          onClose={() => setActivePath(null)}
           onDelete={remove}
           onCopy={copy}
           onStar={toggleStar}
