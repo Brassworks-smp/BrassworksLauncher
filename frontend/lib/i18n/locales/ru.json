@@ -108,7 +108,8 @@
     "crimson": "Багровый",
     "forest": "Лесной",
     "light": "Светлая",
-    "accentDefault": "По умолчанию (зелёный)"
+    "accentDefault": "По умолчанию (зелёный)",
+    "accentCustom": ""
   },
   "onboarding": {
     "skipSetup": "Пропустить настройку",
@@ -293,6 +294,17 @@
       "desc": "Данные Modrinth и CurseForge, которые лаунчер скачивает заново по мере необходимости. Удаление безопасно.",
       "clear": "Очистить кэш"
     },
+    "cli": {
+      "title": "",
+      "desc": "",
+      "status": "",
+      "installed": "",
+      "notInstalled": "",
+      "install": "",
+      "uninstall": "",
+      "done": "",
+      "removed": ""
+    },
     "updates": {
       "title": "Обновления",
       "current": "Текущая версия",
@@ -424,6 +436,7 @@
       "defaultIconsHint": "Быстрый выбор встроенной иконки сборки.",
       "iconUrl": "URL иконки",
       "iconUrlHint": "Квадратный логотип, который отображается на карточке и главном экране.",
+      "chooseFile": "",
       "urlPlaceholder": "https://… или /local.png",
       "bannerUrl": "URL баннера",
       "bannerUrlHint": "Широкое изображение, которое отображается на фоне главного экрана.",
