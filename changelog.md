@@ -13,6 +13,8 @@
 * **Polished toggles** - the screenshot "This instance / All" switch and the instance grid/compact switch now use the same animated segmented control as the rest of the app.
 * **Accurate folder drop preview** - when you drag an instance onto a folder, the "drop here" placeholder now appears exactly where the instance will land once it's sorted, instead of always at the end.
 * **Slimmer title bar** - the window title bar is a little shorter, giving the rest of the app more room.
+* **Themed colour picker** - the colour picker now matches the rest of the launcher, with swatch-style handles, squared corners, and hex fields that show a focus outline. When you open it from a folder's colour menu, its border, buttons, and focus outlines all follow that folder's own colour, and the selected custom colour reads the same as the preset swatches.
+* **Cleaner buttons** - the Play, Install/Update, and "Add content" buttons drop the chunky 3D ledge for the same flat style as the "Add server" button.
 
 ### **Fixes:**
 * **Command palette search** - typing `/` after a search now switches cleanly to command mode and shows every action, instead of keeping the previous results around.
