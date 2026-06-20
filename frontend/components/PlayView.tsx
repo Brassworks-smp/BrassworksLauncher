@@ -5,6 +5,7 @@ import {
   Square,
   Box,
   Clock,
+  Package,
   Download,
   ArrowUpCircle,
   X,
@@ -201,16 +202,12 @@ export function PlayView({
   return (
     <div className={`flex min-h-0 flex-1 ${resizing ? "cursor-col-resize select-none" : ""}`}>
       {}
-      <div className="schem-bg relative flex flex-1 overflow-hidden rounded-lg border border-edge">
+      <div className="play-hero-glass relative flex flex-1 overflow-hidden rounded-lg border border-edge">
         <div className="play-hero-overlay pointer-events-none absolute inset-0" />
 
         <div className="relative z-10 flex h-full w-full flex-col p-7">
           {}
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-edge bg-ink-900/50 px-3 py-1 text-[11px] text-brass-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-patina-400" />
-              {kindLabel(t, instance)}
-            </div>
             <div className="flex items-center gap-3">
               {instance.icon && (
                 <img
@@ -224,6 +221,7 @@ export function PlayView({
               </h1>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
+              <Chip icon={<Package size={13} />}>{kindLabel(t, instance)}</Chip>
               <Chip icon={<Box size={13} />}>
                 {loaderLabel(instance)} {instance.minecraft_version}
               </Chip>
