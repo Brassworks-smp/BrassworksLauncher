@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Children, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Settings,
@@ -83,6 +83,25 @@ function loaderLabel(i: Instance): string {
 
 const byPinned = (a: Instance, b: Instance) =>
   Number(b.pinned ?? false) - Number(a.pinned ?? false);
+
+// Where a dragged instance will land in an already-sorted list once it's moved
+// there: pinned first, then name (matches the backend's instance ordering).
+const dropIndexFor = (list: Instance[], dragged: Instance | null): number => {
+  if (!dragged) return list.length;
+  let idx = 0;
+  for (const i of list) {
+    if (i.id === dragged.id) continue;
+    const pin = Number(i.pinned ?? false);
+    const dpin = Number(dragged.pinned ?? false);
+    const before =
+      pin !== dpin
+        ? pin > dpin
+        : i.name.toLowerCase().localeCompare(dragged.name.toLowerCase()) < 0;
+    if (before) idx++;
+    else break;
+  }
+  return idx;
+};
 
 
 const COMPACT_KEY = "bw-instances-compact";
@@ -172,6 +191,10 @@ export function InstancesView({
   const ungrouped = visible
     .filter((i) => !i.folder_id || !folders.some((f) => f.id === i.folder_id))
     .sort(byPinned);
+  const draggedInstance =
+    draggingFrom !== undefined
+      ? instances.find((i) => i.id === draggedInstanceId) ?? null
+      : null;
 
   const updateFolder = (id: string, patch: Partial<InstanceFolder>) =>
     onSaveFolders(folders.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -303,6 +326,7 @@ export function InstancesView({
           compact={compact}
           dropFolderId={null}
           draggingFrom={draggingFrom}
+          dropIndex={dropIndexFor(ungrouped, draggedInstance)}
           onDropInstance={(id) => assignById(id, null)}
         >
           {ungrouped.map((i) => card(i))}
@@ -325,6 +349,7 @@ export function InstancesView({
             draggingFrom={draggingFrom}
             settingsAccent={settingsAccent}
             count={inFolder(f.id).length}
+            dropIndex={dropIndexFor(inFolder(f.id), draggedInstance)}
             onToggle={() => updateFolder(f.id, { collapsed: !f.collapsed })}
             onRename={(name) => updateFolder(f.id, { name })}
             onColor={(color) => updateFolder(f.id, { color })}
@@ -367,6 +392,7 @@ function Section({
   compact,
   dropFolderId,
   draggingFrom,
+  dropIndex,
   onDropInstance,
 }: {
   title: string;
@@ -375,6 +401,7 @@ function Section({
   compact?: boolean;
   dropFolderId?: string | null;
   draggingFrom?: string | null;
+  dropIndex?: number;
   onDropInstance?: (id: string) => void;
 }) {
   const [over, setOver] = useState(false);
@@ -416,11 +443,30 @@ function Section({
             : "grid-cols-[repeat(auto-fill,196px)] gap-3"
         } ${showDrop ? "ring-2 ring-brass-500/40 ring-offset-4 ring-offset-ink-950" : ""}`}
       >
-        {children}
-        {showDrop && <DropPlaceholder color="var(--color-brass-400)" compact={compact} />}
+        {withDropPlaceholder(
+          children,
+          showDrop,
+          dropIndex,
+          <DropPlaceholder key="__drop" color="var(--color-brass-400)" compact={compact} />,
+        )}
       </div>
     </section>
   );
+}
+
+// Inserts the drop-target placeholder among the cards at the index the instance
+// will actually sort to, instead of always appending it at the end.
+function withDropPlaceholder(
+  children: React.ReactNode,
+  show: boolean,
+  index: number | undefined,
+  placeholder: React.ReactElement,
+): React.ReactNode {
+  if (!show) return children;
+  const items = Children.toArray(children);
+  const at = Math.min(index ?? items.length, items.length);
+  items.splice(at, 0, placeholder);
+  return items;
 }
 
 function FolderGroup({
@@ -434,6 +480,7 @@ function FolderGroup({
   onColor,
   onDelete,
   onDropInstance,
+  dropIndex,
   children,
 }: {
   folder: InstanceFolder;
@@ -446,6 +493,7 @@ function FolderGroup({
   onColor: (color: string | null) => void;
   onDelete: () => void;
   onDropInstance: (id: string) => void;
+  dropIndex?: number;
   children: React.ReactNode;
 }) {
   const tr = useT();
@@ -663,8 +711,14 @@ function FolderGroup({
           }`}
         >
           {}
-          {!(showDrop && count === 0) && children}
-          {showDrop && <DropPlaceholder color={color} compact={compact} />}
+          {showDrop && count === 0
+            ? <DropPlaceholder color={color} compact={compact} />
+            : withDropPlaceholder(
+                children,
+                showDrop,
+                dropIndex,
+                <DropPlaceholder key="__drop" color={color} compact={compact} />,
+              )}
         </div>
       </Collapse>
     </section>
