@@ -387,6 +387,7 @@ function Section({
     ? {
         onDragOver: (e: React.DragEvent) => {
           e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
           setOver(true);
         },
         onDragLeave: (e: React.DragEvent) => {
@@ -474,6 +475,7 @@ function FolderGroup({
       }}
       onDragOver={(e) => {
         e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
         setOver(true);
       }}
       onDragLeave={(e) => {
