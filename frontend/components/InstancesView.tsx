@@ -27,7 +27,7 @@ import { Collapse, placeMenu, useMenuDismiss, Toggle } from "./ui";
 type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import { CustomColorChip } from "@/components/ColorPicker";
-import { iconSrc } from "@/lib/instanceIcons";
+import { iconSrc, brandingSrc } from "@/lib/instanceIcons";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
 
@@ -1065,7 +1065,7 @@ function InstanceCard({
       )}
       <div className="relative flex h-24 items-center justify-center overflow-hidden">
         {instance.banner ? (
-          <img src={instance.banner} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={brandingSrc(instance.banner) ?? undefined} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="schem-bg absolute inset-0" />
         )}

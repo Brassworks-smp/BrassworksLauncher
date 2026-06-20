@@ -381,6 +381,7 @@ pub fn run() {
             commands::get_instances,
             commands::get_instance,
             commands::update_instance,
+            commands::import_instance_branding,
             commands::get_settings,
             commands::save_settings,
             commands::default_settings,

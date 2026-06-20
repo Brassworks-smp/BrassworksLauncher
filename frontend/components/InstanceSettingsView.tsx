@@ -103,6 +103,25 @@ const JVM_PRESETS: { id: string; tkey: string; args: string[] }[] = [
   },
 ];
 
+function BrandingFileButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-edge px-2.5 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+    >
+      <FolderOpen size={13} /> {label}
+    </button>
+  );
+}
+
 function presetIdForArgs(args: string[]): string {
   const norm = (a: string[]) => [...a].sort().join(" ");
   const target = norm(args);
@@ -143,6 +162,17 @@ export function InstanceSettingsView({
   const resetInstance = (p: Partial<Instance>) => {
     patch(p);
     setResetNonce((n) => n + 1);
+  };
+
+  const pickBranding = async (kind: "icon" | "banner" | "logo") => {
+    try {
+      const src = await api.pickBrandingImage();
+      if (!src) return;
+      const dest = await api.importInstanceBranding(instance.id, kind, src);
+      patch({ [kind]: dest } as Partial<Instance>);
+    } catch (e) {
+      toast(String(e), "error");
+    }
   };
 
   const defaultIcons = useMemo(
@@ -511,39 +541,57 @@ export function InstanceSettingsView({
                 </div>
               </Field>
               <Field label={t("instanceSettings.branding.iconUrl")} hint={t("instanceSettings.branding.iconUrlHint")}>
-                <input
-                  key={`icon-${instance.icon ?? "none"}-${resetNonce}`}
-                  defaultValue={
-                    isBuiltinIcon(instance.icon) ? "" : (instance.icon ?? "")
-                  }
-                  onBlur={(e) => patch({ icon: e.target.value.trim() || null })}
-                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
-                  className={`${inputCls} font-mono text-xs`}
-                  spellCheck={false}
-                />
+                <div className="flex gap-2">
+                  <input
+                    key={`icon-${instance.icon ?? "none"}-${resetNonce}`}
+                    defaultValue={
+                      isBuiltinIcon(instance.icon) ? "" : (instance.icon ?? "")
+                    }
+                    onBlur={(e) => patch({ icon: e.target.value.trim() || null })}
+                    placeholder={t("instanceSettings.branding.urlPlaceholder")}
+                    className={`${inputCls} flex-1 font-mono text-xs`}
+                    spellCheck={false}
+                  />
+                  <BrandingFileButton
+                    label={t("instanceSettings.branding.chooseFile")}
+                    onClick={() => pickBranding("icon")}
+                  />
+                </div>
               </Field>
               <Field label={t("instanceSettings.branding.bannerUrl")} hint={t("instanceSettings.branding.bannerUrlHint")}>
-                <input
-                  key={`banner-${resetNonce}`}
-                  defaultValue={instance.banner ?? ""}
-                  onBlur={(e) => patch({ banner: e.target.value.trim() || null })}
-                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
-                  className={`${inputCls} font-mono text-xs`}
-                  spellCheck={false}
-                />
+                <div className="flex gap-2">
+                  <input
+                    key={`banner-${instance.banner ?? "none"}-${resetNonce}`}
+                    defaultValue={instance.banner ?? ""}
+                    onBlur={(e) => patch({ banner: e.target.value.trim() || null })}
+                    placeholder={t("instanceSettings.branding.urlPlaceholder")}
+                    className={`${inputCls} flex-1 font-mono text-xs`}
+                    spellCheck={false}
+                  />
+                  <BrandingFileButton
+                    label={t("instanceSettings.branding.chooseFile")}
+                    onClick={() => pickBranding("banner")}
+                  />
+                </div>
               </Field>
               <Field
                 label={t("instanceSettings.branding.logoUrl")}
                 hint={t("instanceSettings.branding.logoUrlHint")}
               >
-                <input
-                  key={`logo-${resetNonce}`}
-                  defaultValue={instance.logo ?? ""}
-                  onBlur={(e) => patch({ logo: e.target.value.trim() || null })}
-                  placeholder={t("instanceSettings.branding.urlPlaceholder")}
-                  className={`${inputCls} font-mono text-xs`}
-                  spellCheck={false}
-                />
+                <div className="flex gap-2">
+                  <input
+                    key={`logo-${instance.logo ?? "none"}-${resetNonce}`}
+                    defaultValue={instance.logo ?? ""}
+                    onBlur={(e) => patch({ logo: e.target.value.trim() || null })}
+                    placeholder={t("instanceSettings.branding.urlPlaceholder")}
+                    className={`${inputCls} flex-1 font-mono text-xs`}
+                    spellCheck={false}
+                  />
+                  <BrandingFileButton
+                    label={t("instanceSettings.branding.chooseFile")}
+                    onClick={() => pickBranding("logo")}
+                  />
+                </div>
               </Field>
             </Card>
           )}

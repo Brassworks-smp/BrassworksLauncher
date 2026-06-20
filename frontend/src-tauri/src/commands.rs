@@ -32,6 +32,20 @@ pub(crate) fn update_instance(state: State<AppState>, instance: Instance) -> Cmd
     state.launcher.instances().update(&instance).map_err(err)
 }
 
+#[tauri::command]
+pub(crate) fn import_instance_branding(
+    state: State<AppState>,
+    instance_id: String,
+    kind: String,
+    src_path: String,
+) -> CmdResult<String> {
+    state
+        .launcher
+        .instances()
+        .import_branding(&instance_id, &kind, std::path::Path::new(&src_path))
+        .map_err(err)
+}
+
 
 #[tauri::command]
 pub(crate) fn get_settings(state: State<AppState>) -> CmdResult<LauncherSettings> {

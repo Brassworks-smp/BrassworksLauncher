@@ -519,6 +519,27 @@ export const pickModpackFile = async (): Promise<{
   return { path: picked, source };
 };
 
+export const pickBrandingImage = async (): Promise<string | null> => {
+  const picked = await openFileDialog({
+    multiple: false,
+    directory: false,
+    filters: [
+      {
+        name: "Image",
+        extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
+      },
+    ],
+  });
+  return typeof picked === "string" ? picked : null;
+};
+
+export const importInstanceBranding = (
+  instanceId: string,
+  kind: "icon" | "banner" | "logo",
+  srcPath: string,
+): Promise<string> =>
+  invoke("import_instance_branding", { instanceId, kind, srcPath });
+
 export const openInstanceDir = (instanceId: string): Promise<void> =>
   invoke("open_instance_dir", { instanceId });
 export const revealPath = (path: string): Promise<void> =>

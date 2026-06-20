@@ -1,3 +1,5 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+
 const GLYPHS: { id: string; glyph: string }[] = [
   {
     id: "box",
@@ -109,6 +111,16 @@ export const isBuiltinIcon = (icon: string | null | undefined): boolean =>
   !!icon && icon.startsWith(BUILTIN_PREFIX);
 
 
+export function brandingSrc(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^(https?|data|blob):/i.test(value)) return value;
+  try {
+    return convertFileSrc(value);
+  } catch {
+    return value;
+  }
+}
+
 export function iconSrc(
   icon: string | null | undefined,
   accent?: string,
@@ -120,5 +132,5 @@ export function iconSrc(
     const p = currentPalette();
     return uriFor(glyph, { accent: accent || p.accent, bg: p.bg });
   }
-  return icon;
+  return brandingSrc(icon);
 }

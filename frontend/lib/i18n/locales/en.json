@@ -436,6 +436,7 @@
       "defaultIconsHint": "Quick-pick a built-in instance icon.",
       "iconUrl": "Icon URL",
       "iconUrlHint": "Square logo shown on the card and Play page.",
+      "chooseFile": "Choose file",
       "urlPlaceholder": "https://… or /local.png",
       "bannerUrl": "Banner URL",
       "bannerUrlHint": "Wide image shown behind the Play hero.",

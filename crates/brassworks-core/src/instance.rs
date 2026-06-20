@@ -362,6 +362,45 @@ impl InstanceManager {
         instance.save(&self.paths)
     }
 
+    pub fn import_branding(&self, id: &str, kind: &str, src: &std::path::Path) -> Result<String> {
+        if !self.paths.instance_config(id).exists() {
+            return Err(CoreError::InstanceNotFound(id.to_string()));
+        }
+        if !matches!(kind, "icon" | "banner" | "logo") {
+            return Err(CoreError::Modpack(format!("unknown branding kind '{kind}'")));
+        }
+        let ext = src
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .filter(|e| {
+                matches!(
+                    e.as_str(),
+                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg"
+                )
+            })
+            .unwrap_or_else(|| "png".to_string());
+        let dir = self.paths.instance_dir(id).join("branding");
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        if let Ok(read) = std::fs::read_dir(&dir) {
+            for entry in read.flatten() {
+                let p = entry.path();
+                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                    if name.starts_with(&format!("{kind}-")) || name.starts_with(&format!("{kind}.")) {
+                        let _ = std::fs::remove_file(&p);
+                    }
+                }
+            }
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let dest = dir.join(format!("{kind}-{stamp}.{ext}"));
+        std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().to_string())
+    }
+
     pub fn delete(&self, id: &str) -> Result<()> {
         let instance = self.get(id)?;
         if instance.featured {
