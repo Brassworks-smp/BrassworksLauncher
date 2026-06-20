@@ -868,6 +868,8 @@ function ModRow({
             <img
               src={mod.icon_url}
               alt={title}
+              loading="eager"
+              decoding="async"
               className="h-full w-full object-cover"
               onError={() => setIconFailed(true)}
             />

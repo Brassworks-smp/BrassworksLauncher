@@ -705,11 +705,12 @@ a:focus-visible,
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 
-/* Off-screen rows in long lists are skipped by the browser (cheap to scroll a
-   huge list). Progressive enhancement — a no-op where unsupported. */
+/* Rows in long lists isolate their own layout so toggling/expanding one doesn't
+   reflow the rest. We intentionally do NOT use content-visibility here: skipping
+   off-screen rows defers their icon fetch and paint until they scroll in, which
+   makes fast scrolling pop in late. Rendering them up front keeps it seamless. */
 .cv-auto {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 64px;
+  contain: layout;
 }
 
 /* Soft pulsing halo for "live"/running status dots. */
