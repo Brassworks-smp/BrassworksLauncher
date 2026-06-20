@@ -11,6 +11,8 @@
 * **Smoother content scrolling** - mod icons and details now load ahead of time, so scrolling through a big content list stays seamless instead of popping in late.
 * **Instant screenshot starring** - starring or unstarring a screenshot reorders the grid right away instead of waiting for a refresh.
 * **Polished toggles** - the screenshot "This instance / All" switch and the instance grid/compact switch now use the same animated segmented control as the rest of the app.
+* **Accurate folder drop preview** - when you drag an instance onto a folder, the "drop here" placeholder now appears exactly where the instance will land once it's sorted, instead of always at the end.
+* **Slimmer title bar** - the window title bar is a little shorter, giving the rest of the app more room.
 
 ### **Fixes:**
 * **Command palette search** - typing `/` after a search now switches cleanly to command mode and shows every action, instead of keeping the previous results around.
