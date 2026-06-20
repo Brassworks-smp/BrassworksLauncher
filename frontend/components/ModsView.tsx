@@ -461,7 +461,7 @@ export function ModsView({
           </button>
           <button
             onClick={() => setAdding(true)}
-            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 shadow-[0_3px_0_var(--color-brass-700)] transition hover:bg-brass-400 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-700)]"
+            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
           >
             <Plus size={16} /> {t("mods.addContent")}
           </button>

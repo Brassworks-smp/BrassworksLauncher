@@ -624,7 +624,7 @@ function MainButton({
       <button
         disabled={!canPlay}
         onClick={onUpdate}
-        className="group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-linear-to-b from-amber-400 to-amber-500 text-xl text-ink-950 shadow-[0_5px_0_#b45309] transition-all hover:from-amber-300 active:translate-y-[3px] active:shadow-[0_2px_0_#b45309] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+        className="group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-amber-500 text-xl text-ink-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Download size={22} />
         {t("play.update")}
@@ -636,7 +636,7 @@ function MainButton({
     <button
       disabled={!canPlay}
       onClick={onPlay}
-      className="brass-btn group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-brass-500 text-xl text-ink-950 shadow-[0_5px_0_var(--color-brass-700)] transition-all hover:bg-brass-400 active:translate-y-[3px] active:shadow-[0_2px_0_var(--color-brass-700)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+      className="brass-btn group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-brass-500 text-xl text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {notInstalled ? (
         <>
