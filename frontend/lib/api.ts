@@ -8,11 +8,12 @@ import type {
   AccountStatus,
   AccountStore,
   AuthEvent,
-  BlockedMod,
   ContentVersion,
   FlavorGroup,
   ManualMod,
   OptionalComponent,
+  Preflight,
+  PreflightProgress,
   ExitInfo,
   InstallResult,
   InstalledMod,
@@ -490,33 +491,22 @@ export const installModpackFile = (
   invoke("install_modpack_file", { filePath, source, name, optional, manualMods });
 
 
-export const inspectModpack = (
+export const preflightModpack = (
   source: string,
   projectId: string,
   versionId: string,
-): Promise<OptionalComponent[]> =>
-  invoke("inspect_modpack", { source, projectId, versionId });
+): Promise<Preflight> =>
+  invoke("preflight_modpack", { source, projectId, versionId });
 
-export const inspectModpackFile = (
+export const preflightModpackFile = (
   filePath: string,
   source: string,
-): Promise<OptionalComponent[]> =>
-  invoke("inspect_modpack_file", { filePath, source });
+): Promise<Preflight> => invoke("preflight_modpack_file", { filePath, source });
 
-export const inspectBlockedModpack = (
-  source: string,
-  projectId: string,
-  versionId: string,
-  optional: string[] = [],
-): Promise<BlockedMod[]> =>
-  invoke("inspect_blocked_modpack", { source, projectId, versionId, optional });
-
-export const inspectBlockedModpackFile = (
-  filePath: string,
-  source: string,
-  optional: string[] = [],
-): Promise<BlockedMod[]> =>
-  invoke("inspect_blocked_modpack_file", { filePath, source, optional });
+export const onPreflightProgress = (
+  cb: (p: PreflightProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<PreflightProgress>("pack://preflight", (e) => cb(e.payload));
 
 export const scanManualMods = (
   folders: string[],

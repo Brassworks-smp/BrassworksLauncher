@@ -19,6 +19,7 @@ import type {
   Instance,
   ManualMod,
   OptionalComponent,
+  PreflightProgress,
   FeaturedPack,
 } from "@/lib/types";
 import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
@@ -26,10 +27,9 @@ import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
 import { OptionalModsPicker } from "@/components/OptionalModsPicker";
 import { FlavorPicker } from "@/components/FlavorPicker";
-import { BlockedModsDialog } from "@/components/BlockedModsDialog";
+import { BlockedModsPicker } from "@/components/BlockedModsPicker";
 import { SegmentedTabs, Dropdown, useClosable } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { toastProgress, dismissToast } from "@/lib/toast";
 
 
 type PendingInstall =
@@ -52,7 +52,13 @@ type PendingInstall =
 
 type PickerData =
   | { kind: "optional"; components: OptionalComponent[] }
-  | { kind: "flavors"; groups: FlavorGroup[] };
+  | { kind: "flavors"; groups: FlavorGroup[] }
+  | {
+      kind: "blocked";
+      mods: BlockedMod[];
+      folders: string[];
+      proceed: (manualMods: ManualMod[]) => void;
+    };
 
 type Tab = "custom" | "modrinth" | "curseforge" | "packwiz" | "import";
 
@@ -183,19 +189,31 @@ export function AddInstanceModal({
 
   const [picker, setPicker] = useState<PickerData | null>(null);
 
-  const [blocked, setBlocked] = useState<{
-    mods: BlockedMod[];
-    folders: string[];
-    proceed: (manualMods: ManualMod[]) => void;
-  } | null>(null);
+  const [prefStage, setPrefStage] = useState<PreflightProgress | null>(null);
 
   const inspectGen = useRef(0);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    api.onPreflightProgress((p) => setPrefStage(p)).then((u) => (unlisten = u));
+    return () => unlisten?.();
+  }, []);
 
   const saveWatchFolders = (folders: string[]) => {
     api
       .getSettings()
       .then((s) => api.saveSettings({ ...s, manual_download_folders: folders }))
       .catch(() => {});
+  };
+
+  const resolveWatchFolders = async (): Promise<string[]> => {
+    const settings = await api.getSettings().catch(() => null);
+    let folders = settings?.manual_download_folders ?? [];
+    if (folders.length === 0) {
+      const dl = await api.defaultDownloadDir().catch(() => null);
+      if (dl) folders = [dl];
+    }
+    return folders;
   };
 
   
@@ -206,6 +224,8 @@ export function AddInstanceModal({
   };
 
   
+  const prefBlockedRef = useRef<BlockedMod[]>([]);
+
   const launchModpack = (
     intent: Extract<PendingInstall, { kind: "modpack" | "file" }>,
     ids: string[],
@@ -224,41 +244,26 @@ export function AddInstanceModal({
       onInstallModpackFile(intent.source, intent.path, intent.name, ids, manualMods);
     }
     setPending(null);
-    setBlocked(null);
+    setPicker(null);
   };
 
   const finalize = async (intent: PendingInstall, ids: string[]) => {
     if (intent.kind === "modpack" || intent.kind === "file") {
-      if (intent.source === "curseforge") {
-        toastProgress("blocked-check", t("blockedMods.checking"), null);
-        const blockedMods: BlockedMod[] =
-          intent.kind === "modpack"
-            ? await api
-                .inspectBlockedModpack(intent.source, intent.projectId, intent.versionId, ids)
-                .catch(() => [])
-            : await api
-                .inspectBlockedModpackFile(intent.path, intent.source, ids)
-                .catch(() => []);
-        dismissToast("blocked-check");
-        if (blockedMods.length > 0) {
-          const settings = await api.getSettings().catch(() => null);
-          let folders = settings?.manual_download_folders ?? [];
-          if (folders.length === 0) {
-            const dl = await api.defaultDownloadDir().catch(() => null);
-            if (dl) folders = [dl];
-          }
-          setPending(null);
-          setBlocked({
-            mods: blockedMods,
-            folders,
-            proceed: (manual) => launchModpack(intent, ids, manual),
-          });
-          return;
-        }
+      const relevant = prefBlockedRef.current.filter(
+        (b) => b.required || ids.includes(b.id),
+      );
+      if (relevant.length > 0) {
+        const folders = await resolveWatchFolders();
+        setPicker({
+          kind: "blocked",
+          mods: relevant,
+          folders,
+          proceed: (manual) => launchModpack(intent, ids, manual),
+        });
+        return;
       }
       launchModpack(intent, ids, []);
     } else {
-      
       setBusy(true);
       try {
         const inst = intent.unsup
@@ -274,40 +279,43 @@ export function AddInstanceModal({
     }
   };
 
-  
   const beginInstall = async (intent: PendingInstall) => {
     const gen = ++inspectGen.current;
     setPending(intent);
     setPicker(null);
-    toastProgress("inspect-optional", t("addInstance.checkingOptional"), null);
-    const doneInspect = () => {
-      if (gen === inspectGen.current) dismissToast("inspect-optional");
-    };
+    setPrefStage(null);
+    prefBlockedRef.current = [];
     try {
-      if (intent.kind === "packwiz" && intent.unsup) {
-        const groups = await api.inspectPackwizFlavors(intent.url);
+      if (intent.kind === "packwiz") {
+        if (intent.unsup) {
+          const groups = await api.inspectPackwizFlavors(intent.url);
+          if (gen !== inspectGen.current) return;
+          if (groups.length === 0) await finalize(intent, []);
+          else setPicker({ kind: "flavors", groups });
+          return;
+        }
+        const comps = await api.inspectPackwiz(intent.url);
         if (gen !== inspectGen.current) return;
-        doneInspect();
-        if (groups.length === 0) await finalize(intent, []);
-        else setPicker({ kind: "flavors", groups });
+        if (comps.length === 0) await finalize(intent, []);
+        else setPicker({ kind: "optional", components: comps });
         return;
       }
-      const comps =
+
+      const pre =
         intent.kind === "modpack"
-          ? await api.inspectModpack(intent.source, intent.projectId, intent.versionId)
-          : intent.kind === "file"
-            ? await api.inspectModpackFile(intent.path, intent.source)
-            : await api.inspectPackwiz(intent.url);
+          ? await api.preflightModpack(intent.source, intent.projectId, intent.versionId)
+          : await api.preflightModpackFile(intent.path, intent.source);
       if (gen !== inspectGen.current) return;
-      doneInspect();
-      if (comps.length === 0) {
+      setPrefStage(null);
+      prefBlockedRef.current = pre.blocked;
+      if (pre.optional.length === 0) {
         await finalize(intent, []);
       } else {
-        setPicker({ kind: "optional", components: comps });
+        setPicker({ kind: "optional", components: pre.optional });
       }
     } catch {
       if (gen !== inspectGen.current) return;
-      doneInspect();
+      setPrefStage(null);
       await finalize(intent, []);
     }
   };
@@ -440,7 +448,6 @@ export function AddInstanceModal({
   };
 
   return (
-    <>
     <div
       className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
         closing ? "modal-overlay-out" : ""
@@ -489,10 +496,7 @@ export function AddInstanceModal({
         <div className="flex min-h-0 flex-1 flex-col p-5">
           {pending ? (
             picker === null ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-ink-600">
-                <Loader2 size={22} className="animate-spin text-brass-400" />
-                <span className="text-sm">{t("addInstance.checkingOptional")}</span>
-              </div>
+              <PreflightLoading stage={prefStage} />
             ) : picker.kind === "flavors" ? (
               <FlavorPicker
                 title={pending.name || t("addInstance.modpackFallback")}
@@ -500,6 +504,16 @@ export function AddInstanceModal({
                 busy={installing || busy}
                 onBack={closePicker}
                 onConfirm={(ids) => finalize(pending, ids)}
+              />
+            ) : picker.kind === "blocked" ? (
+              <BlockedModsPicker
+                title={pending.name || t("addInstance.modpackFallback")}
+                blocked={picker.mods}
+                initialFolders={picker.folders}
+                busy={installing || busy}
+                onBack={closePicker}
+                onConfirm={picker.proceed}
+                onFoldersChange={saveWatchFolders}
               />
             ) : (
               <OptionalModsPicker
@@ -856,15 +870,43 @@ export function AddInstanceModal({
         </div>
       </div>
     </div>
-    {blocked && (
-      <BlockedModsDialog
-        blocked={blocked.mods}
-        initialFolders={blocked.folders}
-        onCancel={() => setBlocked(null)}
-        onContinue={blocked.proceed}
-        onFoldersChange={saveWatchFolders}
-      />
-    )}
-    </>
+  );
+}
+
+function PreflightLoading({ stage }: { stage: PreflightProgress | null }) {
+  const t = useT();
+  const isDownload = stage?.stage === "download";
+  const pct =
+    isDownload && stage && stage.total > 0
+      ? Math.round((stage.current / stage.total) * 100)
+      : null;
+  const label =
+    stage?.stage === "download"
+      ? t("preflight.downloading")
+      : stage?.stage === "optional"
+        ? t("preflight.checkingOptional")
+        : stage?.stage === "blocked"
+          ? t("preflight.checkingBlocked")
+          : t("preflight.preparing");
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-10 text-ink-600">
+      <Loader2 size={22} className="animate-spin text-brass-400" />
+      <span className="text-sm">{label}</span>
+      {isDownload && (
+        <div className="w-full max-w-xs">
+          <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
+            <div
+              className="progress-fill h-full rounded-full transition-[width] duration-200"
+              style={{ width: pct !== null ? `${pct}%` : "40%" }}
+            />
+          </div>
+          {pct !== null && (
+            <div className="mt-1 text-center text-xs tabular-nums text-ink-600">
+              {pct}%
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

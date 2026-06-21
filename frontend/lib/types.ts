@@ -144,11 +144,24 @@ export interface LauncherSettings {
 }
 
 export interface BlockedMod {
+  id: string;
   project_id: string;
   file_id: string;
   filename: string;
   name: string;
   url: string;
+  required: boolean;
+}
+
+export interface Preflight {
+  optional: OptionalComponent[];
+  blocked: BlockedMod[];
+}
+
+export interface PreflightProgress {
+  stage: string;
+  current: number;
+  total: number;
 }
 
 export type ManualMod = [string, string];

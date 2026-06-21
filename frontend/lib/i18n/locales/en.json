@@ -648,6 +648,7 @@
   },
   "blockedMods": {
     "title": "Manual downloads required",
+    "subtitle": "{title} · {count} file(s) to download by hand",
     "explain": "{count} mod(s) in this pack have third-party downloads disabled by their authors, so the launcher can't fetch them automatically. Download each one from CurseForge into a watched folder below, and the install will continue once they all arrive.",
     "checking": "Checking for blocked downloads…",
     "watchFolders": "Watched folders",
@@ -661,6 +662,12 @@
     "allReady": "All files ready — you can continue.",
     "waiting": "Waiting for the remaining downloads…",
     "continue": "Continue install"
+  },
+  "preflight": {
+    "preparing": "Preparing…",
+    "downloading": "Downloading modpack…",
+    "checkingOptional": "Checking for optional content…",
+    "checkingBlocked": "Checking for blocked mods…"
   },
   "addInstance": {
     "newInstance": "New instance",
