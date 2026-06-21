@@ -95,21 +95,13 @@ pub fn inspect_bytes(bytes: Vec<u8>, cf: &Curseforge) -> Result<Vec<OptionalComp
     Ok(out)
 }
 
-pub fn blocked_bytes(
-    bytes: Vec<u8>,
-    optional: &OptionalSet,
-    cf: &Curseforge,
-) -> Result<Vec<BlockedMod>> {
+pub fn blocked_bytes(bytes: Vec<u8>, cf: &Curseforge) -> Result<Vec<BlockedMod>> {
     let mut archive = open_zip(bytes)?;
     let cf_manifest: CfManifest =
         serde_json::from_str(&read_entry_string(&mut archive, "manifest.json")?)
             .map_err(|e| CoreError::Modpack(format!("parse manifest.json: {e}")))?;
 
-    let wanted: Vec<&CfFile> = cf_manifest
-        .files
-        .iter()
-        .filter(|f| f.required || optional.contains(&f.id()))
-        .collect();
+    let wanted: Vec<&CfFile> = cf_manifest.files.iter().collect();
 
     let file_ids: Vec<i64> = wanted.iter().map(|f| f.file_id).collect();
     let resolved = match cf.resolve_versions_bulk(&file_ids) {
@@ -130,7 +122,7 @@ pub fn blocked_bytes(
     for f in wanted {
         if let Some(rv) = by_id.get(&f.file_id.to_string()) {
             if rv.manual_only {
-                out.push(blocked_from(cf, f.project_id, f.file_id, rv));
+                out.push(blocked_from(cf, f.project_id, f.file_id, f.required, rv));
             }
         }
     }
@@ -141,6 +133,7 @@ fn blocked_from(
     cf: &Curseforge,
     project_id: i64,
     file_id: i64,
+    required: bool,
     rv: &packwiz::ResolvedVersion,
 ) -> BlockedMod {
     let project = cf.project(&project_id.to_string());
@@ -157,11 +150,13 @@ fn blocked_from(
             format!("https://www.curseforge.com/projects/{project_id}/files/{file_id}")
         });
     BlockedMod {
+        id: format!("{project_id}:{file_id}"),
         project_id: project_id.to_string(),
         file_id: file_id.to_string(),
         filename: rv.filename.clone(),
         name,
         url,
+        required,
     }
 }
 

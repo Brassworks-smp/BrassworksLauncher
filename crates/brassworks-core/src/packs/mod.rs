@@ -26,11 +26,19 @@ pub struct PackResult {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BlockedMod {
+    pub id: String,
     pub project_id: String,
     pub file_id: String,
     pub filename: String,
     pub name: String,
     pub url: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Preflight {
+    pub optional: Vec<OptionalComponent>,
+    pub blocked: Vec<BlockedMod>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,10 +175,9 @@ pub fn install_file(
     }
 }
 
-pub fn blocked_in_file(
+fn blocked_from_bytes(
     source: &str,
-    bytes: Vec<u8>,
-    optional: &OptionalSet,
+    bytes: &[u8],
     cf: Option<&Curseforge>,
 ) -> Result<Vec<BlockedMod>> {
     if source != "curseforge" {
@@ -178,27 +185,58 @@ pub fn blocked_in_file(
     }
     let cf = cf
         .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
-    curseforge::blocked_bytes(bytes, optional, cf)
+    curseforge::blocked_bytes(bytes.to_vec(), cf)
 }
 
-pub fn blocked_in_remote(
+pub fn preflight_file(
+    source: &str,
+    bytes: Vec<u8>,
+    cf: Option<&Curseforge>,
+) -> Result<Preflight> {
+    let optional = inspect_bytes(source, bytes.clone(), cf)?;
+    let blocked = blocked_from_bytes(source, &bytes, cf)?;
+    Ok(Preflight { optional, blocked })
+}
+
+pub fn preflight_remote(
     source: &str,
     project_id: &str,
     version_id: &str,
-    optional: &OptionalSet,
     modrinth: &Modrinth,
     cf: Option<&Curseforge>,
-) -> Result<Vec<BlockedMod>> {
-    if source != "curseforge" {
-        return Ok(Vec::new());
-    }
-    let cf = cf
-        .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
-    let rv = cf
-        .resolve_version(project_id, version_id)?
-        .ok_or_else(|| CoreError::Modpack("Modpack file not found".to_string()))?;
-    let bytes = modrinth.download(&rv.url)?;
-    curseforge::blocked_bytes(bytes, optional, cf)
+    progress: Progress,
+) -> Result<Preflight> {
+    let url = if source == "curseforge" {
+        let cf = cf
+            .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
+        cf.resolve_version(project_id, version_id)?
+            .ok_or_else(|| CoreError::Modpack("Modpack file not found".to_string()))?
+            .url
+    } else {
+        modrinth
+            .resolve_version(version_id)?
+            .ok_or_else(|| CoreError::Modpack("Modpack version not found".to_string()))?
+            .url
+    };
+
+    note(progress, SyncStage::Fetching, "download");
+    let bytes = modrinth.download_progress(&url, &mut |current, total| {
+        progress(SyncProgress {
+            stage: SyncStage::Fetching,
+            current,
+            total,
+            message: "download".to_string(),
+        });
+    })?;
+
+    note(progress, SyncStage::Resolving, "optional");
+    let optional = inspect_bytes(source, bytes.clone(), cf)?;
+
+    note(progress, SyncStage::Resolving, "blocked");
+    let blocked = blocked_from_bytes(source, &bytes, cf)?;
+
+    note(progress, SyncStage::Done, "done");
+    Ok(Preflight { optional, blocked })
 }
 
 pub fn scan_manual_mods(

@@ -592,26 +592,27 @@ impl Launcher {
         Ok(inst)
     }
 
-            pub fn inspect_modpack(
+            pub fn preflight_modpack(
         &self,
         source: &str,
         project_id: &str,
         version_id: &str,
-    ) -> Result<Vec<packs::OptionalComponent>> {
+        progress: &mut dyn FnMut(SyncProgress),
+    ) -> Result<packs::Preflight> {
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
-        packs::inspect_remote(source, project_id, version_id, &modrinth, Some(&cf))
+        packs::preflight_remote(source, project_id, version_id, &modrinth, Some(&cf), progress)
     }
 
-        pub fn inspect_modpack_file(
+        pub fn preflight_modpack_file(
         &self,
         file_path: &str,
         source: &str,
-    ) -> Result<Vec<packs::OptionalComponent>> {
+    ) -> Result<packs::Preflight> {
         let path = std::path::Path::new(file_path);
         let bytes = std::fs::read(path).map_err(|e| CoreError::io(path, e))?;
         let cf = self.cf_client();
-        packs::inspect_bytes(source, bytes, Some(&cf))
+        packs::preflight_file(source, bytes, Some(&cf))
     }
 
         pub fn inspect_packwiz(
@@ -698,32 +699,6 @@ impl Launcher {
                 loaders: v.loaders,
             })
             .collect())
-    }
-
-    pub fn blocked_modpack(
-        &self,
-        source: &str,
-        project_id: &str,
-        version_id: &str,
-        optional: Vec<String>,
-    ) -> Result<Vec<packs::BlockedMod>> {
-        let modrinth = self.modrinth_client();
-        let cf = self.cf_client();
-        let optional = packs::optional_set(&Some(optional));
-        packs::blocked_in_remote(source, project_id, version_id, &optional, &modrinth, Some(&cf))
-    }
-
-    pub fn blocked_modpack_file(
-        &self,
-        file_path: &str,
-        source: &str,
-        optional: Vec<String>,
-    ) -> Result<Vec<packs::BlockedMod>> {
-        let path = std::path::Path::new(file_path);
-        let bytes = std::fs::read(path).map_err(|e| CoreError::io(path, e))?;
-        let cf = self.cf_client();
-        let optional = packs::optional_set(&Some(optional));
-        packs::blocked_in_file(source, bytes, &optional, Some(&cf))
     }
 
     pub fn scan_manual_mods(
