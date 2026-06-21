@@ -49,6 +49,7 @@ pub struct ModpackStatus {
     pub update_available: bool,
     pub complete: bool,
     pub failed: Vec<String>,
+    pub failures: Vec<packwiz::FileFailure>,
     pub neoforge_version: Option<String>,
     pub minecraft_version: Option<String>,
 }
@@ -358,6 +359,7 @@ impl<'a> Modpack<'a> {
                 update_available: !manifest.complete && !manifest.files.is_empty(),
                 complete: manifest.complete,
                 failed: manifest.failed.clone(),
+                failures: manifest.failures.clone(),
                 neoforge_version: manifest.neoforge_version.clone(),
                 minecraft_version: manifest
                     .minecraft_version
@@ -384,6 +386,7 @@ impl<'a> Modpack<'a> {
             update_available,
             complete: manifest.complete,
             failed: manifest.failed.clone(),
+            failures: manifest.failures.clone(),
             neoforge_version: pack.versions.neoforge.clone(),
             minecraft_version: pack.versions.minecraft.clone(),
         })

@@ -4,14 +4,14 @@ use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::{
-    cleanup_stale, extract_overrides, note, open_zip, prettify_name, read_entry_string,
-    record_content, write_bytes, OptionalComponent, OptionalSet, PackResult, Progress, SyncProgress,
-    SyncStage,
+    already_current, cleanup_stale, extract_overrides, note, open_zip, prettify_name,
+    read_entry_string, record_content, write_bytes, BlockedMod, OptionalComponent, OptionalSet,
+    PackResult, Progress, SyncProgress, SyncStage,
 };
 
 enum CfOutcome {
     Installed { rel: String, hash: String },
-    Failed(String),
+    Failed { id: String, reason: String },
 }
 use crate::error::{CoreError, Result};
 use crate::instance::LoaderKind;
@@ -93,6 +93,76 @@ pub fn inspect_bytes(bytes: Vec<u8>, cf: &Curseforge) -> Result<Vec<OptionalComp
         });
     }
     Ok(out)
+}
+
+pub fn blocked_bytes(
+    bytes: Vec<u8>,
+    optional: &OptionalSet,
+    cf: &Curseforge,
+) -> Result<Vec<BlockedMod>> {
+    let mut archive = open_zip(bytes)?;
+    let cf_manifest: CfManifest =
+        serde_json::from_str(&read_entry_string(&mut archive, "manifest.json")?)
+            .map_err(|e| CoreError::Modpack(format!("parse manifest.json: {e}")))?;
+
+    let wanted: Vec<&CfFile> = cf_manifest
+        .files
+        .iter()
+        .filter(|f| f.required || optional.contains(&f.id()))
+        .collect();
+
+    let file_ids: Vec<i64> = wanted.iter().map(|f| f.file_id).collect();
+    let resolved = match cf.resolve_versions_bulk(&file_ids) {
+        Ok(r) if !r.is_empty() => r,
+        _ => wanted
+            .iter()
+            .filter_map(|f| {
+                cf.resolve_version(&f.project_id.to_string(), &f.file_id.to_string())
+                    .ok()
+                    .flatten()
+            })
+            .collect(),
+    };
+    let by_id: std::collections::HashMap<String, &packwiz::ResolvedVersion> =
+        resolved.iter().map(|rv| (rv.version_id.clone(), rv)).collect();
+
+    let mut out = Vec::new();
+    for f in wanted {
+        if let Some(rv) = by_id.get(&f.file_id.to_string()) {
+            if rv.manual_only {
+                out.push(blocked_from(cf, f.project_id, f.file_id, rv));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn blocked_from(
+    cf: &Curseforge,
+    project_id: i64,
+    file_id: i64,
+    rv: &packwiz::ResolvedVersion,
+) -> BlockedMod {
+    let project = cf.project(&project_id.to_string());
+    let name = project
+        .as_ref()
+        .map(|p| p.title.clone())
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| prettify_name(&rv.filename));
+    let url = project
+        .as_ref()
+        .and_then(|p| p.url.clone())
+        .map(|w| format!("{}/download/{file_id}", w.trim_end_matches('/')))
+        .unwrap_or_else(|| {
+            format!("https://www.curseforge.com/projects/{project_id}/files/{file_id}")
+        });
+    BlockedMod {
+        project_id: project_id.to_string(),
+        file_id: file_id.to_string(),
+        filename: rv.filename.clone(),
+        name,
+        url,
+    }
 }
 
 fn parse_loader(loaders: &[CfLoader]) -> (LoaderKind, Option<String>) {
@@ -182,23 +252,58 @@ pub fn install_bytes(
         &todo,
         concurrency,
         |f| {
+            let id = format!("curseforge:{}:{}", f.project_id, f.file_id);
             if cancelled.load(Ordering::Relaxed) {
-                return CfOutcome::Failed(format!("curseforge:{}:{}", f.project_id, f.file_id));
+                return CfOutcome::Failed {
+                    id,
+                    reason: "cancelled".to_string(),
+                };
             }
             let pid = f.project_id.to_string();
             let fid = f.file_id.to_string();
             let resolved = match cf.resolve_version(&pid, &fid) {
                 Ok(Some(rv)) => rv,
-                _ => return CfOutcome::Failed(format!("curseforge:{pid}:{fid}")),
+                Ok(None) => {
+                    return CfOutcome::Failed {
+                        id,
+                        reason: "no download available (author disabled third-party downloads)"
+                            .to_string(),
+                    }
+                }
+                Err(e) => return CfOutcome::Failed { id, reason: e.to_string() },
             };
             let rel = format!("mods/{}", resolved.filename);
+            let prev_hash = old.files.get(&rel).map(|r| r.hash.clone());
+            if already_current(&game_dir, &rel, prev_hash.as_deref()) {
+                return CfOutcome::Installed {
+                    rel,
+                    hash: prev_hash.unwrap_or_default(),
+                };
+            }
+            if resolved.manual_only {
+                let dest = game_dir.join(&rel);
+                return match std::fs::read(&dest) {
+                    Ok(bytes) => CfOutcome::Installed {
+                        rel,
+                        hash: sha512_hex(&bytes),
+                    },
+                    Err(_) => CfOutcome::Failed {
+                        id: rel,
+                        reason: "manual download required (author disabled third-party downloads)"
+                            .to_string(),
+                    },
+                };
+            }
             let data = match modrinth.download(&resolved.url) {
                 Ok(d) => d,
-                Err(_) => return CfOutcome::Failed(rel),
+                Err(e) => return CfOutcome::Failed { id: rel, reason: e.to_string() },
             };
             if let Some(exp) = resolved.sha512.as_deref() {
                 if !sha512_hex(&data).eq_ignore_ascii_case(exp) {
-                    return CfOutcome::Failed(rel);
+                    return CfOutcome::Failed {
+                        id: rel,
+                        reason: "hash mismatch (corrupt download)".to_string(),
+                    };
                 }
             }
             match write_bytes(&game_dir, &rel, &data) {
@@ -206,7 +311,10 @@ pub fn install_bytes(
                     rel,
                     hash: sha512_hex(&data),
                 },
-                Err(_) => CfOutcome::Failed(rel),
+                Err(e) => CfOutcome::Failed {
+                    id: rel,
+                    reason: format!("could not write to disk: {e}"),
+                },
             }
         },
         |done, total, _| {
@@ -226,6 +334,7 @@ pub fn install_bytes(
     }
 
     let mut failed = Vec::new();
+    let mut failures = Vec::new();
     for (f, outcome) in todo.iter().zip(outcomes) {
         match outcome {
             CfOutcome::Installed { rel, hash } => {
@@ -244,7 +353,10 @@ pub fn install_bytes(
                     Some((f.project_id, f.file_id)),
                 );
             }
-            CfOutcome::Failed(id) => failed.push(id),
+            CfOutcome::Failed { id, reason } => {
+                failed.push(id.clone());
+                failures.push(packwiz::FileFailure { path: id, reason });
+            }
         }
     }
 
@@ -256,6 +368,7 @@ pub fn install_bytes(
     cleanup_stale(&game_dir, &old, &manifest);
 
     manifest.failed = failed;
+    manifest.failures = failures;
     manifest.optional = selected_optional;
     manifest.complete = manifest.failed.is_empty();
     manifest.save(&manifest_path)?;

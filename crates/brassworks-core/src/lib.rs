@@ -700,6 +700,43 @@ impl Launcher {
             .collect())
     }
 
+    pub fn blocked_modpack(
+        &self,
+        source: &str,
+        project_id: &str,
+        version_id: &str,
+        optional: Vec<String>,
+    ) -> Result<Vec<packs::BlockedMod>> {
+        let modrinth = self.modrinth_client();
+        let cf = self.cf_client();
+        let optional = packs::optional_set(&Some(optional));
+        packs::blocked_in_remote(source, project_id, version_id, &optional, &modrinth, Some(&cf))
+    }
+
+    pub fn blocked_modpack_file(
+        &self,
+        file_path: &str,
+        source: &str,
+        optional: Vec<String>,
+    ) -> Result<Vec<packs::BlockedMod>> {
+        let path = std::path::Path::new(file_path);
+        let bytes = std::fs::read(path).map_err(|e| CoreError::io(path, e))?;
+        let cf = self.cf_client();
+        let optional = packs::optional_set(&Some(optional));
+        packs::blocked_in_file(source, bytes, &optional, Some(&cf))
+    }
+
+    pub fn scan_manual_mods(
+        &self,
+        folders: Vec<String>,
+        filenames: Vec<String>,
+    ) -> Vec<(String, String)> {
+        packs::scan_manual_mods(&folders, &filenames)
+            .into_iter()
+            .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn install_modpack(
         &self,
         source: &str,
@@ -707,6 +744,7 @@ impl Launcher {
         version_id: &str,
         name: &str,
         optional: Vec<String>,
+        manual_mods: Vec<(String, String)>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -735,6 +773,11 @@ impl Launcher {
         instance.optional_mods = Some(optional.clone());
         mgr.create(instance.clone())?;
         on_created(&instance);
+
+        if let Err(e) = packs::place_manual_mods(&self.paths, &id, &manual_mods) {
+            let _ = mgr.delete(&id);
+            return Err(e);
+        }
 
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
@@ -765,12 +808,14 @@ impl Launcher {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn install_modpack_file(
         &self,
         file_path: &str,
         source: &str,
         name: &str,
         optional: Vec<String>,
+        manual_mods: Vec<(String, String)>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -782,15 +827,19 @@ impl Launcher {
             .and_then(|s| s.to_str())
             .unwrap_or("modpack");
         let name = if name.trim().is_empty() { fallback } else { name };
-        self.install_modpack_data(bytes, source, name, optional, cancel, on_created, progress)
+        self.install_modpack_data(
+            bytes, source, name, optional, manual_mods, cancel, on_created, progress,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn install_modpack_data(
         &self,
         bytes: Vec<u8>,
         source: &str,
         name: &str,
         optional: Vec<String>,
+        manual_mods: Vec<(String, String)>,
         cancel: &dyn Fn() -> bool,
         on_created: &mut dyn FnMut(&Instance),
         progress: &mut dyn FnMut(SyncProgress),
@@ -815,6 +864,11 @@ impl Launcher {
         instance.optional_mods = Some(optional.clone());
         mgr.create(instance.clone())?;
         on_created(&instance);
+
+        if let Err(e) = packs::place_manual_mods(&self.paths, &id, &manual_mods) {
+            let _ = mgr.delete(&id);
+            return Err(e);
+        }
 
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();

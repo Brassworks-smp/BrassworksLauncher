@@ -1032,6 +1032,58 @@ pub(crate) async fn inspect_modpack_file(
 }
 
 #[tauri::command]
+pub(crate) async fn inspect_blocked_modpack(
+    state: State<'_, AppState>,
+    source: String,
+    project_id: String,
+    version_id: String,
+    optional: Option<Vec<String>>,
+) -> CmdResult<Vec<brassworks_core::packs::BlockedMod>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .blocked_modpack(&source, &project_id, &version_id, optional.unwrap_or_default())
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_blocked_modpack_file(
+    state: State<'_, AppState>,
+    file_path: String,
+    source: String,
+    optional: Option<Vec<String>>,
+) -> CmdResult<Vec<brassworks_core::packs::BlockedMod>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .blocked_modpack_file(&file_path, &source, optional.unwrap_or_default())
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn scan_manual_mods(
+    state: State<'_, AppState>,
+    folders: Vec<String>,
+    filenames: Vec<String>,
+) -> CmdResult<Vec<(String, String)>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.scan_manual_mods(folders, filenames))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub(crate) fn default_download_dir() -> CmdResult<Option<String>> {
+    Ok(brassworks_core::settings::default_download_dir())
+}
+
+#[tauri::command]
 pub(crate) async fn inspect_packwiz(
     state: State<'_, AppState>,
     url: String,
@@ -1185,6 +1237,7 @@ pub(crate) fn install_modpack(
     version_id: String,
     name: String,
     optional: Option<Vec<String>>,
+    manual_mods: Option<Vec<(String, String)>>,
 ) -> CmdResult<()> {
     let launcher = state.launcher.clone();
     let cancel_flag = state.arm_cancel("__install__");
@@ -1208,6 +1261,7 @@ pub(crate) fn install_modpack(
             &version_id,
             &name,
             optional.unwrap_or_default(),
+            manual_mods.unwrap_or_default(),
             &cancel,
             &mut on_created,
             &mut sink,
@@ -1245,6 +1299,7 @@ pub(crate) fn install_modpack_file(
     source: String,
     name: String,
     optional: Option<Vec<String>>,
+    manual_mods: Option<Vec<(String, String)>>,
 ) -> CmdResult<()> {
     let launcher = state.launcher.clone();
     let cancel_flag = state.arm_cancel("__install__");
@@ -1267,6 +1322,7 @@ pub(crate) fn install_modpack_file(
             &source,
             &name,
             optional.unwrap_or_default(),
+            manual_mods.unwrap_or_default(),
             &cancel,
             &mut on_created,
             &mut sink,

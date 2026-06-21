@@ -63,6 +63,17 @@ pub struct LauncherSettings {
     pub last_version: Option<String>,
 
             pub download_concurrency: usize,
+
+    #[serde(default = "default_download_folders")]
+    pub manual_download_folders: Vec<String>,
+}
+
+pub fn default_download_dir() -> Option<String> {
+    dirs::download_dir().map(|p| p.to_string_lossy().to_string())
+}
+
+fn default_download_folders() -> Vec<String> {
+    default_download_dir().into_iter().collect()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -116,6 +127,7 @@ impl Default for LauncherSettings {
             auto_update: true,
             last_version: None,
             download_concurrency: packwiz::DEFAULT_CONCURRENCY,
+            manual_download_folders: default_download_folders(),
         }
     }
 }

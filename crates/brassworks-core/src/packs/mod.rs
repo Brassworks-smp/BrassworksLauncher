@@ -25,6 +25,15 @@ pub struct PackResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct BlockedMod {
+    pub project_id: String,
+    pub file_id: String,
+    pub filename: String,
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct OptionalComponent {
             pub id: String,
     pub name: String,
@@ -158,10 +167,85 @@ pub fn install_file(
     }
 }
 
+pub fn blocked_in_file(
+    source: &str,
+    bytes: Vec<u8>,
+    optional: &OptionalSet,
+    cf: Option<&Curseforge>,
+) -> Result<Vec<BlockedMod>> {
+    if source != "curseforge" {
+        return Ok(Vec::new());
+    }
+    let cf = cf
+        .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
+    curseforge::blocked_bytes(bytes, optional, cf)
+}
+
+pub fn blocked_in_remote(
+    source: &str,
+    project_id: &str,
+    version_id: &str,
+    optional: &OptionalSet,
+    modrinth: &Modrinth,
+    cf: Option<&Curseforge>,
+) -> Result<Vec<BlockedMod>> {
+    if source != "curseforge" {
+        return Ok(Vec::new());
+    }
+    let cf = cf
+        .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
+    let rv = cf
+        .resolve_version(project_id, version_id)?
+        .ok_or_else(|| CoreError::Modpack("Modpack file not found".to_string()))?;
+    let bytes = modrinth.download(&rv.url)?;
+    curseforge::blocked_bytes(bytes, optional, cf)
+}
+
+pub fn scan_manual_mods(
+    folders: &[String],
+    filenames: &[String],
+) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let wanted: HashMap<String, &String> =
+        filenames.iter().map(|n| (n.to_lowercase(), n)).collect();
+    let mut found: HashMap<String, String> = HashMap::new();
+    for folder in folders {
+        let entries = match std::fs::read_dir(folder) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(orig) = wanted.get(&name.to_lowercase()) {
+                if entry.path().is_file() {
+                    found
+                        .entry((*orig).clone())
+                        .or_insert_with(|| entry.path().to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    found
+}
+
+pub fn place_manual_mods(
+    paths: &Paths,
+    instance_id: &str,
+    mods: &[(String, String)],
+) -> Result<()> {
+    let mods_dir = paths.instance_game_dir(instance_id).join("mods");
+    std::fs::create_dir_all(&mods_dir).map_err(|e| CoreError::io(&mods_dir, e))?;
+    for (filename, src) in mods {
+        let dest = mods_dir.join(filename);
+        std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+    }
+    Ok(())
+}
+
 pub(super) enum FileOutcome {
         AlreadyCurrent,
         Installed(String),
-        Failed,
+        Failed(String),
 }
 
 pub type OptionalSet = HashSet<String>;

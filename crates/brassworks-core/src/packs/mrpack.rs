@@ -184,27 +184,27 @@ pub fn install_bytes(
         concurrency,
         |f| {
             if cancelled.load(Ordering::Relaxed) {
-                return FileOutcome::Failed;
+                return FileOutcome::Failed("cancelled".to_string());
             }
             let expected = f.hashes.sha512.as_deref();
             if already_current(&game_dir, &f.path, expected) {
                 return FileOutcome::AlreadyCurrent;
             }
             let Some(url) = f.downloads.first() else {
-                return FileOutcome::Failed;
+                return FileOutcome::Failed("no download URL in modpack index".to_string());
             };
             let data = match modrinth.download(url) {
                 Ok(d) => d,
-                Err(_) => return FileOutcome::Failed,
+                Err(e) => return FileOutcome::Failed(e.to_string()),
             };
             if let Some(exp) = expected {
                 if !sha512_hex(&data).eq_ignore_ascii_case(exp) {
-                    return FileOutcome::Failed;
+                    return FileOutcome::Failed("hash mismatch (corrupt download)".to_string());
                 }
             }
             match write_bytes(&game_dir, &f.path, &data) {
                 Ok(()) => FileOutcome::Installed(sha512_hex(&data)),
-                Err(_) => FileOutcome::Failed,
+                Err(e) => FileOutcome::Failed(format!("could not write to disk: {e}")),
             }
         },
         |done, total, j| {
@@ -224,6 +224,7 @@ pub fn install_bytes(
     }
 
         let mut failed = Vec::new();
+    let mut failures = Vec::new();
     for (f, outcome) in todo.iter().zip(&outcomes) {
         let expected = f.hashes.sha512.as_deref();
         match outcome {
@@ -249,7 +250,13 @@ pub fn install_bytes(
                 );
                 record(&mut manifest, &f.path, expected);
             }
-            FileOutcome::Failed => failed.push(f.path.clone()),
+            FileOutcome::Failed(reason) => {
+                failed.push(f.path.clone());
+                failures.push(packwiz::FileFailure {
+                    path: f.path.clone(),
+                    reason: reason.clone(),
+                });
+            }
         }
     }
 
@@ -261,6 +268,7 @@ pub fn install_bytes(
     cleanup_stale(&game_dir, &old, &manifest);
 
     manifest.failed = failed;
+    manifest.failures = failures;
     manifest.optional = selected_optional;
     manifest.complete = manifest.failed.is_empty();
     manifest.save(&manifest_path)?;
