@@ -413,6 +413,62 @@ impl Modrinth {
         Err(last)
     }
 
+    pub fn download_progress(
+        &self,
+        url: &str,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<Vec<u8>> {
+        use std::io::Read;
+        const ATTEMPTS: usize = 4;
+        let mut last = PackwizError::Other("download failed".into());
+        for attempt in 0..ATTEMPTS {
+            match self.client.get(url).send() {
+                Ok(mut resp) => {
+                    let status = resp.status();
+                    if !status.is_success() {
+                        if status.as_u16() == 429 || status.is_server_error() {
+                            last = PackwizError::Http(format!("download -> {status}"));
+                        } else {
+                            return Err(PackwizError::Http(format!("download -> {status}")));
+                        }
+                        Self::backoff(attempt, ATTEMPTS);
+                        continue;
+                    }
+                    let total = resp.content_length().unwrap_or(0);
+                    let mut buf: Vec<u8> = Vec::with_capacity(total as usize);
+                    let mut chunk = [0u8; 65536];
+                    let mut failed = false;
+                    loop {
+                        match resp.read(&mut chunk) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                buf.extend_from_slice(&chunk[..n]);
+                                progress(buf.len() as u64, total);
+                            }
+                            Err(e) => {
+                                last = PackwizError::http(e);
+                                failed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !failed {
+                        return Ok(buf);
+                    }
+                }
+                Err(e) => last = PackwizError::http(e),
+            }
+            Self::backoff(attempt, ATTEMPTS);
+        }
+        Err(last)
+    }
+
+    fn backoff(attempt: usize, attempts: usize) {
+        if attempt + 1 < attempts {
+            std::thread::sleep(std::time::Duration::from_millis(500 * (attempt as u64 + 1)));
+        }
+    }
+
     pub fn clear_cache(cache_dir: &Path) {
         let _ = std::fs::remove_dir_all(cache_dir);
     }
