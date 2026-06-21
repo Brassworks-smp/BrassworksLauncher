@@ -8,8 +8,10 @@ import type {
   AccountStatus,
   AccountStore,
   AuthEvent,
+  BlockedMod,
   ContentVersion,
   FlavorGroup,
+  ManualMod,
   OptionalComponent,
   ExitInfo,
   InstallResult,
@@ -469,8 +471,9 @@ export const installModpack = (
   versionId: string,
   name: string,
   optional: string[] = [],
+  manualMods: ManualMod[] = [],
 ): Promise<void> =>
-  invoke("install_modpack", { source, projectId, versionId, name, optional });
+  invoke("install_modpack", { source, projectId, versionId, name, optional, manualMods });
 export const updateModpack = (
   instanceId: string,
   versionId: string | null,
@@ -482,8 +485,9 @@ export const installModpackFile = (
   source: string,
   name: string,
   optional: string[] = [],
+  manualMods: ManualMod[] = [],
 ): Promise<void> =>
-  invoke("install_modpack_file", { filePath, source, name, optional });
+  invoke("install_modpack_file", { filePath, source, name, optional, manualMods });
 
 
 export const inspectModpack = (
@@ -498,6 +502,29 @@ export const inspectModpackFile = (
   source: string,
 ): Promise<OptionalComponent[]> =>
   invoke("inspect_modpack_file", { filePath, source });
+
+export const inspectBlockedModpack = (
+  source: string,
+  projectId: string,
+  versionId: string,
+  optional: string[] = [],
+): Promise<BlockedMod[]> =>
+  invoke("inspect_blocked_modpack", { source, projectId, versionId, optional });
+
+export const inspectBlockedModpackFile = (
+  filePath: string,
+  source: string,
+  optional: string[] = [],
+): Promise<BlockedMod[]> =>
+  invoke("inspect_blocked_modpack_file", { filePath, source, optional });
+
+export const scanManualMods = (
+  folders: string[],
+  filenames: string[],
+): Promise<ManualMod[]> => invoke("scan_manual_mods", { folders, filenames });
+
+export const defaultDownloadDir = (): Promise<string | null> =>
+  invoke("default_download_dir");
 
 export const inspectPackwiz = (url: string): Promise<OptionalComponent[]> =>
   invoke("inspect_packwiz", { url });

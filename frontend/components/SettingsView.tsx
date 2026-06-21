@@ -17,12 +17,14 @@ import {
   ScrollText,
   ArrowUpCircle,
   FolderOpen,
+  FolderPlus,
   Check,
   Server,
   RotateCcw,
   Compass,
   Languages,
 } from "lucide-react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
 import { CustomColorChip, swatchBg } from "@/components/ColorPicker";
 import { toast } from "@/lib/toast";
@@ -540,6 +542,63 @@ export function SettingsView({
                     { value: "32", label: "32" },
                   ]}
                 />
+              </Field>
+              <Field
+                label={t("settings.downloads.manualFolders")}
+                hint={t("settings.downloads.manualFoldersHint")}
+              >
+                <div className="flex flex-col gap-1.5">
+                  {settings.manual_download_folders.length === 0 ? (
+                    <p className="text-xs text-ink-600">
+                      {t("settings.downloads.noManualFolders")}
+                    </p>
+                  ) : (
+                    settings.manual_download_folders.map((f) => (
+                      <div
+                        key={f}
+                        className="group flex items-center gap-2 rounded-md border border-edge bg-ink-950/40 px-2.5 py-1.5 text-xs transition hover:border-brass-600/40 hover:bg-brass-500/5"
+                      >
+                        <FolderOpen size={12} className="shrink-0 text-brass-400" />
+                        <span className="flex-1 truncate text-gray-200" title={f}>
+                          {f}
+                        </span>
+                        <button
+                          onClick={() =>
+                            patch({
+                              manual_download_folders:
+                                settings.manual_download_folders.filter((x) => x !== f),
+                            })
+                          }
+                          className="text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  <button
+                    onClick={async () => {
+                      const picked = await openFileDialog({
+                        directory: true,
+                        multiple: false,
+                      });
+                      if (
+                        typeof picked === "string" &&
+                        !settings.manual_download_folders.includes(picked)
+                      ) {
+                        patch({
+                          manual_download_folders: [
+                            ...settings.manual_download_folders,
+                            picked,
+                          ],
+                        });
+                      }
+                    }}
+                    className="flex w-fit items-center gap-1.5 rounded-md border border-edge px-2.5 py-1 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+                  >
+                    <FolderPlus size={12} /> {t("settings.downloads.addManualFolder")}
+                  </button>
+                </div>
               </Field>
             </Card>
 

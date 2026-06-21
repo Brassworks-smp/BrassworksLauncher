@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import type {
+  BlockedMod,
   FlavorGroup,
   Instance,
+  ManualMod,
   OptionalComponent,
   FeaturedPack,
 } from "@/lib/types";
@@ -24,6 +26,7 @@ import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { ModpackBrowser } from "@/components/ModpackBrowser";
 import { OptionalModsPicker } from "@/components/OptionalModsPicker";
 import { FlavorPicker } from "@/components/FlavorPicker";
+import { BlockedModsDialog } from "@/components/BlockedModsDialog";
 import { SegmentedTabs, Dropdown, useClosable } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { toastProgress, dismissToast } from "@/lib/toast";
@@ -133,12 +136,14 @@ export function AddInstanceModal({
     versionId: string,
     name: string,
     optional: string[],
+    manualMods?: ManualMod[],
   ) => void;
   onInstallModpackFile: (
     source: "modrinth" | "curseforge",
     path: string,
     name: string,
     optional: string[],
+    manualMods?: ManualMod[],
   ) => void;
   onError: (e: string) => void;
   featured?: FeaturedPack[];
@@ -175,10 +180,23 @@ export function AddInstanceModal({
 
   
   const [pending, setPending] = useState<PendingInstall | null>(null);
-  
+
   const [picker, setPicker] = useState<PickerData | null>(null);
-  
+
+  const [blocked, setBlocked] = useState<{
+    mods: BlockedMod[];
+    folders: string[];
+    proceed: (manualMods: ManualMod[]) => void;
+  } | null>(null);
+
   const inspectGen = useRef(0);
+
+  const saveWatchFolders = (folders: string[]) => {
+    api
+      .getSettings()
+      .then((s) => api.saveSettings({ ...s, manual_download_folders: folders }))
+      .catch(() => {});
+  };
 
   
   const closePicker = () => {
@@ -188,13 +206,57 @@ export function AddInstanceModal({
   };
 
   
-  const finalize = async (intent: PendingInstall, ids: string[]) => {
+  const launchModpack = (
+    intent: Extract<PendingInstall, { kind: "modpack" | "file" }>,
+    ids: string[],
+    manualMods: ManualMod[],
+  ) => {
     if (intent.kind === "modpack") {
-      onInstallModpack(intent.source, intent.projectId, intent.versionId, intent.name, ids);
-      setPending(null);
-    } else if (intent.kind === "file") {
-      onInstallModpackFile(intent.source, intent.path, intent.name, ids);
-      setPending(null);
+      onInstallModpack(
+        intent.source,
+        intent.projectId,
+        intent.versionId,
+        intent.name,
+        ids,
+        manualMods,
+      );
+    } else {
+      onInstallModpackFile(intent.source, intent.path, intent.name, ids, manualMods);
+    }
+    setPending(null);
+    setBlocked(null);
+  };
+
+  const finalize = async (intent: PendingInstall, ids: string[]) => {
+    if (intent.kind === "modpack" || intent.kind === "file") {
+      if (intent.source === "curseforge") {
+        toastProgress("blocked-check", t("blockedMods.checking"), null);
+        const blockedMods: BlockedMod[] =
+          intent.kind === "modpack"
+            ? await api
+                .inspectBlockedModpack(intent.source, intent.projectId, intent.versionId, ids)
+                .catch(() => [])
+            : await api
+                .inspectBlockedModpackFile(intent.path, intent.source, ids)
+                .catch(() => []);
+        dismissToast("blocked-check");
+        if (blockedMods.length > 0) {
+          const settings = await api.getSettings().catch(() => null);
+          let folders = settings?.manual_download_folders ?? [];
+          if (folders.length === 0) {
+            const dl = await api.defaultDownloadDir().catch(() => null);
+            if (dl) folders = [dl];
+          }
+          setPending(null);
+          setBlocked({
+            mods: blockedMods,
+            folders,
+            proceed: (manual) => launchModpack(intent, ids, manual),
+          });
+          return;
+        }
+      }
+      launchModpack(intent, ids, []);
     } else {
       
       setBusy(true);
@@ -378,6 +440,7 @@ export function AddInstanceModal({
   };
 
   return (
+    <>
     <div
       className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
         closing ? "modal-overlay-out" : ""
@@ -793,5 +856,15 @@ export function AddInstanceModal({
         </div>
       </div>
     </div>
+    {blocked && (
+      <BlockedModsDialog
+        blocked={blocked.mods}
+        initialFolders={blocked.folders}
+        onCancel={() => setBlocked(null)}
+        onContinue={blocked.proceed}
+        onFoldersChange={saveWatchFolders}
+      />
+    )}
+    </>
   );
 }

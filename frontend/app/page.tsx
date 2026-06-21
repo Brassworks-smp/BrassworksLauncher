@@ -63,6 +63,7 @@ import type {
   LaunchProgress,
   LauncherSettings,
   LogUpload,
+  ManualMod,
   ModpackStatus,
   NewsItem,
   PlayerCount,
@@ -749,16 +750,19 @@ export default function Home() {
       versionId: string,
       name: string,
       optional: string[],
+      manualMods: ManualMod[] = [],
     ) => {
       setInstalling(true);
       toastProgress("install", "Starting install…", null, () =>
         api.cancelInstall().catch(() => {}),
       );
-      api.installModpack(source, projectId, versionId, name, optional).catch((e) => {
-        setInstalling(false);
-        dismissToast("install");
-        setError(String(e));
-      });
+      api
+        .installModpack(source, projectId, versionId, name, optional, manualMods)
+        .catch((e) => {
+          setInstalling(false);
+          dismissToast("install");
+          setError(String(e));
+        });
     },
     [],
   );
@@ -769,12 +773,13 @@ export default function Home() {
       path: string,
       name: string,
       optional: string[],
+      manualMods: ManualMod[] = [],
     ) => {
       setInstalling(true);
       toastProgress("install", "Reading file…", null, () =>
         api.cancelInstall().catch(() => {}),
       );
-      api.installModpackFile(path, source, name, optional).catch((e) => {
+      api.installModpackFile(path, source, name, optional, manualMods).catch((e) => {
         setInstalling(false);
         dismissToast("install");
         setError(String(e));
