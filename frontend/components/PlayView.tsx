@@ -30,6 +30,8 @@ import {
   QuickSettingsPicker,
 } from "@/lib/quickSettings";
 import { useT, type TFunc } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
+import type { FileFailure } from "@/lib/types";
 
 
 const SIDEBAR_MIN = 240;
@@ -52,6 +54,30 @@ const STAGE_LABEL: Record<string, string> = {
 function stageLabelOf(t: TFunc, stage: string): string {
   const k = STAGE_LABEL[stage];
   return k ? t(k) : stage;
+}
+
+const baseName = (p: string) => p.split("/").pop() || p;
+
+function failureSummary(t: TFunc, status: ModpackStatus): string {
+  const failures: FileFailure[] =
+    status.failures && status.failures.length > 0
+      ? status.failures
+      : status.failed.map((path) => ({ path, reason: t("play.failure.unknown") }));
+
+  const groups = new Map<string, string[]>();
+  for (const f of failures) {
+    const list = groups.get(f.reason) ?? [];
+    list.push(baseName(f.path));
+    groups.set(f.reason, list);
+  }
+
+  const lines = [...groups.entries()].map(([reason, files]) => {
+    const example = files[0];
+    const more = files.length > 1 ? ` +${files.length - 1}` : "";
+    return `• ${files.length}× ${reason}\n   ${example}${more}`;
+  });
+
+  return `${t("play.filesFailed", { count: failures.length })}\n${lines.join("\n")}`;
 }
 
 
@@ -324,10 +350,15 @@ export function PlayView({
               modStatus &&
               !modStatus.complete &&
               modStatus.failed.length > 0 && (
-                <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-xs text-amber-400/80">
+                <button
+                  type="button"
+                  onClick={() => toast(failureSummary(t, modStatus), "error")}
+                  title={t("play.filesFailedDetails")}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 text-center text-xs text-amber-400/80 transition hover:text-amber-300"
+                >
                   <AlertTriangle size={12} />
                   {t("play.filesFailed", { count: modStatus.failed.length })}
-                </p>
+                </button>
               )}
           </div>
         </div>

@@ -140,7 +140,18 @@ export interface LauncherSettings {
   auto_update: boolean;
   last_version: string | null;
   download_concurrency: number;
+  manual_download_folders: string[];
 }
+
+export interface BlockedMod {
+  project_id: string;
+  file_id: string;
+  filename: string;
+  name: string;
+  url: string;
+}
+
+export type ManualMod = [string, string];
 
 export interface UpdateInfo {
   available: boolean;
@@ -234,8 +245,14 @@ export interface ModpackStatus {
   update_available: boolean;
   complete: boolean;
   failed: string[];
+  failures: FileFailure[];
   neoforge_version: string | null;
   minecraft_version: string | null;
+}
+
+export interface FileFailure {
+  path: string;
+  reason: string;
 }
 
 export interface InstalledMod {

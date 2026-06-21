@@ -164,7 +164,9 @@ export function ToastHost() {
                   isProgress && t.progress === null ? "animate-pulse" : ""
                 }`}
               />
-              <span className="flex-1 leading-snug text-gray-200">{t.message}</span>
+              <span className="flex-1 whitespace-pre-line leading-snug text-gray-200">
+                {t.message}
+              </span>
               {isProgress && t.progress !== null && (
                 <span className="shrink-0 text-xs tabular-nums text-ink-600">
                   {t.progress}%

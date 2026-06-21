@@ -286,7 +286,11 @@
       "parallel": "Parallel downloads",
       "parallelHint": "How many files are fetched / verified at once when installing or updating a modpack. Higher is faster; lower is gentler on slow connections. Pick Sequential to disable.",
       "sequential": "Sequential (off)",
-      "def16": "16 (default)"
+      "def16": "16 (default)",
+      "manualFolders": "Manual download folders",
+      "manualFoldersHint": "Watched for CurseForge mods whose authors block third-party downloads. When such a mod is needed, drop the downloaded jar into one of these folders and the launcher picks it up. Defaults to your Downloads folder.",
+      "noManualFolders": "No folders watched yet.",
+      "addManualFolder": "Add folder"
     },
     "cache": {
       "title": "Cache",
@@ -642,6 +646,22 @@
     "onlinePing": "Online · {ms} ms",
     "statusOffline": "Offline"
   },
+  "blockedMods": {
+    "title": "Manual downloads required",
+    "explain": "{count} mod(s) in this pack have third-party downloads disabled by their authors, so the launcher can't fetch them automatically. Download each one from CurseForge into a watched folder below, and the install will continue once they all arrive.",
+    "checking": "Checking for blocked downloads…",
+    "watchFolders": "Watched folders",
+    "addFolder": "Add folder",
+    "addFile": "Add file",
+    "noFolders": "No folders watched. Add one, or add jars individually.",
+    "removeFolder": "Stop watching",
+    "filesNeeded": "Files needed",
+    "openAll": "Open all on CurseForge",
+    "open": "Open",
+    "allReady": "All files ready — you can continue.",
+    "waiting": "Waiting for the remaining downloads…",
+    "continue": "Continue install"
+  },
   "addInstance": {
     "newInstance": "New instance",
     "tab": {
@@ -702,6 +722,10 @@
     "cancelDownload": "Cancel download",
     "signInToPlay": "Sign in with Microsoft to start playing.",
     "filesFailed": "{count} files couldn't download - they'll retry on next launch.",
+    "filesFailedDetails": "Click to see why these files failed",
+    "failure": {
+      "unknown": "unknown error"
+    },
     "customize": "Customize",
     "customizeTitle": "Choose which settings appear here",
     "pinHint": "Pin settings here for one-click access. Click to choose.",
