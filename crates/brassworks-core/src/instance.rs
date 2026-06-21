@@ -263,7 +263,7 @@ impl Instance {
             pack,
             featured: false,
             pinned: false,
-            icon: None,
+            icon: Some("builtin:box".to_string()),
             banner: None,
             logo: None,
             modpack_locked,

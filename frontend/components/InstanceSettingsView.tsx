@@ -530,7 +530,7 @@ export function InstanceSettingsView({
                       onClick={() => patch({ icon: ic.value })}
                       title={ic.id}
                       className={`grid h-10 w-10 place-items-center rounded-lg border bg-ink-950/40 transition hover:border-brass-500/60 ${
-                        instance.icon === ic.value
+                        (instance.icon ?? DEFAULT_INSTANCE_ICON) === ic.value
                           ? "border-brass-500 ring-1 ring-brass-500/60"
                           : "border-edge"
                       }`}

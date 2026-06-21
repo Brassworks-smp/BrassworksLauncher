@@ -27,7 +27,7 @@ import { Collapse, placeMenu, useMenuDismiss, Toggle, SegmentedTabs } from "./ui
 type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import { CustomColorChip } from "@/components/ColorPicker";
-import { iconSrc, brandingSrc } from "@/lib/instanceIcons";
+import { iconSrc, brandingSrc, DEFAULT_INSTANCE_ICON } from "@/lib/instanceIcons";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
 
@@ -964,20 +964,11 @@ function InstanceCard({
             )}
           </div>
         )}
-        {instance.icon ? (
-          <img
-            src={iconSrc(instance.icon, accent) ?? undefined}
-            alt=""
-            className="h-9 w-9 shrink-0 rounded-md object-cover shadow"
-          />
-        ) : (
-          <span
-            style={accent ? { borderColor: `${accent}59`, color: accent } : undefined}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-edge bg-ink-950/60 text-brass-400"
-          >
-            <Box size={18} />
-          </span>
-        )}
+        <img
+          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent) ?? undefined}
+          alt=""
+          className="h-9 w-9 shrink-0 rounded-md object-cover shadow"
+        />
 
         <div className="min-w-0 flex-1">
           {editingName ? (
@@ -1133,20 +1124,11 @@ function InstanceCard({
             </span>
           </div>
         )}
-        {instance.icon ? (
-          <img
-            src={iconSrc(instance.icon, accent) ?? undefined}
-            alt=""
-            className="relative h-14 w-14 rounded-lg object-cover shadow-lg"
-          />
-        ) : (
-          <span
-            style={accent ? { borderColor: `${accent}59`, color: accent } : undefined}
-            className="relative grid h-14 w-14 place-items-center rounded-lg border border-edge bg-ink-950/60 text-brass-400"
-          >
-            <Box size={26} />
-          </span>
-        )}
+        <img
+          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent) ?? undefined}
+          alt=""
+          className="relative h-14 w-14 rounded-lg object-cover shadow-lg"
+        />
 
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <button
