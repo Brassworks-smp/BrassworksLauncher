@@ -61,6 +61,8 @@ pub struct ResolvedVersion {
     pub loaders: Vec<String>,
     #[serde(default)]
     pub dependencies: Vec<VersionDep>,
+    #[serde(default)]
+    pub manual_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,6 +144,7 @@ impl ApiVersion {
             game_versions: self.game_versions,
             loaders: self.loaders,
             dependencies,
+            manual_only: false,
         })
     }
 }
@@ -382,11 +385,32 @@ impl Modrinth {
     }
 
     pub fn download(&self, url: &str) -> Result<Vec<u8>> {
-        let resp = self.client.get(url).send().map_err(PackwizError::http)?;
-        if !resp.status().is_success() {
-            return Err(PackwizError::Http(format!("download -> {}", resp.status())));
+        const ATTEMPTS: usize = 4;
+        let mut last = PackwizError::Other("download failed".into());
+        for attempt in 0..ATTEMPTS {
+            match self.client.get(url).send() {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        match resp.bytes() {
+                            Ok(b) => return Ok(b.to_vec()),
+                            Err(e) => last = PackwizError::http(e),
+                        }
+                    } else if status.as_u16() == 429 || status.is_server_error() {
+                        last = PackwizError::Http(format!("download -> {status}"));
+                    } else {
+                        return Err(PackwizError::Http(format!("download -> {status}")));
+                    }
+                }
+                Err(e) => last = PackwizError::http(e),
+            }
+            if attempt + 1 < ATTEMPTS {
+                std::thread::sleep(std::time::Duration::from_millis(
+                    500 * (attempt as u64 + 1),
+                ));
+            }
         }
-        Ok(resp.bytes().map_err(PackwizError::http)?.to_vec())
+        Err(last)
     }
 
     pub fn clear_cache(cache_dir: &Path) {

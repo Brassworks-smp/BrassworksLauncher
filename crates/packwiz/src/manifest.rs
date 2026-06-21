@@ -20,6 +20,8 @@ pub struct Manifest {
     #[serde(default)]
     pub failed: Vec<String>,
     #[serde(default)]
+    pub failures: Vec<FileFailure>,
+    #[serde(default)]
     pub files: BTreeMap<String, FileRecord>,
     #[serde(default)]
     pub mods: Vec<ManagedMod>,
@@ -33,6 +35,12 @@ pub struct Manifest {
 pub struct FileRecord {
     pub hash: String,
     pub hash_format: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FileFailure {
+    pub path: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +96,7 @@ mod manifest_tests {
         assert!(m.neoforge_version.is_none());
         assert!(!m.complete);
         assert!(m.failed.is_empty());
+        assert!(m.failures.is_empty());
         assert!(m.files.is_empty());
         assert!(m.mods.is_empty());
         assert!(m.optional.is_empty());

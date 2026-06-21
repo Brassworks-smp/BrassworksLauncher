@@ -154,6 +154,40 @@ impl Curseforge {
         )))
     }
 
+    fn post_json<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+    ) -> Result<T> {
+        const ATTEMPTS: usize = 5;
+        for attempt in 0..ATTEMPTS {
+            throttle();
+            let mut req = self
+                .client
+                .post(url)
+                .header("Accept", "application/json")
+                .json(body);
+            if !self.api_key.trim().is_empty() {
+                req = req.header("x-api-key", &self.api_key);
+            }
+            let resp = req.send().map_err(PackwizError::http)?;
+            let status = resp.status();
+            if status.as_u16() == 429 {
+                let wait = retry_after(&resp)
+                    .unwrap_or(Duration::from_millis(600 * (attempt as u64 + 1)));
+                std::thread::sleep(wait);
+                continue;
+            }
+            if !status.is_success() {
+                return Err(PackwizError::Http(format!("curseforge {url} -> {status}")));
+            }
+            return resp.json().map_err(PackwizError::http);
+        }
+        Err(PackwizError::Http(format!(
+            "curseforge {url} -> 429 Too Many Requests (gave up after {ATTEMPTS} tries)"
+        )))
+    }
+
     fn cache_path(&self, key: &str) -> PathBuf {
         self.cache_dir.join(format!("{key}.v1.json"))
     }
@@ -296,9 +330,36 @@ impl Curseforge {
         project_id: &str,
         file_id: &str,
     ) -> Result<Option<ResolvedVersion>> {
+        let cache_key = format!("f-{project_id}-{file_id}");
+        if let Some(rv) = self.read_cache::<ResolvedVersion>(&cache_key) {
+            return Ok(Some(rv));
+        }
         let body: DataWrap<ApiFile> =
             self.get(&format!("{}/mods/{project_id}/files/{file_id}", self.api_base()), &[])?;
-        Ok(Some(body.data.resolve()))
+        let rv = body.data.resolve();
+        self.write_cache(&cache_key, &rv);
+        Ok(Some(rv))
+    }
+
+    pub fn resolve_versions_bulk(&self, file_ids: &[i64]) -> Result<Vec<ResolvedVersion>> {
+        if file_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let body: ApiFiles = self.post_json(
+            &format!("{}/mods/files", self.api_base()),
+            &serde_json::json!({ "fileIds": file_ids }),
+        )?;
+        let mut out = Vec::with_capacity(body.data.len());
+        for f in body.data {
+            let project_id = f.mod_id;
+            let file_id = f.id;
+            let rv = f.resolve();
+            if project_id != 0 {
+                self.write_cache(&format!("f-{project_id}-{file_id}"), &rv);
+            }
+            out.push(rv);
+        }
+        Ok(out)
     }
 
     pub fn file_changelog(&self, project_id: &str, file_id: &str) -> Option<String> {
@@ -388,6 +449,8 @@ struct ApiFiles {
 #[derive(Deserialize)]
 struct ApiFile {
     id: i64,
+    #[serde(rename = "modId", default)]
+    mod_id: i64,
     #[serde(rename = "displayName", default)]
     display_name: String,
     #[serde(rename = "fileName")]
@@ -429,10 +492,9 @@ impl ApiFile {
             .game_versions
             .into_iter()
             .partition(|v| LOADER_NAMES.iter().any(|n| n.eq_ignore_ascii_case(v)));
-        let url = self
-            .download_url
-            .filter(|u| !u.is_empty())
-            .unwrap_or_else(|| cdn_url(self.id, &self.file_name));
+        let real_url = self.download_url.filter(|u| !u.is_empty());
+        let manual_only = real_url.is_none();
+        let url = real_url.unwrap_or_else(|| cdn_url(self.id, &self.file_name));
         let dependencies = self
             .dependencies
             .into_iter()
@@ -457,6 +519,7 @@ impl ApiFile {
             game_versions,
             loaders: loaders.into_iter().map(|l| l.to_lowercase()).collect(),
             dependencies,
+            manual_only,
         }
     }
 }

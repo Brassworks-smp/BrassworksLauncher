@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256, Sha512};
 
 use crate::curseforge::{self, Curseforge};
 use crate::error::{PackwizError, Result};
-use crate::manifest::{FileRecord, ManagedMod, Manifest};
+use crate::manifest::{FileFailure, FileRecord, ManagedMod, Manifest};
 use crate::model::{Index, MetaFile, Pack};
 use crate::modrinth::Modrinth;
 use crate::{Side, SyncOptions, SyncProgress, SyncStage};
@@ -392,13 +392,27 @@ impl Installer {
         );
 
         let mut failed: Vec<String> = Vec::new();
+        let mut failures: Vec<FileFailure> = Vec::new();
         for (j, outcome) in outcomes.iter().enumerate() {
-            if let Err(Some(_)) = outcome {
-                failed.push(plan[todo[j]].dest.clone());
+            if let Err(Some(reason)) = outcome {
+                let path = plan[todo[j]].dest.clone();
+                failed.push(path.clone());
+                failures.push(FileFailure {
+                    path,
+                    reason: reason.clone(),
+                });
             }
         }
         if cancelled.load(Ordering::Relaxed) {
-            self.write_manifest(opts, &pack, &index_hash, &plan, &failed, &selected_optional)?;
+            self.write_manifest(
+                opts,
+                &pack,
+                &index_hash,
+                &plan,
+                &failed,
+                &failures,
+                &selected_optional,
+            )?;
             return Err(PackwizError::Cancelled);
         }
 
@@ -423,8 +437,15 @@ impl Installer {
             }
         }
 
-        let manifest =
-            self.write_manifest(opts, &pack, &index_hash, &plan, &failed, &selected_optional)?;
+        let manifest = self.write_manifest(
+            opts,
+            &pack,
+            &index_hash,
+            &plan,
+            &failed,
+            &failures,
+            &selected_optional,
+        )?;
 
         let msg = if failed.is_empty() {
             "Modpack up to date".to_string()
@@ -547,6 +568,7 @@ impl Installer {
         index_hash: &str,
         plan: &[Planned],
         failed: &[String],
+        failures: &[FileFailure],
         optional: &[String],
     ) -> Result<Manifest> {
         let mut manifest = Manifest {
@@ -555,6 +577,7 @@ impl Installer {
             minecraft_version: pack.versions.minecraft.clone(),
             neoforge_version: pack.versions.neoforge.clone(),
             failed: failed.to_vec(),
+            failures: failures.to_vec(),
             optional: optional.to_vec(),
             flavors: {
                 let mut f: Vec<String> = opts.flavors.iter().cloned().collect();
@@ -766,7 +789,7 @@ fn file_stem(path: &str) -> &str {
 fn short_error(e: &PackwizError) -> String {
     match e {
         PackwizError::HashMismatch { .. } => "hash mismatch".to_string(),
-        PackwizError::Http(_) => "download failed".to_string(),
+        PackwizError::Http(msg) => msg.clone(),
         other => other.to_string(),
     }
 }
