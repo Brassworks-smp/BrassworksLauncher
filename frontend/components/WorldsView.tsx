@@ -115,10 +115,12 @@ export function WorldsView({
   instanceId,
   canPlay,
   onQuickPlay,
+  onRemoved,
 }: {
   instanceId: string;
   canPlay: boolean;
   onQuickPlay: (qp: api.QuickPlay) => void;
+  onRemoved?: (folder: string) => void;
 }) {
   const t = useT();
   const [worlds, setWorlds] = useState<WorldInfo[] | null>(
@@ -212,6 +214,7 @@ export function WorldsView({
       .deleteWorld(instanceId, w.folder)
       .then(() => {
         if (worlds) update(worlds.filter((x) => x.folder !== w.folder));
+        onRemoved?.(w.folder);
         toast(t("worlds.deletedToast", { name: w.name }), "success");
       })
       .catch((e) => toast(String(e), "error"));

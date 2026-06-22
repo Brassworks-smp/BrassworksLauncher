@@ -61,10 +61,12 @@ export function ServersView({
   instanceId,
   canPlay,
   onQuickPlay,
+  onRemoved,
 }: {
   instanceId: string;
   canPlay: boolean;
   onQuickPlay: (qp: api.QuickPlay) => void;
+  onRemoved?: (ip: string) => void;
 }) {
   const t = useT();
   const [servers, setServers] = useState<ServerEntry[] | null>(
@@ -133,8 +135,10 @@ export function ServersView({
     pingAll(next);
   };
 
-  const remove = (s: ServerEntry) =>
+  const remove = (s: ServerEntry) => {
     persist((servers ?? []).filter((x) => keyOf(x) !== keyOf(s)));
+    onRemoved?.(s.ip);
+  };
 
   const moveWithin = (group: ServerEntry[], i: number, dir: -1 | 1) => {
     const j = i + dir;

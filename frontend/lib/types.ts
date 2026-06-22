@@ -47,7 +47,12 @@ export interface Instance {
   unsup_public_key: string | null;
   pinned_settings: string[];
   account_override: string | null;
+  auto_join: QuickPlay | null;
 }
+
+export type QuickPlay =
+  | { kind: "server"; ip: string }
+  | { kind: "world"; folder: string };
 
 export interface InstanceFolder {
   id: string;

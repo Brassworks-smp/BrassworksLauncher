@@ -84,8 +84,8 @@ function loaderLabel(i: Instance): string {
 const byPinned = (a: Instance, b: Instance) =>
   Number(b.pinned ?? false) - Number(a.pinned ?? false);
 
-// Where a dragged instance will land in an already-sorted list once it's moved
-// there: pinned first, then name (matches the backend's instance ordering).
+
+
 const dropIndexFor = (list: Instance[], dragged: Instance | null): number => {
   if (!dragged) return list.length;
   let idx = 0;
@@ -454,8 +454,8 @@ function Section({
   );
 }
 
-// Inserts the drop-target placeholder among the cards at the index the instance
-// will actually sort to, instead of always appending it at the end.
+
+
 function withDropPlaceholder(
   children: React.ReactNode,
   show: boolean,

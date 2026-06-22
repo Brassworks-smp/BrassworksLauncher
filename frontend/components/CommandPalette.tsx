@@ -237,7 +237,7 @@ export function CommandPalette({
     setTimeout(() => void runScript(row.pin, REGISTRY, ctx), 0);
   };
 
-  // The command currently being composed, normalised for pinning.
+  
   const composeCmd = `/${body.trim()}`;
   const composeParsed =
     compose && !helpMode && body.trim() ? parse(composeCmd, REGISTRY) : null;

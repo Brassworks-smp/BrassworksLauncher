@@ -23,6 +23,7 @@ import type {
   ModpackStatus,
   NewsItem,
   PlayerCount,
+  QuickPlay,
 } from "@/lib/types";
 import { ServerCard } from "./ServerCard";
 import { NewsCard } from "./NewsCard";
@@ -163,7 +164,7 @@ export function PlayView({
   newsError: boolean;
   onRefreshPlayers: () => Promise<void> | void;
   onRefreshNews: () => Promise<void> | void;
-  onPlay: () => void;
+  onPlay: (quickPlay?: QuickPlay) => void;
   onUpdate: () => void;
   onStop: () => void;
   onCancel: () => void;
@@ -333,7 +334,8 @@ export function PlayView({
               canPlay={canPlay}
               updateAvailable={updateAvailable}
               notInstalled={notInstalled}
-              onPlay={onPlay}
+              autoJoin={instance.auto_join}
+              onPlay={() => onPlay(instance.auto_join ?? undefined)}
               onUpdate={onUpdate}
               onStop={onStop}
               stageLabel={
@@ -608,6 +610,7 @@ function MainButton({
   canPlay,
   updateAvailable,
   notInstalled,
+  autoJoin,
   onPlay,
   onUpdate,
   onStop,
@@ -618,6 +621,7 @@ function MainButton({
   canPlay: boolean;
   updateAvailable: boolean;
   notInstalled: boolean;
+  autoJoin?: QuickPlay | null;
   onPlay: () => void;
   onUpdate: () => void;
   onStop: () => void;
@@ -681,7 +685,7 @@ function MainButton({
       ) : (
         <>
           <Play size={22} className="fill-current" />
-          {t("play.play")}
+          {autoJoin ? t("play.playJoin") : t("play.play")}
         </>
       )}
     </button>

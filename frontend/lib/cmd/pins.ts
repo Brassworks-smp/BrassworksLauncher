@@ -30,7 +30,7 @@ export function onPinsChanged(cb: () => void): () => void {
   };
 }
 
-/** Pinned commands (paths or full command strings) resolved for the native menu. */
+
 export function pinnedMenuItems(): { id: string; label: string }[] {
   return loadPins()
     .map((pin) => {

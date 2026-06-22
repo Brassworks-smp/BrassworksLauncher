@@ -113,9 +113,9 @@ export const isBuiltinIcon = (icon: string | null | undefined): boolean =>
 
 export function brandingSrc(value: string | null | undefined): string | null {
   if (!value) return null;
-  // Remote/data URLs and app-bundled assets (root-relative like "/logo.png")
-  // are served by the webview directly. Only genuine on-disk paths picked from
-  // the file dialog need converting to the asset protocol.
+  
+  
+  
   const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("\\\\");
   const isUnixFsPath = /^\/[^/]+\/.+/.test(value);
   if (isWindowsPath || isUnixFsPath) {

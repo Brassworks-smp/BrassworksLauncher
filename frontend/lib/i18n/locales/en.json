@@ -393,6 +393,15 @@
       "useSelected": "Use selected account (default)",
       "missing": "The chosen account no longer exists. Pick another, or this instance falls back to your selected account."
     },
+    "autoJoin": {
+      "title": "Auto-join",
+      "target": "Join on play",
+      "hint": "Pick a world or server to jump straight into when you hit Play. The button becomes \"Play & Join\".",
+      "none": "Don't auto-join",
+      "worldPrefix": "World:",
+      "serverPrefix": "Server:",
+      "missing": "The chosen world or server no longer exists. Pick another."
+    },
     "memory": {
       "title": "Memory",
       "override": "Override launcher default",
@@ -731,6 +740,7 @@
     "confirm": "Switch & remove override"
   },
   "play": {
+    "playJoin": "Play & Join",
     "loadingInstance": "Loading instance…",
     "accountMissing": "Account missing",
     "featuredPack": "Featured pack",

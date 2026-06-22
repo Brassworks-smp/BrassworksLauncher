@@ -818,6 +818,14 @@ export default function Home() {
     api.selectAccount(acctWarn.accountId).then(refreshAccounts).catch(() => {});
     setAcctWarn(null);
   };
+
+  const clearAutoJoinIfRemoved = (kind: "world" | "server", id: string) => {
+    const inst = instancesRef.current.find((i) => i.id === selectedRef.current);
+    const aj = inst?.auto_join;
+    if (!inst || !aj || aj.kind !== kind) return;
+    const matches = aj.kind === "world" ? aj.folder === id : aj.ip === id;
+    if (matches) onSaveInstance({ ...inst, auto_join: null });
+  };
   const activeAccount =
     accounts.accounts.find((a) => a.id === accounts.selected) ??
     accounts.accounts[0];
@@ -1068,7 +1076,7 @@ export default function Home() {
               newsError={newsError}
               onRefreshPlayers={refreshPlayers}
               onRefreshNews={refreshNews}
-              onPlay={() => onPlay()}
+              onPlay={(qp) => onPlay(undefined, qp)}
               onUpdate={() => onPlay()}
               onStop={onStop}
               onCancel={onCancel}
@@ -1110,6 +1118,7 @@ export default function Home() {
               instanceId={selectedId}
               canPlay={canPlay && !running}
               onQuickPlay={(qp) => onPlay(selectedId, qp)}
+              onRemoved={(folder) => clearAutoJoinIfRemoved("world", folder)}
             />
           )}
 
@@ -1118,6 +1127,7 @@ export default function Home() {
               instanceId={selectedId}
               canPlay={canPlay && !running}
               onQuickPlay={(qp) => onPlay(selectedId, qp)}
+              onRemoved={(ip) => clearAutoJoinIfRemoved("server", ip)}
             />
           )}
 

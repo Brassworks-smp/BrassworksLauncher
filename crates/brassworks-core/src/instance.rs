@@ -179,16 +179,18 @@ pub struct Instance {
     pub tags: Vec<String>,
     #[serde(default)]
     pub folder_id: Option<String>,
-            #[serde(default)]
+    #[serde(default)]
     pub optional_mods: Option<Vec<String>>,
-        #[serde(default)]
+    #[serde(default)]
     pub unsup_flavors: Option<Vec<String>>,
-            #[serde(default)]
+    #[serde(default)]
     pub unsup_public_key: Option<String>,
-            #[serde(default)]
+    #[serde(default)]
     pub pinned_settings: Vec<String>,
-            #[serde(default)]
+    #[serde(default)]
     pub account_override: Option<String>,
+    #[serde(default)]
+    pub auto_join: Option<crate::launch::QuickPlay>,
 }
 
 impl Instance {
@@ -232,6 +234,7 @@ impl Instance {
             unsup_public_key: fp.unsup_public_key.clone(),
                                     pinned_settings: vec!["open_settings".to_string()],
             account_override: None,
+            auto_join: None,
         }
     }
 
@@ -285,6 +288,7 @@ impl Instance {
             unsup_public_key: None,
             pinned_settings,
             account_override: None,
+            auto_join: None,
         }
     }
 

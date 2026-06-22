@@ -24,6 +24,7 @@ import {
   Lock,
   Pin,
   UserRound,
+  Play,
 } from "lucide-react";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
@@ -51,6 +52,9 @@ import type {
   LoaderKind,
   LoaderVersion,
   AccountStore,
+  QuickPlay,
+  WorldInfo,
+  ServerEntry,
 } from "@/lib/types";
 import {
   Card,
@@ -363,6 +367,12 @@ export function InstanceSettingsView({
                 </p>
               )}
           </Card>
+
+          <AutoJoinCard
+            instanceId={instance.id}
+            value={instance.auto_join}
+            onChange={(v) => patch({ auto_join: v })}
+          />
 
           <Card
             title={t("instanceSettings.memory.title")}
@@ -1282,6 +1292,89 @@ const strToLv = (s: string): LoaderVersion =>
   s === "stable" || s === "unstable"
     ? { channel: s }
     : { channel: "exact", value: s };
+
+function AutoJoinCard({
+  instanceId,
+  value,
+  onChange,
+}: {
+  instanceId: string;
+  value: QuickPlay | null;
+  onChange: (v: QuickPlay | null) => void;
+}) {
+  const t = useT();
+  const [worlds, setWorlds] = useState<WorldInfo[]>([]);
+  const [servers, setServers] = useState<ServerEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      api.listWorlds(instanceId).catch(() => [] as WorldInfo[]),
+      api.listServers(instanceId).catch(() => [] as ServerEntry[]),
+    ]).then(([w, s]) => {
+      if (!alive) return;
+      setWorlds(w);
+      setServers(s);
+      setLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [instanceId]);
+
+  const valueStr = !value
+    ? ""
+    : value.kind === "world"
+      ? `world:${value.folder}`
+      : `server:${value.ip}`;
+
+  const missing =
+    loaded &&
+    !!value &&
+    (value.kind === "world"
+      ? !worlds.some((w) => w.folder === value.folder)
+      : !servers.some((s) => s.ip === value.ip));
+
+  const onSelect = (v: string) => {
+    if (!v) return onChange(null);
+    const idx = v.indexOf(":");
+    const kind = v.slice(0, idx);
+    const id = v.slice(idx + 1);
+    onChange(kind === "world" ? { kind: "world", folder: id } : { kind: "server", ip: id });
+  };
+
+  return (
+    <Card title={t("instanceSettings.autoJoin.title")} icon={<Play size={14} />}>
+      <Field
+        label={t("instanceSettings.autoJoin.target")}
+        hint={t("instanceSettings.autoJoin.hint")}
+      >
+        <Dropdown
+          value={valueStr}
+          onChange={onSelect}
+          placeholder={t("instanceSettings.autoJoin.none")}
+          options={[
+            { value: "", label: t("instanceSettings.autoJoin.none") },
+            ...worlds.map((w) => ({
+              value: `world:${w.folder}`,
+              label: `${t("instanceSettings.autoJoin.worldPrefix")} ${w.name}`,
+            })),
+            ...servers.map((s) => ({
+              value: `server:${s.ip}`,
+              label: `${t("instanceSettings.autoJoin.serverPrefix")} ${s.name || s.ip}`,
+            })),
+          ]}
+        />
+      </Field>
+      {missing && (
+        <p className="mt-1 text-xs text-amber-400/80">
+          {t("instanceSettings.autoJoin.missing")}
+        </p>
+      )}
+    </Card>
+  );
+}
 
 function VersionLoaderCard({
   instance,

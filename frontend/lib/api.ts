@@ -14,6 +14,7 @@ import type {
   OptionalComponent,
   Preflight,
   PreflightProgress,
+  QuickPlay,
   ExitInfo,
   InstallResult,
   InstalledMod,
@@ -116,9 +117,7 @@ export const subscribeFaceTextures = (cb: () => void): (() => void) => {
 };
 
 
-export type QuickPlay =
-  | { kind: "server"; ip: string }
-  | { kind: "world"; folder: string };
+export type { QuickPlay };
 export const launch = (
   instanceId: string,
   quickPlay?: QuickPlay,

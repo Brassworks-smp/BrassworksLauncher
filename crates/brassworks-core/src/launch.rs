@@ -27,7 +27,7 @@ pub struct LaunchRequest<'a> {
     pub quick_play: Option<QuickPlay>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum QuickPlay {
     Server { ip: String },
