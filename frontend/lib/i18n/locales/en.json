@@ -741,6 +741,8 @@
   },
   "play": {
     "playJoin": "Play & Join",
+    "autoJoinWorld": "World: {name}",
+    "autoJoinServer": "Server: {name}",
     "loadingInstance": "Loading instance…",
     "accountMissing": "Account missing",
     "featuredPack": "Featured pack",

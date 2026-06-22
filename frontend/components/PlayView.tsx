@@ -13,6 +13,8 @@ import {
   Settings,
   ExternalLink,
   UserRound,
+  Globe,
+  Server,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { iconSrc, DEFAULT_INSTANCE_ICON } from "@/lib/instanceIcons";
@@ -24,6 +26,8 @@ import type {
   NewsItem,
   PlayerCount,
   QuickPlay,
+  WorldInfo,
+  ServerEntry,
 } from "@/lib/types";
 import { ServerCard } from "./ServerCard";
 import { NewsCard } from "./NewsCard";
@@ -257,6 +261,12 @@ export function PlayView({
                 <Chip icon={<UserRound size={13} />}>
                   {overrideAccount ?? t("play.accountMissing")}
                 </Chip>
+              )}
+              {instance.auto_join && (
+                <AutoJoinChip
+                  instanceId={instance.id}
+                  autoJoin={instance.auto_join}
+                />
               )}
               {showPlaytime && (
                 <Chip icon={<Clock size={13} />}>
@@ -601,6 +611,61 @@ function Chip({
       {icon}
       {children}
     </span>
+  );
+}
+
+function AutoJoinChip({
+  instanceId,
+  autoJoin,
+}: {
+  instanceId: string;
+  autoJoin: QuickPlay;
+}) {
+  const t = useT();
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setName(null);
+    if (!api.isTauri()) return;
+    if (autoJoin.kind === "world") {
+      api
+        .listWorlds(instanceId)
+        .then((ws: WorldInfo[]) => {
+          if (!alive) return;
+          const w = ws.find((x) => x.folder === autoJoin.folder);
+          setName(w ? w.name : autoJoin.folder);
+        })
+        .catch(() => alive && setName(autoJoin.folder));
+    } else {
+      api
+        .listServers(instanceId)
+        .then((ss: ServerEntry[]) => {
+          if (!alive) return;
+          const s = ss.find((x) => x.ip === autoJoin.ip);
+          setName(s ? s.name || s.ip : autoJoin.ip);
+        })
+        .catch(() => alive && setName(autoJoin.ip));
+    }
+    return () => {
+      alive = false;
+    };
+  }, [instanceId, autoJoin]);
+
+  const fallback = autoJoin.kind === "world" ? autoJoin.folder : autoJoin.ip;
+  const label =
+    autoJoin.kind === "world"
+      ? t("play.autoJoinWorld", { name: name ?? fallback })
+      : t("play.autoJoinServer", { name: name ?? fallback });
+
+  return (
+    <Chip
+      icon={
+        autoJoin.kind === "world" ? <Globe size={13} /> : <Server size={13} />
+      }
+    >
+      {label}
+    </Chip>
   );
 }
 
