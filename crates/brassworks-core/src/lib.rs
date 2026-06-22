@@ -177,9 +177,11 @@ impl Launcher {
                     let _ = db.store(acc);
                     AccountStatus::Ok
                 }
-                Err(_) => AccountStatus::NeedsRelogin,
+                Err(e) if e.requires_relogin() => AccountStatus::NeedsRelogin,
+                Err(_) => AccountStatus::Ok,
             },
-            _ => AccountStatus::NeedsRelogin,
+            Ok(None) => AccountStatus::NeedsRelogin,
+            Err(_) => AccountStatus::Ok,
         }
     }
 

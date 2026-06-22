@@ -224,7 +224,7 @@ impl Account {
             let res = match request_ms_token(&client, &req, "XboxLive.signin").await? {
                 Ok(res) => res,
                 Err(res) => {
-                    return Err(AuthError::Unknown(res.error_description));
+                    return Err(AuthError::RefreshRejected(res.error_description));
                 }
             };
 
@@ -442,6 +442,8 @@ pub enum AuthError {
     DoesNotOwnGame,
     #[error("invalid status: {0}")]
     InvalidStatus(u16),
+    #[error("refresh token rejected: {0}")]
+    RefreshRejected(String),
     #[error("unknown: {0}")]
     Unknown(String),
     #[error("internal: {0}")]
@@ -449,6 +451,10 @@ pub enum AuthError {
 }
 
 impl AuthError {
+
+    pub fn requires_relogin(&self) -> bool {
+        matches!(self, Self::RefreshRejected(_) | Self::OutdatedToken)
+    }
 
     #[inline]
     fn new_reqwest(e: reqwest::Error) -> Self {
