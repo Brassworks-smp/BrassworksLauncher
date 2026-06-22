@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Offline account",
     "active": "Active",
+    "instanceOverride": "Set for this instance",
     "signOut": "Sign out",
     "relogin": "Re-login",
     "reloginRequired": "Re-login required",
@@ -384,6 +385,13 @@
       "forge": "Forge",
       "fabric": "Fabric",
       "quilt": "Quilt"
+    },
+    "account": {
+      "title": "Account",
+      "override": "Always use a specific account",
+      "overrideHint": "When set, this instance always launches with the chosen account, and selecting it switches your active account to match.",
+      "useSelected": "Use selected account (default)",
+      "missing": "The chosen account no longer exists. Pick another, or this instance falls back to your selected account."
     },
     "memory": {
       "title": "Memory",
@@ -717,8 +725,14 @@
     "importSelectedNone": "Import selected",
     "uploadInstead": "Upload a .mrpack / CurseForge .zip instead"
   },
+  "accountOverride": {
+    "title": "Change account?",
+    "body": "\"{instance}\" is set to always use a specific account. Switching to \"{account}\" will turn off that override for this instance.",
+    "confirm": "Switch & remove override"
+  },
   "play": {
     "loadingInstance": "Loading instance…",
+    "accountMissing": "Account missing",
     "featuredPack": "Featured pack",
     "modrinthModpack": "Modrinth modpack",
     "curseforgeModpack": "CurseForge modpack",

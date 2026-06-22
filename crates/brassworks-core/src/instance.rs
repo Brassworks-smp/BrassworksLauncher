@@ -187,6 +187,8 @@ pub struct Instance {
     pub unsup_public_key: Option<String>,
             #[serde(default)]
     pub pinned_settings: Vec<String>,
+            #[serde(default)]
+    pub account_override: Option<String>,
 }
 
 impl Instance {
@@ -229,6 +231,7 @@ impl Instance {
             unsup_flavors: None,
             unsup_public_key: fp.unsup_public_key.clone(),
                                     pinned_settings: vec!["open_settings".to_string()],
+            account_override: None,
         }
     }
 
@@ -281,6 +284,7 @@ impl Instance {
             unsup_flavors: None,
             unsup_public_key: None,
             pinned_settings,
+            account_override: None,
         }
     }
 

@@ -46,6 +46,7 @@ export interface Instance {
   unsup_flavors: string[] | null;
   unsup_public_key: string | null;
   pinned_settings: string[];
+  account_override: string | null;
 }
 
 export interface InstanceFolder {

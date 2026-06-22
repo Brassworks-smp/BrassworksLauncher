@@ -230,7 +230,13 @@ impl Launcher {
                         self.reconcile_packwiz_loader(instance_id);
         let instance = self.instances().get(instance_id)?;
         let accounts = self.accounts()?;
-        let account = accounts.active().ok_or(CoreError::NoAccount)?.clone();
+        let account = instance
+            .account_override
+            .as_deref()
+            .and_then(|id| accounts.accounts.iter().find(|a| a.id == id))
+            .or_else(|| accounts.active())
+            .ok_or(CoreError::NoAccount)?
+            .clone();
         let settings = self.settings()?;
 
         let child = launch_instance(

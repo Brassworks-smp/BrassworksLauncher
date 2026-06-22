@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Settings,
   ExternalLink,
+  UserRound,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { iconSrc, DEFAULT_INSTANCE_ICON } from "@/lib/instanceIcons";
@@ -143,6 +144,7 @@ export function PlayView({
   onSaveInstance,
   onOpenSettings,
   launcherSettings,
+  overrideAccount,
 }: {
   instance: Instance | null;
   busy: boolean;
@@ -168,6 +170,7 @@ export function PlayView({
   onSaveInstance: (i: Instance) => void;
   onOpenSettings: () => void;
   launcherSettings: LauncherSettings | null;
+  overrideAccount?: string | null;
 }) {
   const t = useT();
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -249,6 +252,11 @@ export function PlayView({
               <Chip icon={<Box size={13} />}>
                 {loaderLabel(instance)} {instance.minecraft_version}
               </Chip>
+              {instance.account_override && (
+                <Chip icon={<UserRound size={13} />}>
+                  {overrideAccount ?? t("play.accountMissing")}
+                </Chip>
+              )}
               {showPlaytime && (
                 <Chip icon={<Clock size={13} />}>
                   {t("play.played", {

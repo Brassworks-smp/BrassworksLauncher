@@ -50,6 +50,7 @@ import {
   resetTabIntros,
 } from "@/components/TabIntro";
 import { RestartPrompt } from "@/components/RestartPrompt";
+import { AccountOverrideWarning } from "@/components/AccountOverrideWarning";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
 import { I18nProvider, translate } from "@/lib/i18n";
@@ -163,6 +164,8 @@ export default function Home() {
 
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const instancesRef = useRef(instances);
+  instancesRef.current = instances;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const skinsAvailableRef = useRef(false);
@@ -794,10 +797,37 @@ export default function Home() {
   }, []);
 
   const refreshAccounts = (s: AccountStore) => setAccounts(s);
+
+  const [acctWarn, setAcctWarn] = useState<{
+    instance: Instance;
+    accountId: string;
+  } | null>(null);
+
+  const handleSelectAccount = (id: string) => {
+    const inst = instancesRef.current.find((i) => i.id === selectedRef.current);
+    if (inst?.account_override && inst.account_override !== id) {
+      setAcctWarn({ instance: inst, accountId: id });
+      return;
+    }
+    api.selectAccount(id).then(refreshAccounts).catch(() => {});
+  };
+
+  const confirmAccountChange = () => {
+    if (!acctWarn) return;
+    onSaveInstance({ ...acctWarn.instance, account_override: null });
+    api.selectAccount(acctWarn.accountId).then(refreshAccounts).catch(() => {});
+    setAcctWarn(null);
+  };
   const activeAccount =
     accounts.accounts.find((a) => a.id === accounts.selected) ??
     accounts.accounts[0];
-  
+
+  const overrideAccountId =
+    instance?.account_override &&
+    accounts.accounts.some((a) => a.id === instance.account_override)
+      ? instance.account_override
+      : null;
+
   const skinsAvailable = activeAccount?.kind === "microsoft";
   skinsAvailableRef.current = skinsAvailable;
   const canPlay = accounts.accounts.length > 0;
@@ -945,7 +975,9 @@ export default function Home() {
             <AccountMenu
               store={accounts}
               avatarVersion={avatarVersion}
-              onSelect={(id) => api.selectAccount(id).then(refreshAccounts)}
+              activeId={overrideAccountId}
+              overridden={!!overrideAccountId}
+              onSelect={handleSelectAccount}
               onRemove={(id) => api.removeAccount(id).then(refreshAccounts)}
               onMicrosoftLogin={onMicrosoftLogin}
               recheckSignal={accountsRecheck}
@@ -1048,6 +1080,12 @@ export default function Home() {
                 }
               }}
               launcherSettings={settings}
+              overrideAccount={
+                instance?.account_override
+                  ? accounts.accounts.find((a) => a.id === instance.account_override)
+                      ?.username ?? null
+                  : null
+              }
             />
           )}
 
@@ -1107,6 +1145,7 @@ export default function Home() {
             <InstanceSettingsView
               instance={gearInstance}
               settings={settings}
+              accounts={accounts}
               modStatus={gearId === selectedId ? modStatus : null}
               maintaining={gearMaintaining}
               progress={gearProgress}
@@ -1266,6 +1305,17 @@ export default function Home() {
           version={changelog.version}
           updated={changelog.updated}
           onClose={() => setChangelog(null)}
+        />
+      )}
+      {acctWarn && (
+        <AccountOverrideWarning
+          instanceName={acctWarn.instance.name}
+          accountName={
+            accounts.accounts.find((a) => a.id === acctWarn.accountId)?.username ??
+            acctWarn.accountId
+          }
+          onConfirm={confirmAccountChange}
+          onCancel={() => setAcctWarn(null)}
         />
       )}
       {restartVersion && (

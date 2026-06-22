@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Cookie,
   Loader2,
+  Lock,
 } from "lucide-react";
 import type { Account, AccountStatus, AccountStore } from "@/lib/types";
 import {
@@ -103,6 +104,8 @@ function Avatar({
 export function AccountMenu({
   store,
   avatarVersion = 0,
+  activeId,
+  overridden = false,
   onSelect,
   onRemove,
   onMicrosoftLogin,
@@ -111,22 +114,25 @@ export function AccountMenu({
 }: {
   store: AccountStore;
   avatarVersion?: number;
+  activeId?: string | null;
+  overridden?: boolean;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onMicrosoftLogin: () => void;
   onAddOffline: (username: string) => Promise<void> | void;
-  
+
   recheckSignal?: number;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, AccountStatus>>({});
-  
+
   const [recheckNonce, setRecheckNonce] = useState(0);
   const [checking, setChecking] = useState(false);
 
+  const effectiveSelected = activeId ?? store.selected;
   const active =
-    store.accounts.find((a) => a.id === store.selected) ?? store.accounts[0];
+    store.accounts.find((a) => a.id === effectiveSelected) ?? store.accounts[0];
 
   
   
@@ -163,6 +169,8 @@ export function AccountMenu({
       {open && (
         <AccountsModal
           store={store}
+          selectedId={effectiveSelected}
+          overridden={overridden}
           avatarVersion={avatarVersion}
           statuses={statuses}
           checking={checking}
@@ -197,12 +205,18 @@ export function AccountMenu({
             className={`flex items-center gap-1 text-[10px] ${
               active && needsRelogin(active.id)
                 ? "text-amber-400"
-                : "text-ink-600"
+                : overridden && active
+                  ? "text-brass-400/90"
+                  : "text-ink-600"
             }`}
           >
             {active && needsRelogin(active.id) ? (
               <>
                 <AlertTriangle size={10} /> {t("account.reloginRequired")}
+              </>
+            ) : overridden && active ? (
+              <>
+                <Lock size={10} /> {t("account.instanceOverride")}
               </>
             ) : active ? (
               t("account.manageAccounts")
@@ -224,6 +238,8 @@ export function AccountMenu({
 
 function AccountsModal({
   store,
+  selectedId,
+  overridden,
   avatarVersion,
   statuses,
   checking,
@@ -235,6 +251,8 @@ function AccountsModal({
   onRecheck,
 }: {
   store: AccountStore;
+  selectedId: string | null;
+  overridden: boolean;
   avatarVersion: number;
   statuses: Record<string, AccountStatus>;
   checking: boolean;
@@ -252,7 +270,7 @@ function AccountsModal({
   const [clearing, setClearing] = useState(false);
 
   const active =
-    store.accounts.find((a) => a.id === store.selected) ?? store.accounts[0];
+    store.accounts.find((a) => a.id === selectedId) ?? store.accounts[0];
   const needsRelogin = (id: string) => statuses[id] === "needs_relogin";
 
   useEffect(() => {
@@ -335,7 +353,9 @@ function AccountsModal({
                       </div>
                       <div className="text-[10px] text-ink-600">
                         {a.kind === "offline" ? t("account.offlineAccount") : t("account.microsoft")}
-                        {isActive ? ` · ${t("account.active")}` : ""}
+                        {isActive
+                          ? ` · ${overridden ? t("account.instanceOverride") : t("account.active")}`
+                          : ""}
                       </div>
                     </button>
                     {needsRelogin(a.id) && (

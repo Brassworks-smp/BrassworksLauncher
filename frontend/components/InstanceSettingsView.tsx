@@ -23,6 +23,7 @@ import {
   Copy,
   Lock,
   Pin,
+  UserRound,
 } from "lucide-react";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
@@ -49,6 +50,7 @@ import type {
   JavaReport,
   LoaderKind,
   LoaderVersion,
+  AccountStore,
 } from "@/lib/types";
 import {
   Card,
@@ -132,6 +134,7 @@ function presetIdForArgs(args: string[]): string {
 export function InstanceSettingsView({
   instance,
   settings,
+  accounts,
   modStatus,
   maintaining,
   progress,
@@ -143,6 +146,7 @@ export function InstanceSettingsView({
 }: {
   instance: Instance;
   settings: LauncherSettings;
+  accounts: AccountStore;
   modStatus: ModpackStatus | null;
   maintaining: boolean;
   progress: LaunchProgress | null;
@@ -330,6 +334,36 @@ export function InstanceSettingsView({
           </Card>
           <ExportCard instanceId={instance.id} />
           {canEditVersion && <VersionLoaderCard instance={instance} onSave={patch} />}
+
+          <Card title={t("instanceSettings.account.title")} icon={<UserRound size={14} />}>
+            <Field
+              label={t("instanceSettings.account.override")}
+              hint={t("instanceSettings.account.overrideHint")}
+            >
+              <Dropdown
+                value={instance.account_override ?? ""}
+                onChange={(v) => patch({ account_override: v || null })}
+                placeholder={t("instanceSettings.account.useSelected")}
+                options={[
+                  { value: "", label: t("instanceSettings.account.useSelected") },
+                  ...accounts.accounts.map((a) => ({
+                    value: a.id,
+                    label:
+                      a.kind === "offline"
+                        ? `${a.username} (${t("account.offlineAccount")})`
+                        : a.username,
+                  })),
+                ]}
+              />
+            </Field>
+            {instance.account_override &&
+              !accounts.accounts.some((a) => a.id === instance.account_override) && (
+                <p className="mt-1 text-xs text-amber-400/80">
+                  {t("instanceSettings.account.missing")}
+                </p>
+              )}
+          </Card>
+
           <Card
             title={t("instanceSettings.memory.title")}
             icon={<SlidersHorizontal size={14} />}
