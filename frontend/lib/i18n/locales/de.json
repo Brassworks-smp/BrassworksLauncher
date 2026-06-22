@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Offline Account",
     "active": "Aktiv",
+    "instanceOverride": "",
     "signOut": "Ausloggen",
     "relogin": "Erneut Einloggen",
     "reloginRequired": "Erneuter Login erforderlich",
@@ -286,7 +287,11 @@
       "parallel": "Parallele Downloads",
       "parallelHint": "",
       "sequential": "Sequenziell (aus)",
-      "def16": "16 (Standard)"
+      "def16": "16 (Standard)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "Cache",
@@ -380,6 +385,22 @@
       "forge": "",
       "fabric": "",
       "quilt": ""
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "",
@@ -642,6 +663,29 @@
     "onlinePing": "",
     "statusOffline": ""
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "",
     "modpackFallback": "",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "",
     "namePlaceholder": "",
     "modLoader": "",
@@ -684,8 +734,17 @@
     "importSelectedNone": "",
     "uploadInstead": ""
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "",
+    "accountMissing": "",
     "featuredPack": "",
     "modrinthModpack": "",
     "curseforgeModpack": "",
@@ -702,6 +761,10 @@
     "cancelDownload": "",
     "signInToPlay": "",
     "filesFailed": "",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "",
     "customizeTitle": "",
     "pinHint": "",

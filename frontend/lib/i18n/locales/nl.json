@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Offline Account",
     "active": "Actief",
+    "instanceOverride": "",
     "signOut": "Log uit",
     "relogin": "Opnieuw inloggen",
     "reloginRequired": "Opnieuw inloggen vereist",
@@ -286,7 +287,11 @@
       "parallel": "Gelijktijdige downloads",
       "parallelHint": "Hoeveel bestanden er tegelijkertijd worden opgehaald / geverifieerd bij het installeren of bijwerken van een modpack. Hoger is sneller, lager is vriendelijker voor trage verbindingen. Kies Sequentieel om dit uit te schakelen.",
       "sequential": "Sequentieel (uit)",
-      "def16": "16 (standaard)"
+      "def16": "16 (standaard)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "Cache",
@@ -380,6 +385,22 @@
       "forge": "Forge",
       "fabric": "Fabric",
       "quilt": "Quilt"
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "Geheugen",
@@ -642,6 +663,29 @@
     "onlinePing": "Online · {ms} ms",
     "statusOffline": "Offline"
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "Nieuwe instantie",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "Controleren op optionele content…",
     "modpackFallback": "Modpack",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Naam",
     "namePlaceholder": "Mijn Instantie",
     "modLoader": "Modloader",
@@ -684,8 +734,17 @@
     "importSelectedNone": "Geselecteerde importeren",
     "uploadInstead": "In plaats daarvan een .mrpack / CurseForge .zip uploaden"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "Instantie laden…",
+    "accountMissing": "",
     "featuredPack": "Uitgelicht pack",
     "modrinthModpack": "Modrinth-modpack",
     "curseforgeModpack": "Curseforge-modpack",
@@ -702,6 +761,10 @@
     "cancelDownload": "Annuleer download",
     "signInToPlay": "Log in met Microsoft om te beginnen met spelen.",
     "filesFailed": "{count} bestanden konden niet worden gedownload — ze worden opnieuw geprobeerd bij de volgende start.",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "Aanpassen",
     "customizeTitle": "Kies welke instellingen hier worden weergegeven",
     "pinHint": "Zet instellingen hier vast voor snelle toegang. Klik om te kiezen.",
