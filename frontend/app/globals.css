@@ -1,7 +1,4 @@
 @import "tailwindcss";
-
-/* ---- Bundled UI font (Inter, OFL) so every OS renders identically instead of
-   falling back to each platform's system font (SF on macOS, Segoe on Windows…). */
 @font-face {
   font-family: "Inter";
   src: url("/fonts/Inter-400.woff2") format("woff2");
@@ -26,8 +23,6 @@
   font-weight: 700;
   font-display: swap;
 }
-
-/* ---- Minecraft brand font (from the Brassworks website) ---- */
 @font-face {
   font-family: "minecraft";
   src: url("/fonts/MinecraftRegular.woff2") format("woff2");
@@ -46,7 +41,6 @@
   font-style: italic;
   font-display: swap;
 }
-
 @font-face {
   font-family: "Monocraft";
   src: url("/fonts/MonocraftExtended-Regular.woff2") format("woff2");
@@ -60,40 +54,29 @@
   font-display: swap;
 }
 @theme {
-  /* Dark surfaces (website: bg 5%, card 10%, popover 12%) */
   --color-ink-950: #080808;
   --color-ink-900: #0d0d0d;
   --color-ink-850: #141414;
   --color-ink-800: #1a1a1a;
   --color-ink-700: #242424;
-  --color-ink-600: #9b9b9b; /* used only as muted text */
-
-  /* Accent — website green hsl(142 70% 45%) */
+  --color-ink-600: #9b9b9b;
   --color-brass-300: #5fe393;
   --color-brass-400: #34d27a;
   --color-brass-500: #1fbf63;
   --color-brass-600: #18a153;
   --color-brass-700: #14803f;
-
-  /* Secondary accent (running/online) — slightly cyan green */
   --color-patina-400: #34e0b4;
   --color-patina-500: #1fb88f;
-
-  /* Hairline borders (website uses gray-200/10) */
   --color-edge: rgba(229, 231, 235, 0.1);
-
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mc: "minecraft", "Monocraft", ui-monospace, monospace;
-
   --radius-xl: 0.5rem;
 }
-
 @layer base {
   html,
   body {
     height: 100%;
   }
-
   body {
     margin: 0;
     background: var(--color-ink-900);
@@ -102,11 +85,6 @@
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
-
-  /* ---- Accessibility: every interactive control shows the hand cursor on
-     hover. Native <button>/<a>/<summary> plus anything tagged with an
-     interactive role or onClick-driven role=button. Disabled controls get the
-     not-allowed cursor so the disabled state reads clearly. */
   button,
   a[href],
   summary,
@@ -124,10 +102,6 @@
   [aria-disabled="true"] {
     cursor: not-allowed;
   }
-
-  /* ---- Light mode: remap the dark ink scale to light surfaces. Every
-     `bg-ink-*` / `text-ink-*` utility resolves through these vars, so flipping
-     them here recolors the whole app while keeping the brass/patina accents. */
   :root.theme-light {
     --color-fg: #1c1c1a;
     --color-ink-950: #ececea;
@@ -137,29 +111,25 @@
     --color-ink-700: #dcdad5;
     --color-ink-600: #6b6a66;
     --color-edge: rgba(20, 20, 20, 0.12);
-    /* Readable green accents for text/icons on white… */
     --color-brass-300: #15803d;
     --color-brass-400: #15803d;
-    /* …and a vivid green for filled buttons/toggles. */
     --color-brass-500: #1bbf5f;
     --color-brass-600: #15a34a;
     --color-brass-700: #0e7a37;
-    /* Patina (online/installed) needs darkening for light surfaces. */
     --color-patina-400: #0f766e;
     --color-patina-500: #14b8a6;
   }
   :root.theme-light body {
     color: var(--color-fg);
   }
-
   :root.theme-grey {
     --color-fg: #e7e9ec;
     --color-ink-950: #181a1d;
-    --color-ink-900: #202327; /* body background */
+    --color-ink-900: #202327;
     --color-ink-850: #272a2f;
     --color-ink-800: #2e3237;
     --color-ink-700: #3a3f45;
-    --color-ink-600: #9ba1a8; /* muted text */
+    --color-ink-600: #9ba1a8;
     --color-edge: rgba(255, 255, 255, 0.09);
   }
   :root.theme-grey body {
@@ -168,116 +138,97 @@
   :root.theme-grey ::-webkit-scrollbar-thumb:hover {
     background: #4a4f56;
   }
-
-  /* ---- Ocean: a cool blue-grey dark theme. */
   :root.theme-ocean {
     --color-fg: #e6edf3;
     --color-ink-950: #0d1117;
-    --color-ink-900: #11161d; /* body background */
+    --color-ink-900: #11161d;
     --color-ink-850: #161d26;
     --color-ink-800: #1c2530;
     --color-ink-700: #2a3340;
-    --color-ink-600: #8b97a6; /* muted text */
+    --color-ink-600: #8b97a6;
     --color-edge: rgba(120, 165, 215, 0.13);
   }
   :root.theme-ocean body {
     color: var(--color-fg);
   }
-
-  /* ---- Mocha: a warm brown-grey dark theme. */
   :root.theme-mocha {
     --color-fg: #ede3da;
     --color-ink-950: #1a1411;
-    --color-ink-900: #211a15; /* body background */
+    --color-ink-900: #211a15;
     --color-ink-850: #29201a;
     --color-ink-800: #322820;
     --color-ink-700: #40342a;
-    --color-ink-600: #a8998b; /* muted text */
+    --color-ink-600: #a8998b;
     --color-edge: rgba(255, 225, 200, 0.11);
   }
   :root.theme-mocha body {
     color: var(--color-fg);
   }
-
-  /* ---- Nord: a crisp arctic blue-grey theme (Polar Night surfaces). */
   :root.theme-nord {
     --color-fg: #eceff4;
     --color-ink-950: #2b303b;
-    --color-ink-900: #2e3440; /* body background */
+    --color-ink-900: #2e3440;
     --color-ink-850: #353c4a;
     --color-ink-800: #3b4252;
     --color-ink-700: #4c566a;
-    --color-ink-600: #8a93a5; /* muted text */
+    --color-ink-600: #8a93a5;
     --color-edge: rgba(216, 222, 233, 0.12);
   }
   :root.theme-nord body {
     color: var(--color-fg);
   }
-
-  /* ---- Rosé: a warm, soft dusty-pink/mauve theme. */
   :root.theme-rose {
     --color-fg: #f0e0e6;
     --color-ink-950: #1e151a;
-    --color-ink-900: #261a20; /* body background */
+    --color-ink-900: #261a20;
     --color-ink-850: #2f2028;
     --color-ink-800: #382630;
     --color-ink-700: #4a3340;
-    --color-ink-600: #b591a0; /* muted text */
+    --color-ink-600: #b591a0;
     --color-edge: rgba(245, 200, 220, 0.11);
   }
   :root.theme-rose body {
     color: var(--color-fg);
   }
-
-  /* ---- Amethyst: a deep, cool blue-violet/indigo theme. */
   :root.theme-amethyst {
     --color-fg: #e7e6f7;
     --color-ink-950: #121022;
-    --color-ink-900: #181527; /* body background */
+    --color-ink-900: #181527;
     --color-ink-850: #1e1a33;
     --color-ink-800: #251f3f;
     --color-ink-700: #332c54;
-    --color-ink-600: #948fc0; /* muted text */
+    --color-ink-600: #948fc0;
     --color-edge: rgba(180, 175, 255, 0.13);
   }
   :root.theme-amethyst body {
     color: var(--color-fg);
   }
-
-  /* ---- Crimson: a dramatic deep-red/maroon theme. */
   :root.theme-crimson {
     --color-fg: #f3e3e1;
     --color-ink-950: #1a0f0f;
-    --color-ink-900: #211311; /* body background */
+    --color-ink-900: #211311;
     --color-ink-850: #2a1714;
     --color-ink-800: #341c18;
     --color-ink-700: #452621;
-    --color-ink-600: #b58e88; /* muted text */
+    --color-ink-600: #b58e88;
     --color-edge: rgba(255, 180, 170, 0.12);
   }
   :root.theme-crimson body {
     color: var(--color-fg);
   }
-
-  /* ---- Forest: a deep emerald-green theme. */
   :root.theme-forest {
     --color-fg: #e2efe5;
     --color-ink-950: #0d1611;
-    --color-ink-900: #111c15; /* body background */
+    --color-ink-900: #111c15;
     --color-ink-850: #15231a;
     --color-ink-800: #1b2c20;
     --color-ink-700: #263a2d;
-    --color-ink-600: #8aa896; /* muted text */
+    --color-ink-600: #8aa896;
     --color-edge: rgba(170, 230, 190, 0.12);
   }
   :root.theme-forest body {
     color: var(--color-fg);
   }
-
-  /* ---- High-contrast mode: an accessibility *overlay* applied on top of any
-     theme (it comes after the theme blocks so its edge/fg wins). Pumps border
-     visibility and text brightness. The light variant has higher specificity so
-     it correctly flips to dark-on-light regardless of source order. */
   :root.theme-contrast {
     --color-fg: #ffffff;
     --color-ink-600: #cfcfcf;
@@ -291,26 +242,17 @@
     --color-ink-600: #262626;
     --color-edge: rgba(0, 0, 0, 0.5);
   }
-
-  /* ---- Reduced motion: drop decorative animations/transitions, keep spinners. */
   :root.reduce-motion *:not(.animate-spin),
   :root.reduce-motion *:not(.animate-spin)::before,
   :root.reduce-motion *:not(.animate-spin)::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
-
-  /* Feel like a native app, not a web page: no text selection or image drag,
-     except inside real text inputs. */
   * {
     -webkit-user-select: none;
     user-select: none;
     -webkit-user-drag: none;
   }
-  /* …but elements that explicitly opt into HTML5 drag-and-drop must be allowed
-     to drag. On WebKit the `*` rule above otherwise vetoes `draggable="true"`,
-     which silently breaks all in-app drag-and-drop (e.g. dragging instance
-     cards into folders). `element` makes the node drag as a single unit. */
   [draggable="true"] {
     -webkit-user-drag: element;
   }
@@ -324,7 +266,6 @@
     -webkit-user-drag: none;
     user-drag: none;
   }
-
   ::-webkit-scrollbar {
     width: 9px;
     height: 9px;
@@ -337,9 +278,7 @@
     background: #2f2f2f;
   }
 }
-
 @layer utilities {
-  /* Global tooltip bubble entrance (see components/Tooltip.tsx) */
   .tip-fade {
     animation: tip-fade 110ms ease-out;
   }
@@ -348,51 +287,43 @@
       opacity: 0;
     }
   }
-
   .drag {
     -webkit-app-region: drag;
   }
   .no-drag {
     -webkit-app-region: no-drag;
   }
-
   .font-mc {
     font-family: var(--font-mc);
   }
-
-  /* Website "schematic" blueprint grid background */
   .schem-bg {
     background-image:
-      linear-gradient(rgba(237, 237, 237, 0.15) 3px, transparent 3px),
-      linear-gradient(90deg, rgba(237, 237, 237, 0.15) 3px, transparent 3px),
-      linear-gradient(rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px),
-      linear-gradient(90deg, rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px);
+            linear-gradient(rgba(237, 237, 237, 0.15) 3px, transparent 3px),
+            linear-gradient(90deg, rgba(237, 237, 237, 0.15) 3px, transparent 3px),
+            linear-gradient(rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px),
+            linear-gradient(90deg, rgba(237, 237, 237, 0.06) 1.5px, transparent 1.5px);
     background-size:
-      100px 100px,
-      100px 100px,
-      20px 20px,
-      20px 20px;
+            100px 100px,
+            100px 100px,
+            20px 20px,
+            20px 20px;
     background-position:
-      -4px -4px,
-      -4px -4px,
-      -2px -2px,
-      -2px -2px;
+            -4px -4px,
+            -4px -4px,
+            -2px -2px,
+            -2px -2px;
     background-color: var(--color-ink-900);
   }
-
   .pixelated {
     image-rendering: pixelated;
   }
-
   .panel {
     background: var(--color-ink-800);
     border: 1px solid var(--color-edge);
   }
-
   .play-hero-glass {
     isolation: isolate;
   }
-
   .play-hero-glass::before {
     content: "";
     position: absolute;
@@ -401,28 +332,25 @@
     border-radius: inherit;
     pointer-events: none;
     background:
-      radial-gradient(120% 110% at 0% 0%, rgba(31, 191, 99, 0.22), transparent 55%),
-      radial-gradient(100% 100% at 100% 100%, rgba(31, 191, 99, 0.12), transparent 60%),
-      rgba(14, 14, 14, 0.86);
+            radial-gradient(120% 110% at 0% 0%, rgba(31, 191, 99, 0.22), transparent 55%),
+            radial-gradient(100% 100% at 100% 100%, rgba(31, 191, 99, 0.12), transparent 60%),
+            rgba(14, 14, 14, 0.86);
     background:
-      radial-gradient(
-        120% 110% at 0% 0%,
-        color-mix(in srgb, var(--color-brass-500) 22%, transparent),
-        transparent 55%
-      ),
-      radial-gradient(
-        100% 100% at 100% 100%,
-        color-mix(in srgb, var(--color-brass-400) 13%, transparent),
-        transparent 60%
-      ),
-      color-mix(in srgb, var(--color-ink-950) 88%, transparent);
+            radial-gradient(
+                    120% 110% at 0% 0%,
+                    color-mix(in srgb, var(--color-brass-500) 22%, transparent),
+                    transparent 55%
+            ),
+            radial-gradient(
+                    100% 100% at 100% 100%,
+                    color-mix(in srgb, var(--color-brass-400) 13%, transparent),
+                    transparent 60%
+            ),
+            color-mix(in srgb, var(--color-ink-950) 88%, transparent);
     backdrop-filter: blur(22px) saturate(1.3);
     -webkit-backdrop-filter: blur(22px) saturate(1.3);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   }
-
-  /* Fine fractal-noise grain over the frosted layer, also rounded to the card's
-     corners so the texture never spills past them. */
   .play-hero-glass::after {
     content: "";
     position: absolute;
@@ -435,49 +363,35 @@
     opacity: 0.32;
     mix-blend-mode: overlay;
   }
-
-  /* Play hero overlay: an accent-tinted glow up top fading into the surface
-     colour at the bottom. Both stops are theme/accent-driven (the green tint
-     follows the global accent; the fade follows the surface), so light, dark and
-     grey themes all read correctly with no per-theme override. */
   .play-hero-overlay {
-    /* Fallback for webviews without color-mix() (kept as the first declaration
-       so they ignore the accent-aware one below and use this). */
     background:
-      radial-gradient(80% 70% at 50% 0%, rgba(31, 191, 99, 0.16), transparent 60%),
-      linear-gradient(180deg, transparent, rgba(8, 8, 8, 0.85));
+            radial-gradient(80% 70% at 50% 0%, rgba(31, 191, 99, 0.16), transparent 60%),
+            linear-gradient(180deg, transparent, rgba(8, 8, 8, 0.85));
     background:
-      radial-gradient(
-        80% 70% at 50% 0%,
-        color-mix(in srgb, var(--color-brass-500) 16%, transparent),
-        transparent 60%
-      ),
-      linear-gradient(
-        180deg,
-        transparent,
-        color-mix(in srgb, var(--color-ink-900) 85%, transparent)
-      );
+            radial-gradient(
+                    80% 70% at 50% 0%,
+                    color-mix(in srgb, var(--color-brass-500) 16%, transparent),
+                    transparent 60%
+            ),
+            linear-gradient(
+                    180deg,
+                    transparent,
+                    color-mix(in srgb, var(--color-ink-900) 85%, transparent)
+            );
   }
-
-  /* Re-enable text selection (the global `*` rule disables it app-wide) so
-     users can highlight and copy parts of the log. */
   .selectable,
   .selectable * {
     -webkit-user-select: text;
     user-select: text;
     cursor: text;
   }
-
   .brass-text {
     color: var(--color-brass-400);
   }
-
-  /* Chunky Minecraft-style raised button shadow */
   .glow {
     box-shadow: 0 0 0 1px var(--color-edge);
   }
 }
-
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -486,18 +400,16 @@
     background-position: 200% 0;
   }
 }
-
 .progress-fill {
   background: linear-gradient(
-    90deg,
-    var(--color-brass-600),
-    var(--color-brass-400),
-    var(--color-brass-600)
+          90deg,
+          var(--color-brass-600),
+          var(--color-brass-400),
+          var(--color-brass-600)
   );
   background-size: 200% 100%;
   animation: shimmer 2.2s linear infinite;
 }
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -511,7 +423,6 @@
 .rise {
   animation: rise 0.35s ease both;
 }
-
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -526,12 +437,6 @@
 .fade-out {
   animation: fade-out 0.18s ease both;
 }
-
-/* Slide-up driven by margin-top (a layout property) rather than `transform`.
-   WebKit/WKWebView keeps an element with a transform animation acting as the
-   containing block for `position: fixed` descendants even at rest, which would
-   trap every modal's full-screen backdrop inside the current tab instead of
-   covering the whole launcher. A margin-based slide avoids that entirely. */
 @keyframes view-in {
   from {
     opacity: 0;
@@ -545,9 +450,6 @@
 .view-anim {
   animation: view-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* Modal backdrop fade + panel pop. Add `.modal-overlay` to the full-screen
-   backdrop; its direct child (the panel) gets the pop automatically. */
 @keyframes modal-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -568,7 +470,6 @@
 .modal-overlay > * {
   animation: modal-pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
 @keyframes modal-backdrop-out {
   from { opacity: 1; }
   to { opacity: 0; }
@@ -589,10 +490,6 @@
 .modal-overlay-out > * {
   animation: modal-pop-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
 }
-
-/* Content swap — used when a panel switches what it shows in place (e.g. the
-   modpack overview ⇄ version list, or a project's readme ⇄ versions). Re-key
-   the swapped node so it slides + fades in. */
 @keyframes swap-in {
   from {
     opacity: 0;
@@ -606,7 +503,6 @@
 .swap-in {
   animation: swap-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-/* Backwards variant — slides in from the left, for "back" navigation. */
 @keyframes swap-in-back {
   from {
     opacity: 0;
@@ -620,8 +516,6 @@
 .swap-in-back {
   animation: swap-in-back 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* Vertical reveal for inline expanders that lazily mount their body. */
 @keyframes reveal-down {
   from {
     opacity: 0;
@@ -635,9 +529,6 @@
 .reveal-down {
   animation: reveal-down 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* Staggered list/grid entrance — add `.stagger` to a container and its direct
-   children rise in sequence. Capped so long lists don't crawl in. */
 .stagger > * {
   animation: rise 0.34s ease both;
 }
@@ -651,16 +542,9 @@
 .stagger > *:nth-child(8) { animation-delay: 0.23s; }
 .stagger > *:nth-child(9) { animation-delay: 0.26s; }
 .stagger > *:nth-child(n + 10) { animation-delay: 0.29s; }
-/* The global reduce-motion override only zeroes durations, not delays — clear
-   the stagger delays too so reduced-motion users don't see items held hidden. */
 :root.reduce-motion .stagger > * {
   animation-delay: 0s !important;
 }
-
-/* Density swap: a quick, snappy scale+fade for the whole instance grid when
-   toggling between comfortable and compact cards. Kept short so it's smooth but
-   never in the way. The grids are keyed on the density so this replays on each
-   toggle; their `.stagger` children cascade in underneath for a layered feel. */
 @keyframes density-swap {
   from {
     opacity: 0;
@@ -674,31 +558,22 @@
 .density-swap {
   animation: density-swap 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* Hover-lift: a gentle float for clickable cards/tiles. Pairs with the existing
-   border-colour hover the cards already have. */
 .hover-lift {
   transition:
-    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.18s ease,
-    border-color 0.18s ease;
+          transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 0.18s ease,
+          border-color 0.18s ease;
 }
 .hover-lift:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.55);
 }
-
-/* Tactile press feedback for buttons that don't already have a custom active
-   state (the big PLAY button keeps its own ledge-shadow press). */
 .pressable {
   transition: transform 0.09s ease;
 }
 .pressable:active {
   transform: scale(0.96);
 }
-
-/* Keyboard focus ring — only shows for keyboard users (:focus-visible), giving
-   the app proper a11y affordance without cluttering mouse interaction. */
 button:focus-visible,
 a:focus-visible,
 [role="switch"]:focus-visible,
@@ -708,10 +583,6 @@ a:focus-visible,
   outline-offset: 2px;
   border-radius: 6px;
 }
-
-/* Animated shine sweep across the primary brass call-to-action on hover. The
-   overflow clip only affects the sheen pseudo-element, not the ledge shadow
-   (box-shadow draws outside the clip box). */
 .brass-btn {
   position: relative;
   overflow: hidden;
@@ -722,10 +593,10 @@ a:focus-visible,
   position: absolute;
   inset: 0;
   background: linear-gradient(
-    110deg,
-    transparent 35%,
-    rgba(255, 255, 255, 0.28) 50%,
-    transparent 65%
+          110deg,
+          transparent 35%,
+          rgba(255, 255, 255, 0.28) 50%,
+          transparent 65%
   );
   transform: translateX(-130%);
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
@@ -735,32 +606,23 @@ a:focus-visible,
 .brass-btn:hover::after {
   transform: translateX(130%);
 }
-
-/* ---- Skeleton placeholders (shown instantly while heavy content mounts) ---- */
 @keyframes skeleton-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: 0 0; }
 }
 .skeleton {
   background: linear-gradient(
-    90deg,
-    var(--color-ink-800) 25%,
-    var(--color-ink-700) 37%,
-    var(--color-ink-800) 63%
+          90deg,
+          var(--color-ink-800) 25%,
+          var(--color-ink-700) 37%,
+          var(--color-ink-800) 63%
   );
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
-
-/* Rows in long lists isolate their own layout so toggling/expanding one doesn't
-   reflow the rest. We intentionally do NOT use content-visibility here: skipping
-   off-screen rows defers their icon fetch and paint until they scroll in, which
-   makes fast scrolling pop in late. Rendering them up front keeps it seamless. */
 .cv-auto {
   contain: layout;
 }
-
-/* Soft pulsing halo for "live"/running status dots. */
 @keyframes halo {
   0%,
   100% {
@@ -773,18 +635,14 @@ a:focus-visible,
 .halo {
   animation: halo 1.8s ease-in-out infinite;
 }
-
-/* ---- Rendered Modrinth markdown ---- */
 .markdown {
   color: #c7c7c7;
   font-size: 13.5px;
   line-height: 1.65;
   word-break: break-word;
 }
-/* Collapse the leading/trailing margins so the block sits flush in its panel. */
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
-
 .markdown h1,
 .markdown h2,
 .markdown h3,
@@ -798,7 +656,6 @@ a:focus-visible,
   margin: 1.4em 0 0.55em;
   line-height: 1.3;
 }
-/* Brass underline rule on the top-level headings to match the schematic theme. */
 .markdown h1,
 .markdown h2 {
   padding-bottom: 0.3em;
@@ -810,12 +667,10 @@ a:focus-visible,
 .markdown h4 { font-size: 0.95rem; color: var(--color-brass-400); }
 .markdown h5,
 .markdown h6 { font-size: 0.9rem; color: var(--color-ink-600); text-transform: uppercase; letter-spacing: 0.06em; }
-
 .markdown p { margin: 0.65em 0; }
 .markdown strong, .markdown b { color: #ededed; font-weight: 700; }
 .markdown em, .markdown i { color: #e0e0e0; }
 .markdown del { color: var(--color-ink-600); }
-
 .markdown a {
   color: var(--color-brass-300);
   text-decoration: none;
@@ -824,7 +679,6 @@ a:focus-visible,
   cursor: pointer;
 }
 .markdown a:hover { color: var(--color-brass-400); border-bottom-color: var(--color-brass-400); }
-
 .markdown ul,
 .markdown ol { margin: 0.65em 0; padding-left: 1.4em; }
 .markdown ul { list-style: disc; }
@@ -832,7 +686,6 @@ a:focus-visible,
 .markdown ul ul { list-style: circle; }
 .markdown li { margin: 0.3em 0; }
 .markdown li::marker { color: var(--color-brass-500); }
-
 .markdown blockquote {
   margin: 0.8em 0;
   padding: 0.3em 0 0.3em 0.9em;
@@ -842,9 +695,6 @@ a:focus-visible,
   border-radius: 0 4px 4px 0;
 }
 .markdown blockquote p { margin: 0.35em 0; }
-
-/* Inline so several small badges/images on one source line sit side by side
-   (like GitHub / Modrinth) instead of stacking. */
 .markdown img {
   max-width: 100%;
   height: auto;
@@ -853,7 +703,6 @@ a:focus-visible,
   vertical-align: middle;
   margin: 0.15em 0.25em 0.15em 0;
 }
-
 .markdown code {
   background: var(--color-ink-950);
   padding: 0.12em 0.4em;
@@ -876,10 +725,6 @@ a:focus-visible,
 .markdown pre code.hljs { color: #d6deeb; }
 :root.theme-light .markdown pre code,
 :root.theme-light .markdown pre code.hljs { color: #24292f; }
-
-/* Syntax highlighting — accent-derived tokens, each nudged toward a different
-   hue so shades vary while staying tied to the current accent (custom accents
-   and per-source panel accents flow through automatically via --color-brass-*). */
 .markdown {
   --hl-comment: color-mix(in srgb, var(--color-brass-400) 28%, var(--color-ink-600));
   --hl-keyword: var(--color-brass-400);
@@ -922,9 +767,7 @@ a:focus-visible,
 .markdown .hljs-doctag { color: var(--hl-meta); }
 .markdown .hljs-emphasis { font-style: italic; }
 .markdown .hljs-strong { font-weight: 700; }
-
 .markdown hr { border: none; border-top: 1px solid var(--color-edge); margin: 1.4em 0; }
-
 .markdown table {
   border-collapse: collapse;
   margin: 0.9em 0;
@@ -940,10 +783,6 @@ a:focus-visible,
 .markdown td,
 .markdown th { border: 1px solid var(--color-edge); padding: 0.4em 0.7em; }
 .markdown tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
-
-/* Hide the native number-input spinner (its arrows are an unstyleable
-   dark-on-dark in our themes). Inputs marked `.no-spin` supply their own themed
-   stepper buttons instead. */
 .no-spin::-webkit-outer-spin-button,
 .no-spin::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -953,8 +792,6 @@ a:focus-visible,
   -moz-appearance: textfield;
   appearance: textfield;
 }
-
-/* ---- Themed range slider (brass) ---- */
 .brass-range {
   -webkit-appearance: none;
   appearance: none;
@@ -988,13 +825,6 @@ a:focus-visible,
   border: 1px solid var(--color-brass-700);
   cursor: pointer;
 }
-
-/* ============================================================================
-   Light-mode readability overrides. These are intentionally UNLAYERED: Tailwind
-   ships its utilities in `@layer utilities`, and unlayered rules win over any
-   layered rule regardless of specificity — which is what we need to recolor the
-   fixed `text-gray-*` utilities that don't go through our CSS vars.
-   ============================================================================ */
 :root.theme-light .text-gray-100,
 :root.theme-light .text-gray-200,
 :root.theme-light .text-gray-300 {
@@ -1006,11 +836,6 @@ a:focus-visible,
 :root.theme-light .text-gray-500 {
   color: #6b6a66;
 }
-/* (Brass accent text is handled by the remapped --color-brass-* vars so that an
-   inline accent override — e.g. CurseForge orange — still wins.) */
-
-/* Duplicate-mods warning banner — theme-aware so it stays legible in light mode
-   (the previous amber-200-on-amber-10 combo washed out on a light background). */
 .dup-warn {
   border-color: rgba(245, 158, 11, 0.3);
   background: rgba(245, 158, 11, 0.1);
@@ -1027,17 +852,13 @@ a:focus-visible,
 :root.theme-light .dup-warn .dup-warn-list {
   color: #b45309;
 }
-
-/* Featured-pack hero: light grid + light fade so the dark title text reads. */
 :root.theme-light .schem-bg {
   background-image:
-    linear-gradient(rgba(20, 20, 20, 0.05) 3px, transparent 3px),
-    linear-gradient(90deg, rgba(20, 20, 20, 0.05) 3px, transparent 3px),
-    linear-gradient(rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px),
-    linear-gradient(90deg, rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px);
+          linear-gradient(rgba(20, 20, 20, 0.05) 3px, transparent 3px),
+          linear-gradient(90deg, rgba(20, 20, 20, 0.05) 3px, transparent 3px),
+          linear-gradient(rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px),
+          linear-gradient(90deg, rgba(20, 20, 20, 0.025) 1.5px, transparent 1.5px);
 }
-
-/* Rendered markdown uses fixed near-white colours; darken for light mode. */
 :root.theme-light .markdown {
   color: #33322f;
 }
@@ -1060,15 +881,9 @@ a:focus-visible,
 :root.theme-light .markdown pre code {
   color: #33322f;
 }
-
-/* `ink-950` doubles as the deepest background AND as dark text on bright accent
-   buttons. In light mode keep the *text* usage dark so button labels stay legible
-   on green (the background usage still flips light via the var). */
 :root.theme-light .text-ink-950 {
   color: #14140f;
 }
-
-/* ---- Theme-aware log levels (used by the log viewer) ---- */
 .log-error { color: #f3795f; }
 .log-warn { color: #e0b15a; }
 .log-info { color: #5fc88a; }
@@ -1079,16 +894,10 @@ a:focus-visible,
 :root.theme-light .log-info { color: #15803d; }
 :root.theme-light .log-debug { color: #8a8884; }
 :root.theme-light .log-default { color: #36352f; }
-
-/* ---- Source badges (Modrinth / CurseForge) — readable in both themes ---- */
 .badge-modrinth { background: rgba(31, 191, 99, 0.15); color: #2fa45f; }
 .badge-curseforge { background: rgba(241, 100, 54, 0.16); color: #f58c6b; }
 :root.theme-light .badge-modrinth { color: #0f7a3a; }
 :root.theme-light .badge-curseforge { color: #c2410c; }
-
-/* ---- Primary call-to-action buttons get a nicer, brighter look in light mode
-   (a soft green gradient + crisp ledge shadow) so they don't look out of place
-   on white. Class is a no-op in dark mode (utilities apply there). ---- */
 :root.theme-light .brass-btn {
   background: linear-gradient(180deg, #2bd36c, #16a34a);
 }
