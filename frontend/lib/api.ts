@@ -636,6 +636,7 @@ export const onPackStarted = (
 ): Promise<UnlistenFn> =>
   listen<Instance>("pack://started", (e) => cb(e.payload));
 export const cancelInstall = (): Promise<void> => cancelOp("__install__");
+export const cancelPreflight = (): Promise<void> => cancelOp("__preflight__");
 export const onPackDone = (
   cb: (d: PackDone) => void,
 ): Promise<UnlistenFn> => listen<PackDone>("pack://done", (e) => cb(e.payload));

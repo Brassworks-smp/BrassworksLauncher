@@ -74,7 +74,8 @@ impl Installer {
         crate::parallel_run(
             paths,
             self.concurrency,
-            |path| {
+            || false,
+            |path, _stop| {
                 let url = join_url(base, path);
                 self.get_text(&url).and_then(|t| {
                     toml::from_str::<MetaFile>(&t)
@@ -94,6 +95,29 @@ impl Installer {
         }
         let bytes = resp.bytes().map_err(PackwizError::http)?;
         Ok(bytes.to_vec())
+    }
+
+    fn get_bytes_until(&self, url: &str, stop: &AtomicBool) -> Result<Vec<u8>> {
+        use std::io::Read;
+        if stop.load(Ordering::Relaxed) {
+            return Err(PackwizError::Cancelled);
+        }
+        let mut resp = self.client.get(url).send().map_err(PackwizError::http)?;
+        if !resp.status().is_success() {
+            return Err(PackwizError::Http(format!("GET {url} -> {}", resp.status())));
+        }
+        let mut buf = Vec::with_capacity(resp.content_length().unwrap_or(0) as usize);
+        let mut chunk = [0u8; 65536];
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                return Err(PackwizError::Cancelled);
+            }
+            match resp.read(&mut chunk).map_err(PackwizError::http)? {
+                0 => break,
+                n => buf.extend_from_slice(&chunk[..n]),
+            }
+        }
+        Ok(buf)
     }
 
     pub fn fetch_pack(&self, pack_url: &str) -> Result<Pack> {
@@ -361,26 +385,24 @@ impl Installer {
                         let need: Vec<bool> = crate::parallel_run(
             &plan,
             self.concurrency,
-            |p| self.needs_download(opts, &old, p, force),
+            || cancel(),
+            |p, _stop| self.needs_download(opts, &old, p, force),
             |_, _, _| {},
         );
 
                 let todo: Vec<usize> = (0..plan.len()).filter(|&i| need[i]).collect();
         let total = todo.len() as u64;
-        let cancelled = AtomicBool::new(false);
         let outcomes = crate::parallel_run(
             &todo,
             self.concurrency,
-            |&i| {
-                if cancelled.load(Ordering::Relaxed) {
+            || cancel(),
+            |&i, stop| {
+                if stop.load(Ordering::Relaxed) {
                     return Err(None);                 }
-                self.download_one(&opts.game_dir, &plan[i])
+                self.download_one(&opts.game_dir, &plan[i], stop)
                     .map_err(|e| Some(short_error(&e)))
             },
             |done, total, j| {
-                if cancel() {
-                    cancelled.store(true, Ordering::Relaxed);
-                }
                 emit(
                     progress,
                     SyncStage::Downloading,
@@ -403,7 +425,7 @@ impl Installer {
                 });
             }
         }
-        if cancelled.load(Ordering::Relaxed) {
+        if cancel() {
             self.write_manifest(
                 opts,
                 &pack,
@@ -539,15 +561,19 @@ impl Installer {
         Ok(crate::unsup::resolve(&unsup_toml, &metafiles).groups)
     }
 
-    fn download_one(&self, game_dir: &Path, p: &Planned) -> Result<()> {
+    fn download_one(&self, game_dir: &Path, p: &Planned, stop: &AtomicBool) -> Result<()> {
         const ATTEMPTS: usize = 3;
         let mut last = PackwizError::Other("download failed".into());
         for attempt in 0..ATTEMPTS {
-            match self.get_bytes(&p.url) {
+            if stop.load(Ordering::Relaxed) {
+                return Err(PackwizError::Cancelled);
+            }
+            match self.get_bytes_until(&p.url, stop) {
                 Ok(bytes) => match verify_hash(&p.dest, &p.hash_format, &p.hash, &bytes) {
                     Ok(()) => return write_file(game_dir, &p.dest, &bytes),
                     Err(e) => return Err(e),
                 },
+                Err(PackwizError::Cancelled) => return Err(PackwizError::Cancelled),
                 Err(e) => {
                     last = e;
                     if attempt + 1 < ATTEMPTS {

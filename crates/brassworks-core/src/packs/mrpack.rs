@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use packwiz::{sha512_hex, FileRecord, Manifest, Modrinth};
 use serde::Deserialize;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use super::{
     already_current, cleanup_stale, extract_overrides, note, open_zip, prettify_name,
@@ -113,7 +113,7 @@ pub fn sync(
     progress: Progress,
 ) -> Result<PackResult> {
     note(progress, SyncStage::Fetching, "Downloading modpack");
-    let bytes = modrinth.download(mrpack_url)?;
+    let bytes = modrinth.download_progress(mrpack_url, cancel, &mut |_, _| {})?;
     install_bytes(paths, instance_id, version_id, bytes, optional, concurrency, modrinth, cancel, progress)
 }
 
@@ -178,12 +178,12 @@ pub fn install_bytes(
         todo.push(f);
     }
 
-    let cancelled = AtomicBool::new(false);
     let outcomes = packwiz::parallel_run(
         &todo,
         concurrency,
-        |f| {
-            if cancelled.load(Ordering::Relaxed) {
+        || cancel(),
+        |f, stop| {
+            if stop.load(Ordering::Relaxed) {
                 return FileOutcome::Failed("cancelled".to_string());
             }
             let expected = f.hashes.sha512.as_deref();
@@ -193,7 +193,7 @@ pub fn install_bytes(
             let Some(url) = f.downloads.first() else {
                 return FileOutcome::Failed("no download URL in modpack index".to_string());
             };
-            let data = match modrinth.download(url) {
+            let data = match modrinth.download_until(url, stop) {
                 Ok(d) => d,
                 Err(e) => return FileOutcome::Failed(e.to_string()),
             };
@@ -208,9 +208,6 @@ pub fn install_bytes(
             }
         },
         |done, total, j| {
-            if cancel() {
-                cancelled.store(true, Ordering::Relaxed);
-            }
             progress(SyncProgress {
                 stage: SyncStage::Downloading,
                 current: done,
@@ -219,7 +216,7 @@ pub fn install_bytes(
             });
         },
     );
-    if cancelled.load(Ordering::Relaxed) {
+    if cancel() {
         return Err(CoreError::Cancelled);
     }
 

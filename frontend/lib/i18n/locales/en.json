@@ -680,6 +680,12 @@
     },
     "checkingOptional": "Checking for optional content…",
     "modpackFallback": "Modpack",
+    "cancelDownload": {
+      "title": "Cancel download?",
+      "body": "This will stop setting up the modpack and close this window.",
+      "keep": "Keep going",
+      "confirm": "Cancel"
+    },
     "name": "Name",
     "namePlaceholder": "My instance",
     "modLoader": "Mod loader",

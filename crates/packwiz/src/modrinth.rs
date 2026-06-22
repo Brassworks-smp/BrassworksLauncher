@@ -416,12 +416,16 @@ impl Modrinth {
     pub fn download_progress(
         &self,
         url: &str,
+        cancel: &dyn Fn() -> bool,
         progress: &mut dyn FnMut(u64, u64),
     ) -> Result<Vec<u8>> {
         use std::io::Read;
         const ATTEMPTS: usize = 4;
         let mut last = PackwizError::Other("download failed".into());
         for attempt in 0..ATTEMPTS {
+            if cancel() {
+                return Err(PackwizError::Cancelled);
+            }
             match self.client.get(url).send() {
                 Ok(mut resp) => {
                     let status = resp.status();
@@ -439,6 +443,9 @@ impl Modrinth {
                     let mut chunk = [0u8; 65536];
                     let mut failed = false;
                     loop {
+                        if cancel() {
+                            return Err(PackwizError::Cancelled);
+                        }
                         match resp.read(&mut chunk) {
                             Ok(0) => break,
                             Ok(n) => {
@@ -461,6 +468,15 @@ impl Modrinth {
             Self::backoff(attempt, ATTEMPTS);
         }
         Err(last)
+    }
+
+    pub fn download_until(
+        &self,
+        url: &str,
+        stop: &std::sync::atomic::AtomicBool,
+    ) -> Result<Vec<u8>> {
+        use std::sync::atomic::Ordering;
+        self.download_progress(url, &|| stop.load(Ordering::Relaxed), &mut |_, _| {})
     }
 
     fn backoff(attempt: usize, attempts: usize) {

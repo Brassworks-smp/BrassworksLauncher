@@ -1,7 +1,7 @@
 use packwiz::{sha512_hex, Curseforge, FileRecord, Manifest, Modrinth};
 use serde::Deserialize;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use super::{
     already_current, cleanup_stale, extract_overrides, note, open_zip, prettify_name,
@@ -189,7 +189,7 @@ pub fn sync(
     progress: Progress,
 ) -> Result<PackResult> {
     note(progress, SyncStage::Fetching, "Downloading modpack");
-    let bytes = modrinth.download(zip_url)?;
+    let bytes = modrinth.download_progress(zip_url, cancel, &mut |_, _| {})?;
     install_bytes(paths, instance_id, file_id, bytes, optional, concurrency, cf, modrinth, cancel, progress)
 }
 
@@ -242,13 +242,13 @@ pub fn install_bytes(
         todo.push(f);
     }
 
-    let cancelled = AtomicBool::new(false);
     let outcomes = packwiz::parallel_run(
         &todo,
         concurrency,
-        |f| {
+        || cancel(),
+        |f, stop| {
             let id = format!("curseforge:{}:{}", f.project_id, f.file_id);
-            if cancelled.load(Ordering::Relaxed) {
+            if stop.load(Ordering::Relaxed) {
                 return CfOutcome::Failed {
                     id,
                     reason: "cancelled".to_string(),
@@ -289,7 +289,7 @@ pub fn install_bytes(
                     },
                 };
             }
-            let data = match modrinth.download(&resolved.url) {
+            let data = match modrinth.download_until(&resolved.url, stop) {
                 Ok(d) => d,
                 Err(e) => return CfOutcome::Failed { id: rel, reason: e.to_string() },
             };
@@ -313,9 +313,6 @@ pub fn install_bytes(
             }
         },
         |done, total, _| {
-            if cancel() {
-                cancelled.store(true, Ordering::Relaxed);
-            }
             progress(SyncProgress {
                 stage: SyncStage::Downloading,
                 current: done,
@@ -324,7 +321,7 @@ pub fn install_bytes(
             });
         },
     );
-    if cancelled.load(Ordering::Relaxed) {
+    if cancel() {
         return Err(CoreError::Cancelled);
     }
 

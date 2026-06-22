@@ -597,11 +597,14 @@ impl Launcher {
         source: &str,
         project_id: &str,
         version_id: &str,
+        cancel: &dyn Fn() -> bool,
         progress: &mut dyn FnMut(SyncProgress),
     ) -> Result<packs::Preflight> {
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
-        packs::preflight_remote(source, project_id, version_id, &modrinth, Some(&cf), progress)
+        packs::preflight_remote(
+            source, project_id, version_id, &modrinth, Some(&cf), cancel, progress,
+        )
     }
 
         pub fn preflight_modpack_file(

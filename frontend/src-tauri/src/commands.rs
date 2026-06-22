@@ -1026,17 +1026,24 @@ pub(crate) async fn preflight_modpack(
     version_id: String,
 ) -> CmdResult<brassworks_core::packs::Preflight> {
     let launcher = state.launcher.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let cancel_flag = state.arm_cancel("__preflight__");
+    let cancels = state.cancels.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let progress_app = app.clone();
         let mut sink = move |sp: SyncProgress| {
             let _ = progress_app.emit("pack://preflight", PreflightProgress::from(sp));
         };
+        let cancel = move || cancel_flag.load(Ordering::Relaxed);
         launcher
-            .preflight_modpack(&source, &project_id, &version_id, &mut sink)
+            .preflight_modpack(&source, &project_id, &version_id, &cancel, &mut sink)
             .map_err(err)
     })
     .await
-    .map_err(err)?
+    .map_err(err);
+    if let Ok(mut map) = cancels.lock() {
+        map.remove("__preflight__");
+    }
+    result?
 }
 
 #[tauri::command]

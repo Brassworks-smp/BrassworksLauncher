@@ -198,12 +198,14 @@ pub fn preflight_file(
     Ok(Preflight { optional, blocked })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn preflight_remote(
     source: &str,
     project_id: &str,
     version_id: &str,
     modrinth: &Modrinth,
     cf: Option<&Curseforge>,
+    cancel: &dyn Fn() -> bool,
     progress: Progress,
 ) -> Result<Preflight> {
     let url = if source == "curseforge" {
@@ -220,7 +222,7 @@ pub fn preflight_remote(
     };
 
     note(progress, SyncStage::Fetching, "download");
-    let bytes = modrinth.download_progress(&url, &mut |current, total| {
+    let bytes = modrinth.download_progress(&url, cancel, &mut |current, total| {
         progress(SyncProgress {
             stage: SyncStage::Fetching,
             current,
@@ -229,9 +231,15 @@ pub fn preflight_remote(
         });
     })?;
 
+    if cancel() {
+        return Err(CoreError::Cancelled);
+    }
     note(progress, SyncStage::Resolving, "optional");
     let optional = inspect_bytes(source, bytes.clone(), cf)?;
 
+    if cancel() {
+        return Err(CoreError::Cancelled);
+    }
     note(progress, SyncStage::Resolving, "blocked");
     let blocked = blocked_from_bytes(source, &bytes, cf)?;
 

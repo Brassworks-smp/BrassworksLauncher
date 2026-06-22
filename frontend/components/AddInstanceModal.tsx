@@ -11,6 +11,7 @@ import {
   Box,
   Download,
   DownloadCloud,
+  AlertTriangle,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import type {
@@ -191,6 +192,9 @@ export function AddInstanceModal({
 
   const [prefStage, setPrefStage] = useState<PreflightProgress | null>(null);
 
+  const loading = pending !== null && picker === null;
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+
   const inspectGen = useRef(0);
 
   useEffect(() => {
@@ -223,7 +227,21 @@ export function AddInstanceModal({
     setPicker(null);
   };
 
-  
+  const cancelPreflight = () => {
+    inspectGen.current++;
+    api.cancelPreflight().catch(() => {});
+    setPending(null);
+    setPicker(null);
+    setPrefStage(null);
+    setCancelConfirm(false);
+    close();
+  };
+
+  const requestClose = () => {
+    if (pending) setCancelConfirm(true);
+    else close();
+  };
+
   const prefBlockedRef = useRef<BlockedMod[]>([]);
 
   const launchModpack = (
@@ -411,14 +429,14 @@ export function AddInstanceModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      
-      
-      if (pending) closePicker();
+      if (cancelConfirm) setCancelConfirm(false);
+      else if (loading) setCancelConfirm(true);
+      else if (pending) closePicker();
       else close();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [close, pending]);
+  }, [close, pending, loading, cancelConfirm]);
 
   const createCustom = async () => {
     setBusy(true);
@@ -452,11 +470,19 @@ export function AddInstanceModal({
       className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
         closing ? "modal-overlay-out" : ""
       }`}
-      onMouseDown={(e) => e.target === e.currentTarget && close()}
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (loading) return;
+        if (pending) {
+          setCancelConfirm(true);
+          return;
+        }
+        close();
+      }}
     >
       <div
         style={importOnly ? undefined : (ACCENTS[tab] as React.CSSProperties | undefined)}
-        className="rise flex h-[80vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
+        className="rise relative flex h-[80vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
@@ -473,7 +499,7 @@ export function AddInstanceModal({
             )}
           </h2>
           <button
-            onClick={close}
+            onClick={requestClose}
             className="grid h-8 w-8 place-items-center rounded-md text-ink-600 transition hover:bg-ink-800 hover:text-gray-200"
           >
             <X size={16} />
@@ -868,6 +894,34 @@ export function AddInstanceModal({
           </>
           )}
         </div>
+
+        {cancelConfirm && (
+          <div className="modal-overlay absolute inset-0 z-10 grid place-items-center bg-ink-950/70 backdrop-blur-sm">
+            <div className="w-[340px] max-w-[90%] rounded-xl border border-amber-600/30 bg-ink-900 p-5 shadow-2xl">
+              <div className="mb-2 flex items-center gap-2 font-mc text-sm tracking-wide text-gray-100">
+                <AlertTriangle size={16} className="text-amber-400" />
+                {t("addInstance.cancelDownload.title")}
+              </div>
+              <p className="mb-4 text-xs leading-relaxed text-ink-500">
+                {t("addInstance.cancelDownload.body")}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setCancelConfirm(false)}
+                  className="rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:text-gray-200"
+                >
+                  {t("addInstance.cancelDownload.keep")}
+                </button>
+                <button
+                  onClick={cancelPreflight}
+                  className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-amber-400"
+                >
+                  {t("addInstance.cancelDownload.confirm")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
