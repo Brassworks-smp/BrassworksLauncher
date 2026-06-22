@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Compte hors ligne",
     "active": "Actif",
+    "instanceOverride": "",
     "signOut": "Se déconnecter",
     "relogin": "Se reconnecter",
     "reloginRequired": "Reconnexion nécessaire",
@@ -286,7 +287,11 @@
       "parallel": "Téléchargements parallèles",
       "parallelHint": "Combien de fichiers sont récupérés / vérifiés en même temps lors de l'installation ou de la mise à jour d'un modpack. Plus haut = plus rapide ; plus bas = plus doux pour les connexions lentes. Choisis Séquentiel pour désactiver.",
       "sequential": "Séquentiel (désactivé)",
-      "def16": "16 (défaut)"
+      "def16": "16 (défaut)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "Cache",
@@ -380,6 +385,22 @@
       "forge": "Forge",
       "fabric": "Fabric",
       "quilt": "Quilt"
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "Mémoire",
@@ -642,6 +663,29 @@
     "onlinePing": "En ligne · {ms} ms",
     "statusOffline": "Hors ligne"
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "Nouvelle instance",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "Recherche de contenu optionnel…",
     "modpackFallback": "Modpack",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Nom",
     "namePlaceholder": "Mon instance",
     "modLoader": "Chargeur de mods",
@@ -684,8 +734,17 @@
     "importSelectedNone": "Importer la sélection",
     "uploadInstead": "Envoyer un .mrpack / CurseForge .zip à la place"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "Chargement de l'instance…",
+    "accountMissing": "",
     "featuredPack": "Pack en vedette",
     "modrinthModpack": "Modpack Modrinth",
     "curseforgeModpack": "Modpack CurseForge",
@@ -702,6 +761,10 @@
     "cancelDownload": "Annuler le téléchargement",
     "signInToPlay": "Connecte-toi avec Microsoft pour commencer à jouer.",
     "filesFailed": "{count} fichiers n'ont pas pu être téléchargés - ils seront réessayés au prochain lancement.",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "Personnaliser",
     "customizeTitle": "Choisis quels réglages apparaissent ici",
     "pinHint": "Épingle des réglages ici pour un accès en un clic. Clique pour choisir.",

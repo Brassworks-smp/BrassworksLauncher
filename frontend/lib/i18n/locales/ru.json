@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Офлайн-аккаунт",
     "active": "Активен",
+    "instanceOverride": "",
     "signOut": "Выйти",
     "relogin": "Перезайти",
     "reloginRequired": "Требуется повторный вход",
@@ -109,7 +110,7 @@
     "forest": "Лесной",
     "light": "Светлая",
     "accentDefault": "По умолчанию (зелёный)",
-    "accentCustom": ""
+    "accentCustom": "Свой цвет"
   },
   "onboarding": {
     "skipSetup": "Пропустить настройку",
@@ -286,7 +287,11 @@
       "parallel": "Параллельные загрузки",
       "parallelHint": "Сколько файлов одновременно скачивается или проверяется при установке и обновлении модпака. Больше - быстрее; меньше - надёжнее при слабом интернете. Выберите \"Последовательно\", чтобы отключить.",
       "sequential": "Последовательно (выкл.)",
-      "def16": "16 (по умолчанию)"
+      "def16": "16 (по умолчанию)",
+      "manualFolders": "Папки для ручной загрузки",
+      "manualFoldersHint": "Отслеживаются для модов CurseForge, авторы которых блокируют сторонние скачивания. Если такой мод необходим, перенесите скачанный jar-файл в одну из этих папок, и лаунчер подхватит его. По умолчанию используется ваша папка \"Загрузки\".",
+      "noManualFolders": "Папки пока не отслеживаются.",
+      "addManualFolder": "Добавить папку"
     },
     "cache": {
       "title": "Кэш",
@@ -295,15 +300,15 @@
       "clear": "Очистить кэш"
     },
     "cli": {
-      "title": "",
-      "desc": "",
-      "status": "",
-      "installed": "",
-      "notInstalled": "",
-      "install": "",
-      "uninstall": "",
-      "done": "",
-      "removed": ""
+      "title": "Инструмент командной строки",
+      "desc": "Установите команду `brassworks`, чтобы управлять лаунчером из терминала - например, `brassworks instance launch survival` или `brassworks go settings`. Те же команды, что и в палитре ⌘K.",
+      "status": "Статус",
+      "installed": "Установлено",
+      "notInstalled": "Не установлено",
+      "install": "Установить команду `brassworks`",
+      "uninstall": "Удалить команду `brassworks`",
+      "done": "CLI установлен",
+      "removed": "CLI удалён"
     },
     "updates": {
       "title": "Обновления",
@@ -381,6 +386,22 @@
       "fabric": "Fabric",
       "quilt": "Quilt"
     },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
+    },
     "memory": {
       "title": "ОЗУ",
       "override": "Собственные настройки лаунчера",
@@ -436,7 +457,7 @@
       "defaultIconsHint": "Быстрый выбор встроенной иконки сборки.",
       "iconUrl": "URL иконки",
       "iconUrlHint": "Квадратный логотип, который отображается на карточке и главном экране.",
-      "chooseFile": "",
+      "chooseFile": "Выбрать файл",
       "urlPlaceholder": "https://… или /local.png",
       "bannerUrl": "URL баннера",
       "bannerUrlHint": "Широкое изображение, которое отображается на фоне главного экрана.",
@@ -642,6 +663,29 @@
     "onlinePing": "В сети · {ms} мс",
     "statusOffline": "Не в сети"
   },
+  "blockedMods": {
+    "title": "Нужна самостоятельная загрузка",
+    "subtitle": "{title} · Осталось скачать файлов: {count}",
+    "explain": "Стороннее скачивание отключено для следующего числа модов в сборке: {count}. Лаунчер не может загрузить их автоматически, поэтому скачайте каждый из них с CurseForge в отслеживаемую папку ниже. Установка продолжится, как только все файлы будут на месте.",
+    "checking": "Проверка заблокированных загрузок…",
+    "watchFolders": "Отслеживаемые папки",
+    "addFolder": "Добавить папку",
+    "addFile": "Добавить файл",
+    "noFolders": "Папки не отслеживаются. Добавьте папку или jar-файлы по одному.",
+    "removeFolder": "Перестать отслеживать",
+    "filesNeeded": "Необходимые файлы",
+    "openAll": "Открыть все на CurseForge",
+    "open": "Открыть",
+    "allReady": "Все файлы готовы - можно продолжить.",
+    "waiting": "Ожидание оставшихся загрузок…",
+    "continue": "Продолжить установку"
+  },
+  "preflight": {
+    "preparing": "Подготовка…",
+    "downloading": "Скачивание сборки…",
+    "checkingOptional": "Проверка дополнительного контента…",
+    "checkingBlocked": "Проверка заблокированных модов…"
+  },
   "addInstance": {
     "newInstance": "Новая сборка",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "Проверка дополнительного контента…",
     "modpackFallback": "Модпак",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Название",
     "namePlaceholder": "Моя сборка",
     "modLoader": "Загрузчик модов",
@@ -684,8 +734,17 @@
     "importSelectedNone": "Импортировать выбранное",
     "uploadInstead": "Или же загрузите файл .mrpack / CurseForge .zip"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "Загрузка сборки…",
+    "accountMissing": "",
     "featuredPack": "Рекомендуемый пак",
     "modrinthModpack": "Модпак Modrinth",
     "curseforgeModpack": "Модпак CurseForge",
@@ -702,6 +761,10 @@
     "cancelDownload": "Отменить загрузку",
     "signInToPlay": "Войдите через Microsoft, чтобы начать играть.",
     "filesFailed": "Не удалось скачать файлов: {count} — попытка повторится при следующем запуске.",
+    "filesFailedDetails": "Нажмите, чтобы узнать причину ошибки",
+    "failure": {
+      "unknown": "неизвестная ошибка"
+    },
     "customize": "Кастомизация",
     "customizeTitle": "Выберите, какие настройки будут отображаться здесь",
     "pinHint": "Закрепите настройки для быстрого доступа в один клик. Нажмите, чтобы выбрать.",

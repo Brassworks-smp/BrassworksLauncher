@@ -55,6 +55,7 @@
     "microsoft": "مايكروسوفت",
     "offlineAccount": "حساب أوفلاين",
     "active": "نشط",
+    "instanceOverride": "",
     "signOut": "تسجيل خروج",
     "relogin": "سجّل دخول من جديد",
     "reloginRequired": "لازم تسجّل دخول من جديد",
@@ -286,7 +287,11 @@
       "parallel": "تحميلات متوازية",
       "parallelHint": "كم ملف يتحمّل / يتحقّق منه بنفس الوقت وقت تثبيت أو تحديث مودباك. الأعلى أسرع؛ الأقل أرفق بالاتصالات البطيئة. اختر متتابع عشان تطفّيه.",
       "sequential": "متتابع (مطفّي)",
-      "def16": "16 (افتراضي)"
+      "def16": "16 (افتراضي)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "الكاش",
@@ -380,6 +385,22 @@
       "forge": "Forge",
       "fabric": "Fabric",
       "quilt": "Quilt"
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "الرام",
@@ -642,6 +663,29 @@
     "onlinePing": "أونلاين · {ms} ms",
     "statusOffline": "أوفلاين"
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "نسخة جديدة",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "جاري الفحص عن محتوى اختياري…",
     "modpackFallback": "مودباك",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "الاسم",
     "namePlaceholder": "نسختي",
     "modLoader": "محمّل المودات",
@@ -684,8 +734,17 @@
     "importSelectedNone": "استورد المختار",
     "uploadInstead": "ارفع .mrpack / CurseForge .zip بدالها"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "جاري تحميل النسخة…",
+    "accountMissing": "",
     "featuredPack": "باك مميّز",
     "modrinthModpack": "مودباك Modrinth",
     "curseforgeModpack": "مودباك CurseForge",
@@ -702,6 +761,10 @@
     "cancelDownload": "ألغِ التحميل",
     "signInToPlay": "سجّل دخول بمايكروسوفت عشان تبدأ اللعب.",
     "filesFailed": "{count} ملف ما قدر يتحمّل - بيعيد المحاولة عند التشغيل الجاي.",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "تخصيص",
     "customizeTitle": "اختر أي إعدادات تظهر هنا",
     "pinHint": "ثبّت إعدادات هنا عشان توصلها بضغطة وحدة. اضغط عشان تختار.",

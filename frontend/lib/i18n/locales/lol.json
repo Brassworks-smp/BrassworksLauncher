@@ -55,6 +55,7 @@
     "microsoft": "Mikrosoft",
     "offlineAccount": "Offline akkount",
     "active": "Aktive",
+    "instanceOverride": "",
     "signOut": "Sign owt",
     "relogin": "Re-loginz",
     "reloginRequired": "Re-login rekwired",
@@ -286,7 +287,11 @@
       "parallel": "Parallel downloadz",
       "parallelHint": "How many filez r fetkhed / verified at once when installin or updatin a modpak. Higher iz faster; lower iz gentler on slow konnekshunz. Pik Sekwential to disable.",
       "sequential": "Sekwential (off)",
-      "def16": "16 (defaultz)"
+      "def16": "16 (defaultz)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "Kakhe",
@@ -380,6 +385,22 @@
       "forge": "Forgez",
       "fabric": "Fabrik",
       "quilt": "Kwilt"
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "Memoryz",
@@ -642,6 +663,29 @@
     "onlinePing": "Online · {ms} mz",
     "statusOffline": "Offlinez"
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "Noo instance",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "Khekin fer opshunal kontent…",
     "modpackFallback": "Modpak",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Naem",
     "namePlaceholder": "Mah instance",
     "modLoader": "Mod loaderz",
@@ -684,8 +734,17 @@
     "importSelectedNone": "Import selekted",
     "uploadInstead": "Upload a .mrpak / Kurseforge .zip instead"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "Loadin instance…",
+    "accountMissing": "",
     "featuredPack": "Featured pak",
     "modrinthModpack": "Modrinth modpak",
     "curseforgeModpack": "Kurseforge modpak",
@@ -702,6 +761,10 @@
     "cancelDownload": "Kancel download",
     "signInToPlay": "Sign in wif Mikrosoft to start playin.",
     "filesFailed": "{count} filez kouldn't download - they'll retry on next launkh.",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "Kustomize",
     "customizeTitle": "Khoose whikh settingz appear heer",
     "pinHint": "Pin settingz heer fer one-klik akcesz. Klik to khoose.",

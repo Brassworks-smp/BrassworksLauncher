@@ -55,6 +55,7 @@
     "microsoft": "Microsoft arr",
     "offlineAccount": "Offline ship's log",
     "active": "Active arr",
+    "instanceOverride": "",
     "signOut": "Sign out arr",
     "relogin": "Re-come aboard",
     "reloginRequired": "Re-come aboard required",
@@ -286,7 +287,11 @@
       "parallel": "Parallel plunder",
       "parallelHint": "How many scrolls be fetched / verified at once when installin' or updatin' a modpack. Higher be faster; lower be gentler on slow connections. Pick Sequential to strike.",
       "sequential": "Sequential (off arr)",
-      "def16": "16 (as she lies)"
+      "def16": "16 (as she lies)",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "Cache arr",
@@ -380,6 +385,22 @@
       "forge": "Forge arr",
       "fabric": "Fabric arr",
       "quilt": "Quilt arr"
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "Memory arr",
@@ -642,6 +663,29 @@
     "onlinePing": "Online · {ms} ms arr",
     "statusOffline": "Offline arr"
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "Fresh instance",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "Checkin' fer optional content…",
     "modpackFallback": "Modpack arr",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Handle",
     "namePlaceholder": "Me instance",
     "modLoader": "Mod loader arr",
@@ -684,8 +734,17 @@
     "importSelectedNone": "Import selected arr",
     "uploadInstead": "Upload a .mrpack / CurseForge .zip instead arr"
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "Haulin' instance…",
+    "accountMissing": "",
     "featuredPack": "Featured pack arr",
     "modrinthModpack": "Modrinth modpack arr",
     "curseforgeModpack": "CurseForge modpack arr",
@@ -702,6 +761,10 @@
     "cancelDownload": "Belay plunder",
     "signInToPlay": "Sign in wit' Microsoft to weigh anchor playin'.",
     "filesFailed": "{count} scrolls couldn't plunder - they'll try again, ye dog on onward set sail.",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "Customize arr",
     "customizeTitle": "Choose which riggin' appear 'ere",
     "pinHint": "Pin riggin' 'ere fer one-click access. Click to choose.",

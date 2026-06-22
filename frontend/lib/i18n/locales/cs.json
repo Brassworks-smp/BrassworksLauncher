@@ -35,10 +35,10 @@
     "brandSub": "Launcher",
     "instanceLabel": "Instance",
     "gameRunning": "Hra běží",
-    "resize": "",
+    "resize": "Táhněte pro zvětšení",
     "logs": "Záznamy",
     "viewLiveLogs": "Zobrazit živé záznamy",
-    "stopGame": "",
+    "stopGame": "Ukončit hru",
     "viewLastLog": "Zobrazit poslední záznam",
     "viewPrevLog": "Zobrazit zázamy minulé hry",
     "searchPlaceholder": "hledat...",
@@ -55,6 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Offline (mimo síťový účet)",
     "active": "Aktivní",
+    "instanceOverride": "",
     "signOut": "Odhlásit",
     "relogin": "Znovu přihlásit",
     "reloginRequired": "Přihlašte se znovu",
@@ -68,7 +69,7 @@
     "clearCookiesTitle": "",
     "noAccounts": "Žádné účty. Přihlašte se pro hraní online nebo přidejte offline účet níže.",
     "offlineHint": "Přidejte offline (mimo síťový) účet - Nebude možno hrát s jinými hráči.",
-    "signedInAs": ""
+    "signedInAs": "Přihlášen/a"
   },
   "instances": {
     "title": "Instance",
@@ -77,23 +78,23 @@
     "newFolder": "Nová složka",
     "newInstance": "Nová instance",
     "clear": "",
-    "featured": "",
-    "yourInstances": "",
+    "featured": "Vybrané",
+    "yourInstances": "Vaše instance",
     "emptyFolder": "Žádné složky, přeneste sem kartu nebo ji přiřaďte v malém menu u karty.",
     "dropHere": "",
     "doubleClickRename": "Dvakrát klikněte pro přejmenování",
-    "running": "",
-    "selected": "",
-    "select": "",
+    "running": "Instance běží",
+    "selected": "Vybráno",
+    "select": "Vybrat",
     "pin": "Připnout nahoru",
-    "unpin": "",
+    "unpin": "Odepnout",
     "moveToFolder": "Přesouvání a přejmenování instance",
     "instanceSettings": "Nastavení instance",
     "openGameFolder": "Otevřít herní složku",
-    "colour": "",
+    "colour": "Barva",
     "deleteFolder": "Smazat složku",
-    "noFolder": "",
-    "newFolderDots": "",
+    "noFolder": "Žádná složka",
+    "newFolderDots": "Nová složka…",
     "launcherDefault": "V barvách launcheru"
   },
   "theme": {
@@ -102,19 +103,19 @@
     "oled": "OLED (pravá černá)",
     "ocean": "Oceánský",
     "mocha": "Mocha",
-    "nord": "",
-    "rose": "",
-    "amethyst": "",
-    "crimson": "",
-    "forest": "",
+    "nord": "Motiv v barvách Nord",
+    "rose": "Růžový",
+    "amethyst": "Ametystový",
+    "crimson": "Karmínový",
+    "forest": "Lesní",
     "light": "Světlý",
     "accentDefault": "Základní (Brassworks zelená)",
-    "accentCustom": ""
+    "accentCustom": "Vlastní barva"
   },
   "onboarding": {
-    "skipSetup": "",
-    "getStarted": "",
-    "finish": "",
+    "skipSetup": "Přeskočit nastavení",
+    "getStarted": "Pojďme začít",
+    "finish": "Dokončit",
     "welcomeTitle": "Vítejte v Brassworks",
     "welcomeBody": "Rychlý a moderní launcher Minecraftu s modpacky, skiny, světy a vším dalším co potřebujete pro dobrou hru.\nTak si to pojďme upravit podle sebe.",
     "themeTitle": "Uprav si launcher podle sebe",
@@ -139,7 +140,7 @@
     "rpcToggle": "Zapnout propojení s Discordem",
     "rpcToggleDesc": "Ukažte hraný mopack u svého Discordového profilu.",
     "languageTitle": "Jazyk",
-    "languageBody": "",
+    "languageBody": "Brassworks nyní mluví mnoha jazyky a další jsou na cestě, pomoct s překladem můžete na Crowdin.",
     "displayLanguage": "Vybraný jazyk",
     "signInTitle": "Přihlaš se",
     "signInBody": "Přihlašte se s účtem Microsoft pro hraní online (na síti) a užití skinů nebo přidejte účet pro hraní offline (mimo síť).",
@@ -148,11 +149,11 @@
     "doneBody": "To je ze základního nastavení vše a přejeme Vám hezkou hru!"
   },
   "tabIntro": {
-    "onceNote": "",
+    "onceNote": "Rychlý úvod - tohle uvidíte jen jednou.",
     "tip": "Tip",
     "dismiss": "",
     "skipTips": "Přeskakovat tipy",
-    "instancesHeading": "",
+    "instancesHeading": "Instance",
     "instances1Title": "Jedna instance na modpack",
     "instances1Body": "Každý modpack nebo verze má svojí vlastní instanci s jinými modpacky, světy a nastavením.",
     "instances2Title": "Organizujte se složkami",
@@ -161,26 +162,26 @@
     "instances3Body": "Tvořte vlastní instance nebo přidávejte z Modrinth, CurseForge, packwiz a dalších launcherů.",
     "playHeading": "",
     "play1Title": "",
-    "play1Body": "",
-    "play2Title": "",
+    "play1Body": "Zmáčkněte \"Hrát\" pro spuštění. Zde se zobrazí vybraná instance se statistikami.",
+    "play2Title": "Rychlé nastavení",
     "play2Body": "",
     "contentHeading": "Obsah",
     "content1Title": "Mody, packy a shadery",
     "content1Body": "Hledejte a stahujte obsah z Modrinth a CurseForge přímo do této instance.",
     "content2Title": "Spojení s modpackem",
     "content2Body": "Obsah ovlivněný modpacky je uzamčen, aby aktualizace běžely bez problémů. Odemkněte pro přidání nového obsahu - pozastaví automatické aktualizace.",
-    "worldsHeading": "",
-    "worlds1Title": "",
-    "worlds1Body": "",
-    "worlds2Title": "",
-    "worlds2Body": "",
-    "serversHeading": "",
-    "servers1Title": "",
-    "servers1Body": "",
+    "worldsHeading": "Světy",
+    "worlds1Title": "Vaše světy pro jednoho hráče",
+    "worlds1Body": "Zobrazte všechny světy v této instanci i se seedem a časem poslední hry.",
+    "worlds2Title": "Rychlá hra",
+    "worlds2Body": "Skočte přímo do vybraného světa - Launcher Vám rovnou spustí hru i se světem.",
+    "serversHeading": "Servery",
+    "servers1Title": "Váš seznam serverů",
+    "servers1Body": "Spravůjte servery, seřazujte je a připojte se jedním kliknutím - zmáčknout se dá celý řádek.",
     "screenshotsHeading": "Snímky obrazovky",
     "screenshots1Title": "Vaše snímky obrazovky",
     "screenshots1Body": "Hledejte a otevírejte snímky obrazovek z Vašich instancí.",
-    "skinHeading": "",
+    "skinHeading": "Skiny",
     "skin1Title": "",
     "skin1Body": "",
     "skin2Title": "",
@@ -189,15 +190,15 @@
     "skin3Body": ""
   },
   "settings": {
-    "title": "",
-    "subtitle": "",
+    "title": "Nastavení",
+    "subtitle": "Toto jsou celolauncherové nastavení. Pro nastavení instancí zmáčkněte ozubené kolečko u instance (⚙).",
     "tab": {
-      "defaults": "",
-      "java": "",
-      "launcher": ""
+      "defaults": "Základní nastavení",
+      "java": "Nastavení javy",
+      "launcher": "Nastavení launcheru"
     },
     "language": {
-      "title": "",
+      "title": "Jazyk",
       "field": "",
       "hint": "",
       "pseudo": "",
@@ -271,8 +272,8 @@
       "rpcDesc": ""
     },
     "featured": {
-      "title": "",
-      "toggle": "",
+      "title": "Vybraný obsah",
+      "toggle": "Vybrané packy a servery",
       "toggleDesc": ""
     },
     "curseforge": {
@@ -286,7 +287,11 @@
       "parallel": "",
       "parallelHint": "",
       "sequential": "",
-      "def16": ""
+      "def16": "",
+      "manualFolders": "",
+      "manualFoldersHint": "",
+      "noManualFolders": "",
+      "addManualFolder": ""
     },
     "cache": {
       "title": "",
@@ -346,8 +351,8 @@
   },
   "instanceSettings": {
     "subtitle": "",
-    "featuredNameLocked": "",
-    "featuredNameLockedHint": "",
+    "featuredNameLocked": "Jména vybraného obsahu nemůžete změnit",
+    "featuredNameLockedHint": "Jména vybraného obsahu nemůžete změnit.",
     "renameInstance": "",
     "resetToDefault": "",
     "details": {
@@ -380,6 +385,22 @@
       "forge": "",
       "fabric": "",
       "quilt": ""
+    },
+    "account": {
+      "title": "",
+      "override": "",
+      "overrideHint": "",
+      "useSelected": "",
+      "missing": ""
+    },
+    "autoJoin": {
+      "title": "",
+      "target": "",
+      "hint": "",
+      "none": "",
+      "worldPrefix": "",
+      "serverPrefix": "",
+      "missing": ""
     },
     "memory": {
       "title": "",
@@ -628,7 +649,7 @@
     "allServers": "",
     "emptyNone": "",
     "emptyFilter": "",
-    "featured": "",
+    "featured": "Vybrané",
     "pinging": "",
     "offline": "",
     "viewServer": "",
@@ -642,6 +663,29 @@
     "onlinePing": "",
     "statusOffline": ""
   },
+  "blockedMods": {
+    "title": "",
+    "subtitle": "",
+    "explain": "",
+    "checking": "",
+    "watchFolders": "",
+    "addFolder": "",
+    "addFile": "",
+    "noFolders": "",
+    "removeFolder": "",
+    "filesNeeded": "",
+    "openAll": "",
+    "open": "",
+    "allReady": "",
+    "waiting": "",
+    "continue": ""
+  },
+  "preflight": {
+    "preparing": "",
+    "downloading": "",
+    "checkingOptional": "",
+    "checkingBlocked": ""
+  },
   "addInstance": {
     "newInstance": "Nová instance",
     "tab": {
@@ -653,6 +697,12 @@
     },
     "checkingOptional": "",
     "modpackFallback": "",
+    "cancelDownload": {
+      "title": "",
+      "body": "",
+      "keep": "",
+      "confirm": ""
+    },
     "name": "Jméno instance",
     "namePlaceholder": "Má instance",
     "modLoader": "Mod loader",
@@ -684,9 +734,18 @@
     "importSelectedNone": "Vyberte instanci pro přenesení",
     "uploadInstead": ""
   },
+  "accountOverride": {
+    "title": "",
+    "body": "",
+    "confirm": ""
+  },
   "play": {
+    "playJoin": "",
+    "autoJoinWorld": "",
+    "autoJoinServer": "",
     "loadingInstance": "",
-    "featuredPack": "",
+    "accountMissing": "",
+    "featuredPack": "Vybraný Modpack",
     "modrinthModpack": "",
     "curseforgeModpack": "",
     "packwizModpack": "",
@@ -702,6 +761,10 @@
     "cancelDownload": "",
     "signInToPlay": "",
     "filesFailed": "",
+    "filesFailedDetails": "",
+    "failure": {
+      "unknown": ""
+    },
     "customize": "",
     "customizeTitle": "",
     "pinHint": "",
