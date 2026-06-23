@@ -37,6 +37,7 @@ fn packwiz_open_from_argv(args: &[String]) -> Option<String> {
         .cloned()
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
 fn packwiz_open_from_url(raw: &str) -> Option<String> {
     if is_packwiz_scheme(raw) {
         return Some(raw.to_string());
@@ -541,6 +542,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Brassworks Launcher")
         .run(|app, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
             if let tauri::RunEvent::Opened { urls } = event {
                 let opens: Vec<String> = urls
                     .iter()
