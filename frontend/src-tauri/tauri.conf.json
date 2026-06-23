@@ -33,7 +33,8 @@
         "scope": [
           "$DATA/BrassworksLauncher/instances/**",
           "$DATA/BrassworksLauncher/shared/skins/**",
-          "$DATA/BrassworksLauncher/thumbnails/**"
+          "$DATA/BrassworksLauncher/thumbnails/**",
+          "$DATA/BrassworksLauncher/image-cache/**"
         ]
       }
     }

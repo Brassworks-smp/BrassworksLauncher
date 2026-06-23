@@ -1,4 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import React, { useEffect, useState } from "react";
+import * as api from "./api";
 
 const GLYPHS: { id: string; glyph: string }[] = [
   {
@@ -140,4 +142,67 @@ export function iconSrc(
     return uriFor(glyph, { accent: accent || p.accent, bg: p.bg });
   }
   return brandingSrc(icon);
+}
+
+export function isCacheableBranding(value: string | null | undefined): boolean {
+  if (!value) return false;
+  if (value.startsWith(BUILTIN_PREFIX) || value.startsWith("data:")) return false;
+  const isHttp = /^https?:\/\//i.test(value);
+  const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("\\\\");
+  const isUnixFsPath = /^\/[^/]+\/.+/.test(value);
+  return isHttp || isWindowsPath || isUnixFsPath;
+}
+
+const warmedThisSession = new Set<string>();
+
+type BrandingImageProps = Omit<
+  React.ImgHTMLAttributes<HTMLImageElement>,
+  "src"
+> & {
+  value: string | null | undefined;
+  src: string | null | undefined;
+};
+
+export function BrandingImage({
+  value,
+  src,
+  onLoad,
+  onError,
+  ...rest
+}: BrandingImageProps) {
+  const [fallback, setFallback] = useState<string | null>(null);
+  const cacheable = isCacheableBranding(value);
+
+  useEffect(() => {
+    setFallback(null);
+  }, [value, src]);
+
+  const handleLoad: React.ReactEventHandler<HTMLImageElement> = (e) => {
+    if (cacheable && value && !fallback && !warmedThisSession.has(value)) {
+      warmedThisSession.add(value);
+      api.cacheImages([value]).catch(() => {});
+    }
+    onLoad?.(e);
+  };
+
+  const handleError: React.ReactEventHandler<HTMLImageElement> = (e) => {
+    if (cacheable && value && !fallback) {
+      api
+        .cachedImage(value)
+        .then((p) => {
+          if (p) setFallback(convertFileSrc(p));
+        })
+        .catch(() => {});
+    }
+    onError?.(e);
+  };
+
+  return (
+    <img
+      src={fallback ?? src ?? undefined}
+      onLoad={handleLoad}
+      onError={handleError}
+      {...rest}
+    />
+  );
 }

@@ -473,6 +473,8 @@ pub fn run() {
             commands::java_info,
             commands::cache_size,
             commands::clear_cache,
+            commands::cache_images,
+            commands::cached_image,
             commands::get_news,
             commands::get_playercount,
             commands::release_changelog,

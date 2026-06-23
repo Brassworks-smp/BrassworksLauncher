@@ -17,7 +17,7 @@ import {
   Server,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import { iconSrc, DEFAULT_INSTANCE_ICON } from "@/lib/instanceIcons";
+import { iconSrc, DEFAULT_INSTANCE_ICON, BrandingImage } from "@/lib/instanceIcons";
 import type {
   Instance,
   LaunchProgress,
@@ -244,8 +244,9 @@ export function PlayView({
           {}
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="flex items-center gap-3">
-              <img
-                src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON) ?? undefined}
+              <BrandingImage
+                value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+                src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON)}
                 alt=""
                 className="h-12 w-12 rounded-lg object-cover shadow-lg"
               />

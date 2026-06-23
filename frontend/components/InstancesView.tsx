@@ -27,7 +27,7 @@ import { Collapse, placeMenu, useMenuDismiss, Toggle, SegmentedTabs } from "./ui
 type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import { CustomColorChip } from "@/components/ColorPicker";
-import { iconSrc, brandingSrc, DEFAULT_INSTANCE_ICON } from "@/lib/instanceIcons";
+import { iconSrc, brandingSrc, DEFAULT_INSTANCE_ICON, BrandingImage } from "@/lib/instanceIcons";
 import type { Instance, InstanceFolder } from "@/lib/types";
 
 
@@ -936,8 +936,9 @@ function InstanceCard({
           dragging ? "opacity-0" : ""
         }`}
       >
-        <img
-          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent) ?? undefined}
+        <BrandingImage
+          value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent)}
           alt=""
           className="h-9 w-9 shrink-0 rounded-md object-cover shadow"
         />
@@ -1064,7 +1065,12 @@ function InstanceCard({
     >
       <div className="relative flex h-24 items-center justify-center overflow-hidden">
         {instance.banner ? (
-          <img src={brandingSrc(instance.banner) ?? undefined} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <BrandingImage
+            value={instance.banner}
+            src={brandingSrc(instance.banner)}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         ) : (
           <div className="schem-bg absolute inset-0" />
         )}
@@ -1077,8 +1083,9 @@ function InstanceCard({
             </span>
           </div>
         )}
-        <img
-          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent) ?? undefined}
+        <BrandingImage
+          value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+          src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent)}
           alt=""
           className="relative h-14 w-14 rounded-lg object-cover shadow-lg"
         />

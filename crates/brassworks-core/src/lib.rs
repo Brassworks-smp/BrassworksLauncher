@@ -14,6 +14,7 @@ pub mod account;
 pub mod auth;
 pub mod error;
 pub mod featured;
+pub mod image_cache;
 pub mod import;
 pub mod instance;
 pub mod launch;
@@ -1577,6 +1578,7 @@ impl Launcher {
         [
             self.paths.modrinth_cache_dir(),
             self.paths.curseforge_cache_dir(),
+            self.paths.image_cache_dir(),
         ]
         .iter()
         .map(|d| dir_size(d))
@@ -1587,12 +1589,27 @@ impl Launcher {
         for dir in [
             self.paths.modrinth_cache_dir(),
             self.paths.curseforge_cache_dir(),
+            self.paths.image_cache_dir(),
         ] {
             if dir.exists() {
                 std::fs::remove_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
             }
         }
         Ok(())
+    }
+
+    pub fn cache_images(&self, values: &[String]) {
+        let dir = self.paths.image_cache_dir();
+        for value in values {
+            if value.trim().is_empty() {
+                continue;
+            }
+            let _ = image_cache::cache_image(&dir, value);
+        }
+    }
+
+    pub fn cached_image(&self, value: &str) -> Option<std::path::PathBuf> {
+        image_cache::cached_image(&self.paths.image_cache_dir(), value)
     }
 
     pub fn add_playtime(&self, instance_id: &str, seconds: u64) -> Result<()> {

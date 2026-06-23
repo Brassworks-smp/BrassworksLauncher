@@ -884,6 +884,32 @@ pub(crate) async fn clear_cache(state: State<'_, AppState>) -> CmdResult<u64> {
 }
 
 #[tauri::command]
+pub(crate) async fn cache_images(state: State<'_, AppState>, values: Vec<String>) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.cache_images(&values);
+        Ok(())
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn cached_image(
+    state: State<'_, AppState>,
+    value: String,
+) -> CmdResult<Option<String>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(launcher
+            .cached_image(&value)
+            .map(|p| p.to_string_lossy().into_owned()))
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn get_news(state: State<'_, AppState>, instance_id: String) -> CmdResult<NewsItem> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {

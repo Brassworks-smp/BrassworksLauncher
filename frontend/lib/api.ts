@@ -255,6 +255,10 @@ export const openDir = (instanceId: string, sub?: string): Promise<void> =>
 
 export const cacheSize = (): Promise<number> => invoke("cache_size");
 export const clearCache = (): Promise<number> => invoke("clear_cache");
+export const cacheImages = (values: string[]): Promise<void> =>
+  invoke("cache_images", { values });
+export const cachedImage = (value: string): Promise<string | null> =>
+  invoke("cached_image", { value });
 
 export const listScreenshots = (): Promise<Screenshot[]> =>
   invoke("list_screenshots");

@@ -101,6 +101,10 @@ impl Paths {
         self.root().join("thumbnails")
     }
 
+    pub fn image_cache_dir(&self) -> PathBuf {
+        self.root().join("image-cache")
+    }
+
     pub fn skins_dir(&self) -> PathBuf {
         self.shared_dir().join("skins")
     }

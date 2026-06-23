@@ -36,6 +36,7 @@ import {
   DEFAULT_INSTANCE_ICON,
   iconSrc,
   isBuiltinIcon,
+  BrandingImage,
 } from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
 import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
@@ -219,8 +220,9 @@ export function InstanceSettingsView({
           <ArrowLeft size={16} />
         </button>
         <div className="flex items-center gap-3">
-          <img
-            src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON) ?? undefined}
+          <BrandingImage
+            value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+            src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON)}
             alt=""
             className="h-9 w-9 rounded-md object-cover"
           />

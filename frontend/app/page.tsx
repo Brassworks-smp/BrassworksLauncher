@@ -55,6 +55,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
 import { I18nProvider, translate } from "@/lib/i18n";
 import { applyAccent } from "@/lib/colors";
+import { isCacheableBranding } from "@/lib/instanceIcons";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
   AccountStore,
@@ -336,6 +337,18 @@ export default function Home() {
     api.modpackStatus(selectedId).then(setModStatus).catch(() => {});
   }, [selectedId]);
   useEffect(refreshModStatus, [refreshModStatus]);
+
+  useEffect(() => {
+    if (!api.isTauri() || instances.length === 0) return;
+    const values = Array.from(
+      new Set(
+        instances
+          .flatMap((i) => [i.icon, i.banner, i.logo])
+          .filter((v): v is string => isCacheableBranding(v)),
+      ),
+    );
+    if (values.length) api.cacheImages(values).catch(() => {});
+  }, [instances]);
 
   useEffect(() => {
     const preload = () => void import("skinview3d").catch(() => {});
