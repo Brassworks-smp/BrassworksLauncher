@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Brassworks Launcher",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "identifier": "com.brassworks.launcher",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -54,7 +54,9 @@
     "longDescription": "The Brassworks Launcher installs and launches the Brassworks SMP modpack (NeoForge 1.21.1) and keeps you up to date.",
     "fileAssociations": [
       {
-        "ext": ["packwiz"],
+        "ext": [
+          "packwiz"
+        ],
         "name": "Brassworks Pack",
         "description": "Brassworks shareable modpack",
         "mimeType": "application/x-brassworks-packwiz",
@@ -74,7 +76,9 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["brassworks"]
+        "schemes": [
+          "brassworks"
+        ]
       }
     }
   }
