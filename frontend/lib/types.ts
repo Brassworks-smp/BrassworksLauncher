@@ -157,6 +157,7 @@ export interface BlockedMod {
   name: string;
   url: string;
   required: boolean;
+  sha1: string | null;
 }
 
 export interface Preflight {

@@ -38,18 +38,28 @@ export function BlockedModsPicker({
   const t = useT();
   const [folders, setFolders] = useState<string[]>(initialFolders);
   const [found, setFound] = useState<Record<string, string>>({});
+  const [rejected, setRejected] = useState<string | null>(null);
 
   const wanted = blocked.map((b) => b.filename);
   const missing = wanted.filter((f) => !found[f]);
   const allFound = missing.length === 0;
 
+  const byName: Record<string, BlockedMod> = Object.fromEntries(
+    blocked.map((b) => [b.filename, b]),
+  );
+
   const missingRef = useRef(missing);
   missingRef.current = missing;
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
+  const byNameRef = useRef(byName);
+  byNameRef.current = byName;
 
   const poll = useCallback(async () => {
-    const want = missingRef.current;
+    const want = missingRef.current.map((f) => ({
+      filename: f,
+      sha1: byNameRef.current[f]?.sha1 ?? null,
+    }));
     const dirs = foldersRef.current;
     if (want.length === 0 || dirs.length === 0) return;
     const hits = await api.scanManualMods(dirs, want).catch(() => []);
@@ -94,7 +104,16 @@ export function BlockedModsPicker({
     if (typeof picked !== "string") return;
     const name = baseName(picked);
     const match = wanted.find((f) => f.toLowerCase() === name.toLowerCase());
-    if (match) setFound((prev) => ({ ...prev, [match]: picked }));
+    if (!match) return;
+    const ok = await api
+      .validateManualMod(picked, byName[match]?.sha1 ?? null)
+      .catch(() => false);
+    if (ok) {
+      setRejected(null);
+      setFound((prev) => ({ ...prev, [match]: picked }));
+    } else {
+      setRejected(match);
+    }
   };
 
   const confirm = () => {
@@ -189,6 +208,12 @@ export function BlockedModsPicker({
           <ExternalLink size={12} /> {t("blockedMods.openAll")}
         </button>
       </div>
+
+      {rejected && (
+        <p className="shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {t("blockedMods.invalidFile", { name: rejected })}
+        </p>
+      )}
 
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
         {blocked.map((b) => {

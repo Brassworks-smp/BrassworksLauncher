@@ -1066,10 +1066,22 @@ pub(crate) async fn preflight_modpack_file(
 pub(crate) async fn scan_manual_mods(
     state: State<'_, AppState>,
     folders: Vec<String>,
-    filenames: Vec<String>,
+    wanted: Vec<brassworks_core::packs::ManualWant>,
 ) -> CmdResult<Vec<(String, String)>> {
     let launcher = state.launcher.clone();
-    tauri::async_runtime::spawn_blocking(move || launcher.scan_manual_mods(folders, filenames))
+    tauri::async_runtime::spawn_blocking(move || launcher.scan_manual_mods(folders, wanted))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn validate_manual_mod(
+    state: State<'_, AppState>,
+    path: String,
+    sha1: Option<String>,
+) -> CmdResult<bool> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.validate_manual_mod(path, sha1))
         .await
         .map_err(err)
 }

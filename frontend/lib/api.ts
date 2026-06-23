@@ -533,8 +533,13 @@ export const onPreflightProgress = (
 
 export const scanManualMods = (
   folders: string[],
-  filenames: string[],
-): Promise<ManualMod[]> => invoke("scan_manual_mods", { folders, filenames });
+  wanted: { filename: string; sha1: string | null }[],
+): Promise<ManualMod[]> => invoke("scan_manual_mods", { folders, wanted });
+
+export const validateManualMod = (
+  path: string,
+  sha1: string | null,
+): Promise<boolean> => invoke("validate_manual_mod", { path, sha1 });
 
 export const defaultDownloadDir = (): Promise<string | null> =>
   invoke("default_download_dir");

@@ -680,7 +680,8 @@
     "open": "Open",
     "allReady": "All files ready — you can continue.",
     "waiting": "Waiting for the remaining downloads…",
-    "continue": "Continue install"
+    "continue": "Continue install",
+    "invalidFile": "{name} looks empty or corrupt — please download it again."
   },
   "preflight": {
     "preparing": "Preparing…",

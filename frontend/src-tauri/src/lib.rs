@@ -498,6 +498,7 @@ pub fn run() {
             commands::preflight_modpack,
             commands::preflight_modpack_file,
             commands::scan_manual_mods,
+            commands::validate_manual_mod,
             commands::default_download_dir,
             commands::inspect_packwiz,
             commands::update_modpack,
