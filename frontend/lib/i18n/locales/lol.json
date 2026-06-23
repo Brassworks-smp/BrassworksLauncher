@@ -84,6 +84,8 @@
     "dropHere": "Drop heer",
     "doubleClickRename": "Double-klik to rename",
     "running": "Runnin",
+    "updating": "",
+    "downloading": "",
     "selected": "Selekted",
     "select": "Selekt",
     "pin": "Pin to topz",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "Khekin fer opshunal kontent…",
     "modpackFallback": "Modpak",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",

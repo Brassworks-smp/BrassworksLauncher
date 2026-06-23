@@ -84,6 +84,8 @@
     "dropHere": "Hier anfügen",
     "doubleClickRename": "Doppelklick zum Umbenennen",
     "running": "Läuft",
+    "updating": "",
+    "downloading": "",
     "selected": "Ausgewählt",
     "select": "Auswählen",
     "pin": "Oben anpinnen",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "",
     "modpackFallback": "",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",

@@ -45,7 +45,7 @@
     "openPalette": "Открыть палитру команд"
   },
   "account": {
-    "manageAccounts": "Управлять аккаунтами",
+    "manageAccounts": "Аккаунты",
     "accounts": "Аккаунты",
     "signInMicrosoft": "Войти с помощью Microsoft",
     "addAnotherMicrosoft": "Добавить другой аккаунт Microsoft",
@@ -55,7 +55,7 @@
     "microsoft": "Microsoft",
     "offlineAccount": "Офлайн-аккаунт",
     "active": "Активен",
-    "instanceOverride": "",
+    "instanceOverride": "Задан для этой сборки",
     "signOut": "Выйти",
     "relogin": "Перезайти",
     "reloginRequired": "Требуется повторный вход",
@@ -84,6 +84,8 @@
     "dropHere": "Перетащите сюда",
     "doubleClickRename": "Переименовать двойным щелчком",
     "running": "Запущено",
+    "updating": "",
+    "downloading": "",
     "selected": "Выбрано",
     "select": "Выбрать",
     "pin": "Закрепить",
@@ -387,24 +389,24 @@
       "quilt": "Quilt"
     },
     "account": {
-      "title": "",
-      "override": "",
-      "overrideHint": "",
-      "useSelected": "",
-      "missing": ""
+      "title": "Аккаунт",
+      "override": "Всегда использовать конкретный аккаунт",
+      "overrideHint": "Если включено, эта сборка всегда запускается с выбранным аккаунтом, а её выбор автоматически переключает ваш текущий профиль.",
+      "useSelected": "Выбранный аккаунт (по умолчанию)",
+      "missing": "Выбранный аккаунт больше не существует. Выберите другой, иначе эта сборка вернётся к основному аккаунту."
     },
     "autoJoin": {
-      "title": "",
-      "target": "",
-      "hint": "",
-      "none": "",
-      "worldPrefix": "",
-      "serverPrefix": "",
-      "missing": ""
+      "title": "Автоматическое подключение",
+      "target": "Вход при запуске",
+      "hint": "Выберите мир или сервер для мгновенного входа при нажатии на кнопку \"Играть\". Сама кнопка изменится на \"Играть и войти\".",
+      "none": "Не подключаться автоматически",
+      "worldPrefix": "Мир:",
+      "serverPrefix": "Сервер:",
+      "missing": "Выбранный мир или сервер больше не существует. Выберите другой."
     },
     "memory": {
       "title": "ОЗУ",
-      "override": "Собственные настройки лаунчера",
+      "override": "Свой объём ОЗУ",
       "overrideDesc": "По умолчанию - максимум {gb} ГБ."
     },
     "quick": {
@@ -697,11 +699,20 @@
     },
     "checkingOptional": "Проверка дополнительного контента…",
     "modpackFallback": "Модпак",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
-      "title": "",
-      "body": "",
-      "keep": "",
-      "confirm": ""
+      "title": "Отменить скачивание?",
+      "body": "Это прервёт настройку сборки и закроет это окно.",
+      "keep": "Продолжить",
+      "confirm": "Отменить"
     },
     "name": "Название",
     "namePlaceholder": "Моя сборка",
@@ -735,16 +746,16 @@
     "uploadInstead": "Или же загрузите файл .mrpack / CurseForge .zip"
   },
   "accountOverride": {
-    "title": "",
-    "body": "",
-    "confirm": ""
+    "title": "Сменить аккаунт?",
+    "body": "Для сборки \"{instance}\" задан конкретный аккаунт. Переключение на \"{account}\" сбросит эту настройку для данной сборки.",
+    "confirm": "Сменить и сбросить"
   },
   "play": {
-    "playJoin": "",
-    "autoJoinWorld": "",
-    "autoJoinServer": "",
+    "playJoin": "Играть и войти",
+    "autoJoinWorld": "Мир: {name}",
+    "autoJoinServer": "Сервер: {name}",
     "loadingInstance": "Загрузка сборки…",
-    "accountMissing": "",
+    "accountMissing": "Аккаунт отсутствует",
     "featuredPack": "Рекомендуемый пак",
     "modrinthModpack": "Модпак Modrinth",
     "curseforgeModpack": "Модпак CurseForge",
@@ -758,7 +769,7 @@
     "updateAvailableVersion": "Доступно обновление модпака — v{version}",
     "updateLockHint": "Доступно обновление — заблокируйте сборку, чтобы установить его.",
     "preparing": "Подготовка",
-    "cancelDownload": "Отменить загрузку",
+    "cancelDownload": "Отменить скачивание",
     "signInToPlay": "Войдите через Microsoft, чтобы начать играть.",
     "filesFailed": "Не удалось скачать файлов: {count} — попытка повторится при следующем запуске.",
     "filesFailedDetails": "Нажмите, чтобы узнать причину ошибки",

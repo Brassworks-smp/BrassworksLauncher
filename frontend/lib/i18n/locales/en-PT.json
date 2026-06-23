@@ -84,6 +84,8 @@
     "dropHere": "Drop 'ere",
     "doubleClickRename": "Double-click to rechristen",
     "running": "Runnin'",
+    "updating": "",
+    "downloading": "",
     "selected": "Selected arr",
     "select": "Choose",
     "pin": "Pin to top arr",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "Checkin' fer optional content…",
     "modpackFallback": "Modpack arr",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",
