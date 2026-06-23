@@ -680,7 +680,8 @@
     "open": "",
     "allReady": "",
     "waiting": "",
-    "continue": ""
+    "continue": "",
+    "invalidFile": ""
   },
   "preflight": {
     "preparing": "",
