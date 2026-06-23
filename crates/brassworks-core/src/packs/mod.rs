@@ -112,6 +112,69 @@ fn note(progress: Progress, stage: SyncStage, message: impl Into<String>) {
     });
 }
 
+fn fetch_archive(
+    paths: &Paths,
+    source: &str,
+    version_id: &str,
+    url: &str,
+    modrinth: &Modrinth,
+    cancel: &dyn Fn() -> bool,
+    progress: Progress,
+) -> Result<Vec<u8>> {
+    let cache = paths.modpack_archive_cache(source, version_id);
+    if let Ok(bytes) = std::fs::read(&cache) {
+        if !bytes.is_empty() {
+            return Ok(bytes);
+        }
+    }
+    note(progress, SyncStage::Fetching, "Downloading modpack");
+    let bytes = modrinth.download_progress(url, cancel, &mut |current, total| {
+        progress(SyncProgress {
+            stage: SyncStage::Fetching,
+            current,
+            total,
+            message: "Downloading modpack".to_string(),
+        });
+    })?;
+    cache_archive(&cache, &bytes);
+    Ok(bytes)
+}
+
+/// Best-effort persist of a freshly downloaded archive. Written atomically (via
+/// a temp sibling + rename) so a crash mid-write never leaves a truncated zip
+/// that a later read would mistake for a complete pack.
+fn cache_archive(path: &Path, bytes: &[u8]) {
+    let Some(dir) = path.parent() else { return };
+    if std::fs::create_dir_all(dir).is_err() {
+        return;
+    }
+    let tmp = path.with_extension("part");
+    if std::fs::write(&tmp, bytes).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
+/// Drop a cached archive once an install/sync has consumed it.
+fn clear_archive_cache(paths: &Paths, source: &str, version_id: &str) {
+    let _ = std::fs::remove_file(paths.modpack_archive_cache(source, version_id));
+}
+
+/// Best-effort removal of cached archives left behind by preflights that never
+/// led to an install, so the cache directory does not grow without bound.
+fn prune_archive_cache(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(24 * 60 * 60);
+    for entry in entries.flatten() {
+        if let Ok(modified) = entry.metadata().and_then(|m| m.modified()) {
+            if modified < cutoff {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn sync_pack(
     paths: &Paths,
@@ -200,6 +263,7 @@ pub fn preflight_file(
 
 #[allow(clippy::too_many_arguments)]
 pub fn preflight_remote(
+    paths: &Paths,
     source: &str,
     project_id: &str,
     version_id: &str,
@@ -208,6 +272,8 @@ pub fn preflight_remote(
     cancel: &dyn Fn() -> bool,
     progress: Progress,
 ) -> Result<Preflight> {
+    prune_archive_cache(&paths.modpack_cache_dir());
+
     let url = if source == "curseforge" {
         let cf = cf
             .ok_or_else(|| CoreError::Modpack("A CurseForge API key is required".to_string()))?;
@@ -230,6 +296,10 @@ pub fn preflight_remote(
             message: "download".to_string(),
         });
     })?;
+
+    // Stash the archive so the install that follows this preflight reuses it
+    // instead of downloading the same bytes a second time.
+    cache_archive(&paths.modpack_archive_cache(source, version_id), &bytes);
 
     if cancel() {
         return Err(CoreError::Cancelled);

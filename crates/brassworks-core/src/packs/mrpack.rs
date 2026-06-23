@@ -112,9 +112,13 @@ pub fn sync(
     cancel: &dyn Fn() -> bool,
     progress: Progress,
 ) -> Result<PackResult> {
-    note(progress, SyncStage::Fetching, "Downloading modpack");
-    let bytes = modrinth.download_progress(mrpack_url, cancel, &mut |_, _| {})?;
-    install_bytes(paths, instance_id, version_id, bytes, optional, concurrency, modrinth, cancel, progress)
+    let bytes =
+        super::fetch_archive(paths, "modrinth", version_id, mrpack_url, modrinth, cancel, progress)?;
+    let result = install_bytes(
+        paths, instance_id, version_id, bytes, optional, concurrency, modrinth, cancel, progress,
+    )?;
+    super::clear_archive_cache(paths, "modrinth", version_id);
+    Ok(result)
 }
 
 #[allow(clippy::too_many_arguments)]

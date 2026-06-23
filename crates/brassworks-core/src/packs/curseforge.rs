@@ -188,9 +188,13 @@ pub fn sync(
     cancel: &dyn Fn() -> bool,
     progress: Progress,
 ) -> Result<PackResult> {
-    note(progress, SyncStage::Fetching, "Downloading modpack");
-    let bytes = modrinth.download_progress(zip_url, cancel, &mut |_, _| {})?;
-    install_bytes(paths, instance_id, file_id, bytes, optional, concurrency, cf, modrinth, cancel, progress)
+    let bytes =
+        super::fetch_archive(paths, "curseforge", file_id, zip_url, modrinth, cancel, progress)?;
+    let result = install_bytes(
+        paths, instance_id, file_id, bytes, optional, concurrency, cf, modrinth, cancel, progress,
+    )?;
+    super::clear_archive_cache(paths, "curseforge", file_id);
+    Ok(result)
 }
 
 #[allow(clippy::too_many_arguments)]

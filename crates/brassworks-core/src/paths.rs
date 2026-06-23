@@ -81,6 +81,18 @@ impl Paths {
         self.shared_dir().join("curseforge-cache")
     }
 
+    pub fn modpack_cache_dir(&self) -> PathBuf {
+        self.shared_dir().join("modpack-cache")
+    }
+
+    pub fn modpack_archive_cache(&self, source: &str, version_id: &str) -> PathBuf {
+        let safe: String = version_id
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        self.modpack_cache_dir().join(format!("{source}-{safe}.zip"))
+    }
+
     pub fn jvm_dir(&self) -> PathBuf {
         self.shared_dir().join("jvm")
     }
@@ -169,6 +181,15 @@ mod paths_tests {
         let shared = Path::new("root").join("shared");
         assert_eq!(p.modrinth_cache_dir(), shared.join("modrinth-cache"));
         assert_eq!(p.curseforge_cache_dir(), shared.join("curseforge-cache"));
+        assert_eq!(p.modpack_cache_dir(), shared.join("modpack-cache"));
+        assert_eq!(
+            p.modpack_archive_cache("modrinth", "aBc123"),
+            shared.join("modpack-cache").join("modrinth-aBc123.zip")
+        );
+        assert_eq!(
+            p.modpack_archive_cache("curseforge", "12/34"),
+            shared.join("modpack-cache").join("curseforge-12_34.zip")
+        );
         assert_eq!(p.jvm_dir(), shared.join("jvm"));
         assert_eq!(p.skins_dir(), shared.join("skins"));
         assert_eq!(p.skins_index(), shared.join("skins").join("skins.json"));

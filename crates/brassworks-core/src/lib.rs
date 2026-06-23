@@ -611,7 +611,7 @@ impl Launcher {
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
         packs::preflight_remote(
-            source, project_id, version_id, &modrinth, Some(&cf), cancel, progress,
+            &self.paths, source, project_id, version_id, &modrinth, Some(&cf), cancel, progress,
         )
     }
 
