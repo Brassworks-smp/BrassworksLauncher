@@ -96,11 +96,22 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 
 ## Command palette & CLI
 
+<table>
+<tr>
+<td width="55%">
 <img src="assets/CommandPallete.png" alt="Command palette" width="100%">
+</td>
+<td width="45%" valign="middle">
 
 Press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> to open the command palette. Start typing to
 fuzzy-find any action, or type <kbd>/</kbd> to enter **command mode** - Discord-style
-slash commands with per-argument autocomplete for everything the UI can do:
+slash commands with per-argument autocomplete for everything the UI can do.
+
+</td>
+</tr>
+</table>
+
+Command mode covers the whole UI, with per-argument autocomplete as you type:
 
 ```
 /instance launch survival --world "My Base"
@@ -137,9 +148,18 @@ command is installed and lets you remove it again at any time.
 
 ## Share a pack
 
+<table>
+<tr>
+<td width="45%" valign="middle">
+
 Small servers that want to share their packwiz modpack with players can hand them a single file - or link - that opens the launcher straight to an install. A `.packwiz` file is a small JSON pointer to your [packwiz](https://packwiz.infra.link/) pack: double-clicking it opens Brassworks to a confirmation screen with the pack's name, icon, description, and settings, then walks through the normal flavour and optional-content steps. The launcher registers itself as the handler for `.packwiz` files on macOS, Windows, and Linux, so they show up as branded documents.
 
+</td>
+<td width="55%">
 <img src="assets/PackwizUrlImport.png" alt="Packwiz pack install screen" width="100%">
+</td>
+</tr>
+</table>
 
 Only `pack_url` is required - everything else is optional and falls back to the pack's own defaults:
 
