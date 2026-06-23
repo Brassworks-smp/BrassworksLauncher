@@ -157,7 +157,15 @@ fn blocked_from(
         name,
         url,
         required,
+        sha1: rv.sha1.clone(),
     }
+}
+
+fn validate_manual_download(
+    bytes: &[u8],
+    resolved: &packwiz::ResolvedVersion,
+) -> std::result::Result<(), String> {
+    super::check_manual_bytes(bytes, &resolved.filename, resolved.sha1.as_deref())
 }
 
 fn parse_loader(loaders: &[CfLoader]) -> (LoaderKind, Option<String>) {
@@ -282,9 +290,15 @@ pub fn install_bytes(
             if resolved.manual_only {
                 let dest = game_dir.join(&rel);
                 return match std::fs::read(&dest) {
-                    Ok(bytes) => CfOutcome::Installed {
-                        rel,
-                        hash: sha512_hex(&bytes),
+                    Ok(bytes) => match validate_manual_download(&bytes, &resolved) {
+                        Ok(()) => CfOutcome::Installed {
+                            rel,
+                            hash: sha512_hex(&bytes),
+                        },
+                        Err(reason) => {
+                            let _ = std::fs::remove_file(&dest);
+                            CfOutcome::Failed { id: rel, reason }
+                        }
                     },
                     Err(_) => CfOutcome::Failed {
                         id: rel,
@@ -297,13 +311,8 @@ pub fn install_bytes(
                 Ok(d) => d,
                 Err(e) => return CfOutcome::Failed { id: rel, reason: e.to_string() },
             };
-            if let Some(exp) = resolved.sha512.as_deref() {
-                if !sha512_hex(&data).eq_ignore_ascii_case(exp) {
-                    return CfOutcome::Failed {
-                        id: rel,
-                        reason: "hash mismatch (corrupt download)".to_string(),
-                    };
-                }
+            if let Err(reason) = resolved.verify_data(&data) {
+                return CfOutcome::Failed { id: rel, reason };
             }
             match write_bytes(&game_dir, &rel, &data) {
                 Ok(()) => CfOutcome::Installed {

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::io::{Cursor, Read};
 use std::path::Path;
 
-use packwiz::{sha512_hex, Curseforge, FileRecord, ManagedMod, Manifest, Modrinth};
+use packwiz::{sha1_hex, sha512_hex, Curseforge, FileRecord, ManagedMod, Manifest, Modrinth};
 use serde::Serialize;
 
 use crate::error::{CoreError, Result};
@@ -33,6 +33,7 @@ pub struct BlockedMod {
     pub name: String,
     pub url: String,
     pub required: bool,
+    pub sha1: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -317,13 +318,20 @@ pub fn preflight_remote(
     Ok(Preflight { optional, blocked })
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ManualWant {
+    pub filename: String,
+    #[serde(default)]
+    pub sha1: Option<String>,
+}
+
 pub fn scan_manual_mods(
     folders: &[String],
-    filenames: &[String],
+    wanted: &[ManualWant],
 ) -> std::collections::HashMap<String, String> {
     use std::collections::HashMap;
-    let wanted: HashMap<String, &String> =
-        filenames.iter().map(|n| (n.to_lowercase(), n)).collect();
+    let by_name: HashMap<String, &ManualWant> =
+        wanted.iter().map(|w| (w.filename.to_lowercase(), w)).collect();
     let mut found: HashMap<String, String> = HashMap::new();
     for folder in folders {
         let entries = match std::fs::read_dir(folder) {
@@ -332,16 +340,54 @@ pub fn scan_manual_mods(
         };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(orig) = wanted.get(&name.to_lowercase()) {
-                if entry.path().is_file() {
-                    found
-                        .entry((*orig).clone())
-                        .or_insert_with(|| entry.path().to_string_lossy().to_string());
+            if let Some(want) = by_name.get(&name.to_lowercase()) {
+                let path = entry.path();
+                if path.is_file()
+                    && !found.contains_key(&want.filename)
+                    && validate_manual_file(&path, want.sha1.as_deref())
+                {
+                    found.insert(want.filename.clone(), path.to_string_lossy().to_string());
                 }
             }
         }
     }
     found
+}
+
+pub fn validate_manual_file(path: &Path, expected_sha1: Option<&str>) -> bool {
+    match std::fs::read(path) {
+        Ok(bytes) => check_manual_bytes(&bytes, &path.to_string_lossy(), expected_sha1).is_ok(),
+        Err(_) => false,
+    }
+}
+
+pub(crate) fn check_manual_bytes(
+    bytes: &[u8],
+    filename: &str,
+    expected_sha1: Option<&str>,
+) -> std::result::Result<(), String> {
+    if bytes.is_empty() {
+        return Err("manual download is empty (0 bytes) — please download it again".to_string());
+    }
+    if let Some(sha1) = expected_sha1.filter(|h| !h.is_empty()) {
+        if !sha1_hex(bytes).eq_ignore_ascii_case(sha1) {
+            return Err(
+                "manual download doesn't match the expected file — please download it again"
+                    .to_string(),
+            );
+        }
+    }
+    let is_archive = filename
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.eq_ignore_ascii_case("jar") || ext.eq_ignore_ascii_case("zip"))
+        .unwrap_or(false);
+    if is_archive && open_zip(bytes.to_vec()).is_err() {
+        return Err(
+            "manual download is corrupt or incomplete — please download it again".to_string(),
+        );
+    }
+    Ok(())
 }
 
 pub fn place_manual_mods(
@@ -536,7 +582,7 @@ fn already_current(game_dir: &Path, rel: &str, expected: Option<&str>) -> bool {
     };
     let path = game_dir.join(rel);
     match std::fs::read(&path) {
-        Ok(bytes) => sha512_hex(&bytes).eq_ignore_ascii_case(expected),
+        Ok(bytes) => !bytes.is_empty() && sha512_hex(&bytes).eq_ignore_ascii_case(expected),
         Err(_) => false,
     }
 }
@@ -552,6 +598,39 @@ fn cleanup_stale(game_dir: &Path, old: &Manifest, new: &Manifest) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_empty_manual_download() {
+        assert!(check_manual_bytes(&[], "mod.jar", None).is_err());
+    }
+
+    #[test]
+    fn rejects_hash_mismatch_manual_download() {
+        let zip = minimal_zip();
+        let bad = sha1_hex(b"different");
+        assert!(check_manual_bytes(&zip, "mod.jar", Some(&bad)).is_err());
+        let good = sha1_hex(&zip);
+        assert!(check_manual_bytes(&zip, "mod.jar", Some(&good)).is_ok());
+    }
+
+    #[test]
+    fn rejects_corrupt_archive_but_allows_non_archive() {
+        assert!(check_manual_bytes(b"not a zip", "mod.jar", None).is_err());
+        assert!(check_manual_bytes(b"some text", "notes.txt", None).is_ok());
+    }
+
+    fn minimal_zip() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut w = zip::ZipWriter::new(Cursor::new(&mut buf));
+            w.start_file::<_, ()>("a.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            w.write_all(b"hi").unwrap();
+            w.finish().unwrap();
+        }
+        buf
+    }
 
     #[test]
     fn prettifies_mod_filenames() {

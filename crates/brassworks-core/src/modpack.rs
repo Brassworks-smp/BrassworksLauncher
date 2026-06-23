@@ -809,14 +809,9 @@ impl<'a> Modpack<'a> {
         let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
         let bytes = http.download(&version.url)?;
-        if let Some(expected) = &version.sha512 {
-            let actual = packwiz::sha512_hex(&bytes);
-            if !actual.eq_ignore_ascii_case(expected) {
-                return Err(CoreError::Modpack(
-                    "Downloaded file failed hash verification".to_string(),
-                ));
-            }
-        }
+        version
+            .verify_data(&bytes)
+            .map_err(|_| CoreError::Modpack("Downloaded file failed hash verification".to_string()))?;
 
         let dir = self.game_dir().join("saves").join(world).join("datapacks");
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
@@ -929,14 +924,9 @@ impl<'a> Modpack<'a> {
         let folder = folder_for(project_type);
 
         let bytes = http.download(&version.url)?;
-        if let Some(expected) = &version.sha512 {
-            let actual = packwiz::sha512_hex(&bytes);
-            if !actual.eq_ignore_ascii_case(expected) {
-                return Err(CoreError::Modpack(
-                    "Downloaded file failed hash verification".to_string(),
-                ));
-            }
-        }
+        version
+            .verify_data(&bytes)
+            .map_err(|_| CoreError::Modpack("Downloaded file failed hash verification".to_string()))?;
 
         let game_dir = self.game_dir();
         if allow_disable_managed {

@@ -734,11 +734,15 @@ impl Launcher {
     pub fn scan_manual_mods(
         &self,
         folders: Vec<String>,
-        filenames: Vec<String>,
+        wanted: Vec<packs::ManualWant>,
     ) -> Vec<(String, String)> {
-        packs::scan_manual_mods(&folders, &filenames)
+        packs::scan_manual_mods(&folders, &wanted)
             .into_iter()
             .collect()
+    }
+
+    pub fn validate_manual_mod(&self, path: String, sha1: Option<String>) -> bool {
+        packs::validate_manual_file(std::path::Path::new(&path), sha1.as_deref())
     }
 
     #[allow(clippy::too_many_arguments)]
