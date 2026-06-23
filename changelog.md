@@ -1,6 +1,9 @@
 ### **Additions:**
-* **Shareable packs** - a `.packwiz` file (or a `brassworks://install` link) points the launcher at a remote pack and opens straight to a confirmation screen before running the normal install. Packs can carry an optional name, description, icon, banner, signing key, news and player-count feeds, default RAM, and JVM args. The file type and URL scheme are registered on every platform, packwiz instances can edit their news and player-count feeds, and shared packs ship with a branded document icon.
+* **Offline branding** - modpack icons, banners, and logos are now cached locally the first time they load, so instances still look right when you're offline or a source can't be reached. The live image is still used whenever you're online, and the cached copies are cleared along with everything else from the cache control in Settings.
 
 ### **Improvements:**
-* **Install progress where you can see it** - when an instance is still installing, hitting Play selects it and shows its download in the loading bar instead of an overlay on the instances page. When its Play tab isn't open, the download is mirrored as a cancellable progress toast, and instances that are downloading or updating are now marked on their cards. Cancelling a never-finished first install cleans up the orphaned instance.
-* **Faster install checks** - the optional and blocked content step now reuses the modpack download from the previous check instead of fetching it again.
+* **Verified downloads** - mods and modpack files are now checked against their published SHA-1 hashes, empty or corrupt downloads are rejected, manually supplied files are validated before they're used, and blocked content is verified in the optional/blocked content picker.
+
+### **Fixes:**
+* **Launches offline again** - the launcher no longer hangs on a blank screen at startup when you're offline with Discord open. Discord Rich Presence now connects in the background, and network requests time out instead of stalling forever.
+* **Opening a pack file while closed** - double-clicking a `.packwiz` file (or following an install link) while the launcher is closed now opens the install confirmation on first launch, instead of just starting the app and making you click again.
