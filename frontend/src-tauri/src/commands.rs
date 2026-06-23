@@ -57,13 +57,14 @@ pub(crate) fn save_settings(state: State<AppState>, settings: LauncherSettings) 
     let was_on = state.launcher.settings().map(|s| s.discord_rpc).unwrap_or(true);
     state.launcher.save_settings(&settings).map_err(err)?;
             if was_on != settings.discord_rpc {
+        let discord = state.discord.clone();
         if settings.discord_rpc {
             let in_game = state.running.lock().map(|r| !r.is_empty()).unwrap_or(false);
             if !in_game {
-                state.discord.set_idle();
+                std::thread::spawn(move || discord.set_idle());
             }
         } else {
-            state.discord.clear();
+            std::thread::spawn(move || discord.clear());
         }
     }
     Ok(())

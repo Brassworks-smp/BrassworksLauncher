@@ -368,7 +368,8 @@ pub fn run() {
 
             let discord = Arc::new(Discord::new());
             if launcher.settings().map(|s| s.discord_rpc).unwrap_or(true) {
-                discord.set_idle();
+                let discord = discord.clone();
+                std::thread::spawn(move || discord.set_idle());
             }
 
             let cold_args = std::env::args().collect::<Vec<_>>();

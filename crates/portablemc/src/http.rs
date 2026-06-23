@@ -5,7 +5,9 @@ use reqwest::{Client, ClientBuilder};
 pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 pub fn builder() -> ClientBuilder {
-    Client::builder().user_agent(USER_AGENT)
+    Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(std::time::Duration::from_secs(30))
 }
 
 /// Build a fresh client for the caller.
