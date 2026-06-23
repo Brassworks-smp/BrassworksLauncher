@@ -65,6 +65,21 @@ pub struct ResolvedVersion {
     pub manual_only: bool,
 }
 
+impl ResolvedVersion {
+    pub fn verify_data(&self, data: &[u8]) -> std::result::Result<(), String> {
+        if let Some(expected) = self.sha512.as_deref().filter(|h| !h.is_empty()) {
+            if !crate::sha512_hex(data).eq_ignore_ascii_case(expected) {
+                return Err("hash mismatch (corrupt download)".to_string());
+            }
+        } else if let Some(expected) = self.sha1.as_deref().filter(|h| !h.is_empty()) {
+            if !crate::sha1_hex(data).eq_ignore_ascii_case(expected) {
+                return Err("hash mismatch (corrupt download)".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionDep {
     pub project_id: Option<String>,
@@ -460,7 +475,18 @@ impl Modrinth {
                         }
                     }
                     if !failed {
-                        return Ok(buf);
+                        if buf.is_empty() {
+                            last = PackwizError::Http(
+                                "download -> empty response body".to_string(),
+                            );
+                        } else if total > 0 && (buf.len() as u64) != total {
+                            last = PackwizError::Http(format!(
+                                "download -> truncated ({} of {total} bytes)",
+                                buf.len()
+                            ));
+                        } else {
+                            return Ok(buf);
+                        }
                     }
                 }
                 Err(e) => last = PackwizError::http(e),
@@ -487,5 +513,52 @@ impl Modrinth {
 
     pub fn clear_cache(cache_dir: &Path) {
         let _ = std::fs::remove_dir_all(cache_dir);
+    }
+}
+
+#[cfg(test)]
+mod verify_tests {
+    use super::ResolvedVersion;
+    use crate::{sha1_hex, sha512_hex};
+
+    fn rv(sha512: Option<String>, sha1: Option<String>) -> ResolvedVersion {
+        ResolvedVersion {
+            version_id: "1".into(),
+            version_number: "1".into(),
+            filename: "mod.jar".into(),
+            url: "https://example/mod.jar".into(),
+            sha512,
+            sha1,
+            game_versions: vec![],
+            loaders: vec![],
+            dependencies: vec![],
+            manual_only: false,
+        }
+    }
+
+    #[test]
+    fn accepts_matching_sha512() {
+        let data = b"hello world";
+        assert!(rv(Some(sha512_hex(data)), None).verify_data(data).is_ok());
+    }
+
+    #[test]
+    fn falls_back_to_sha1_when_no_sha512() {
+        let data = b"curseforge mod bytes";
+        assert!(rv(None, Some(sha1_hex(data))).verify_data(data).is_ok());
+    }
+
+    #[test]
+    fn rejects_mismatch() {
+        let data = b"real bytes";
+        assert!(rv(Some(sha512_hex(b"other")), None).verify_data(data).is_err());
+        assert!(rv(None, Some(sha1_hex(b"other"))).verify_data(data).is_err());
+    }
+
+    #[test]
+    fn accepts_when_no_hashes_or_empty() {
+        let data = b"anything";
+        assert!(rv(None, None).verify_data(data).is_ok());
+        assert!(rv(Some(String::new()), Some(String::new())).verify_data(data).is_ok());
     }
 }
