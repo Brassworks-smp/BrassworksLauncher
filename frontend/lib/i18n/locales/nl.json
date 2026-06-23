@@ -84,6 +84,8 @@
     "dropHere": "Drop hier",
     "doubleClickRename": "Dubbelklikken om te hernoemen",
     "running": "Actief",
+    "updating": "",
+    "downloading": "",
     "selected": "Geselecteerd",
     "select": "Selecteer",
     "pin": "Vastpinnen aan de bovenkant",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "Controleren op optionele content…",
     "modpackFallback": "Modpack",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",

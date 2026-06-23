@@ -84,6 +84,8 @@
     "dropHere": "",
     "doubleClickRename": "",
     "running": "",
+    "updating": "",
+    "downloading": "",
     "selected": "",
     "select": "",
     "pin": "",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "",
     "modpackFallback": "",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",

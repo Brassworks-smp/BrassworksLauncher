@@ -84,6 +84,8 @@
     "dropHere": "أفلِت هنا",
     "doubleClickRename": "دبل كليك عشان تغيّر الاسم",
     "running": "شغّالة",
+    "updating": "",
+    "downloading": "",
     "selected": "مختارة",
     "select": "اختيار",
     "pin": "ثبّت في الأعلى",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "جاري الفحص عن محتوى اختياري…",
     "modpackFallback": "مودباك",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",

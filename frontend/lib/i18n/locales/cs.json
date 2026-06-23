@@ -84,6 +84,8 @@
     "dropHere": "",
     "doubleClickRename": "Dvakrát klikněte pro přejmenování",
     "running": "Instance běží",
+    "updating": "",
+    "downloading": "",
     "selected": "Vybráno",
     "select": "Vybrat",
     "pin": "Připnout nahoru",
@@ -697,6 +699,15 @@
     },
     "checkingOptional": "",
     "modpackFallback": "",
+    "share": {
+      "subtitle": "",
+      "unsup": "",
+      "install": "",
+      "jvmArgs": "",
+      "copyUrl": "",
+      "copy": "",
+      "copied": ""
+    },
     "cancelDownload": {
       "title": "",
       "body": "",
