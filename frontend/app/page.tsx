@@ -67,6 +67,7 @@ import type {
   ManualMod,
   ModpackStatus,
   NewsItem,
+  PackwizShare,
   PlayerCount,
 } from "@/lib/types";
 import { FlavorPicker } from "@/components/FlavorPicker";
@@ -147,6 +148,8 @@ export default function Home() {
   const [tabIntro, setTabIntro] = useState<View | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [pendingPackwizShare, setPendingPackwizShare] =
+    useState<PackwizShare | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installingInstanceId, setInstallingInstanceId] = useState<string | null>(
     null,
@@ -396,16 +399,15 @@ export default function Home() {
   }, []);
 
   const featuredEnabled = settings?.show_featured ?? true;
+  const feedsEnabled = !!instance && (!instance.featured || featuredEnabled);
   const showNews = !!(
-    featuredEnabled &&
-    instance?.featured &&
-    instance.show_news &&
+    feedsEnabled &&
+    instance?.show_news &&
     instance.news_url
   );
   const showPlayers = !!(
-    featuredEnabled &&
-    instance?.featured &&
-    instance.show_playercount &&
+    feedsEnabled &&
+    instance?.show_playercount &&
     instance.playercount_url
   );
 
@@ -792,6 +794,17 @@ export default function Home() {
     });
   }, []);
 
+  const openPackwizShare = useCallback(async (input: string) => {
+    try {
+      const share = await api.resolvePackwizShare(input);
+      getCurrentWindow().setFocus().catch(() => {});
+      setPendingPackwizShare(share);
+      setAddOpen(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
   const onUploadLog = useCallback(() => {
     if (!selectedId) return;
     setUploadingLog(true);
@@ -974,15 +987,19 @@ export default function Home() {
   useEffect(() => {
     if (!api.isTauri()) return;
     const unsubs: Array<() => void> = [];
-    api
-      .onCliCommand((cmd) => {
-        getCurrentWindow().setFocus().catch(() => {});
-        void runScript(cmd, REGISTRY, cmdCtx);
-      })
-      .then((u) => {
-        unsubs.push(u);
-        api.cliReady().catch(() => {});
-      });
+    Promise.all([
+      api
+        .onCliCommand((cmd) => {
+          getCurrentWindow().setFocus().catch(() => {});
+          void runScript(cmd, REGISTRY, cmdCtx);
+        })
+        .then((u) => unsubs.push(u)),
+      api
+        .onPackwizOpen((path) => void openPackwizShare(path))
+        .then((u) => unsubs.push(u)),
+    ]).then(() => {
+      api.cliReady().catch(() => {});
+    });
     api
       .onMenuAction((action) => {
         if (!action.startsWith("cmd:")) return;
@@ -1001,7 +1018,7 @@ export default function Home() {
       unsubs.forEach((u) => u());
       offPins();
     };
-  }, [cmdCtx]);
+  }, [cmdCtx, openPackwizShare]);
 
   return (
     <I18nProvider
@@ -1267,13 +1284,16 @@ export default function Home() {
           installing={installing}
           detailInstanceId={selectedId}
           importOnly={importFromOnboarding}
+          initialPackwiz={pendingPackwizShare}
           onClose={() => {
             setAddOpen(false);
             setImportFromOnboarding(false);
+            setPendingPackwizShare(null);
           }}
           onCreated={(inst) => {
             setAddOpen(false);
             setImportFromOnboarding(false);
+            setPendingPackwizShare(null);
             api.getSettings().then(setSettings).catch(() => {});
             refreshInstances().then(() => {
               void selectInstance(inst.id);

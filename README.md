@@ -135,6 +135,77 @@ command is installed and lets you remove it again at any time.
 
 ---
 
+## Share a pack
+
+Small servers that want to share their packwiz modpack with players can hand them a single file - or link - that opens the launcher straight to an install. A `.packwiz` file is a small JSON pointer to your [packwiz](https://packwiz.infra.link/) pack: double-clicking it opens Brassworks to a confirmation screen with the pack's name, icon, description, and settings, then walks through the normal flavour and optional-content steps. The launcher registers itself as the handler for `.packwiz` files on macOS, Windows, and Linux, so they show up as branded documents.
+
+<img src="assets/PackwizUrlImport.png" alt="Packwiz pack install screen" width="100%">
+
+Only `pack_url` is required - everything else is optional and falls back to the pack's own defaults:
+
+```json
+{
+  "pack_url": "https://packs.example.com/mypack/pack.toml",
+  "name": "My SMP Pack",
+  "description": "A cosy trains-and-rails server pack.",
+  "unsup": true,
+  "icon": "https://packs.example.com/mypack/icon.png",
+  "banner": "https://packs.example.com/mypack/banner.png",
+  "signing_key": "<ed25519 public key>",
+  "news_url": "https://packs.example.com/mypack/news.json",
+  "playercount_url": "https://packs.example.com/mypack/status.json",
+  "min_memory_mb": 2048,
+  "max_memory_mb": 6144,
+  "jvm_args": ["-XX:+UseG1GC"]
+}
+```
+
+The `news_url` and `playercount_url` fields point at small JSON endpoints the launcher polls and shows on the instance's Play screen. `news_url` returns a single news item:
+
+```json
+{
+  "title": "Weekend event",
+  "body": "Build contest starts Saturday at 3pm."
+}
+```
+
+`playercount_url` returns live counts for your main server, plus an optional queue server. Every field defaults sensibly, so drop `queue` and `timestamp` if you don't need them:
+
+```json
+{
+  "main": { "online": true, "players_online": 12, "players_max": 100 },
+  "queue": { "online": false, "players_online": 0, "players_max": 0 },
+  "timestamp": "2025-06-23T18:00:00Z"
+}
+```
+
+A website can trigger the exact same install with a `brassworks://install?...` URL - no download needed. This script turns a pack file into one:
+
+```python
+import json, sys, urllib.parse
+
+data = json.load(open(sys.argv[1]))
+params = {}
+for key, value in data.items():
+    if value is None:
+        continue
+    if isinstance(value, bool):
+        params[key] = "true" if value else "false"
+    elif isinstance(value, list):
+        params[key] = " ".join(map(str, value))
+    else:
+        params[key] = str(value)
+print("brassworks://install?" + urllib.parse.urlencode(params))
+```
+
+Run it with the pack file as the argument:
+
+```bash
+python pack2url.py mypack.packwiz
+```
+
+---
+
 ## Make it yours
 
 A handful of built-in themes and a customisable accent colour let you set the mood. Pick a look that matches how you play.

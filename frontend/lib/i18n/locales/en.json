@@ -699,6 +699,15 @@
     },
     "checkingOptional": "Checking for optional content…",
     "modpackFallback": "Modpack",
+    "share": {
+      "subtitle": "Shared packwiz modpack",
+      "unsup": "unsup",
+      "install": "Install",
+      "jvmArgs": "Java arguments",
+      "copyUrl": "Copy pack URL",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
     "cancelDownload": {
       "title": "Cancel download?",
       "body": "This will stop setting up the modpack and close this window.",

@@ -419,12 +419,27 @@ export interface DatapackInfo {
 }
 
 export interface FeaturedPack {
-  
+
   id: string;
   name: string;
   icon: string | null;
   modrinth_ids: string[];
   curseforge_ids: string[];
+}
+
+export interface PackwizShare {
+  pack_url: string;
+  name: string | null;
+  description: string | null;
+  unsup: boolean;
+  icon: string | null;
+  banner: string | null;
+  signing_key: string | null;
+  news_url: string | null;
+  playercount_url: string | null;
+  min_memory_mb: number | null;
+  max_memory_mb: number | null;
+  jvm_args: string[] | null;
 }
 
 export interface ServerEntry {

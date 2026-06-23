@@ -16,6 +16,8 @@ pub(crate) struct AppState {
     pub(crate) cancels: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     pub(crate) discord: Arc<Discord>,
     pub(crate) pending_cli: Arc<Mutex<Option<String>>>,
+    pub(crate) pending_open: Arc<Mutex<Option<String>>>,
+    pub(crate) frontend_ready: Arc<AtomicBool>,
 }
 
 impl AppState {

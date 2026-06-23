@@ -652,7 +652,7 @@ export function InstanceSettingsView({
             />
           )}
 
-          {instance.featured && (
+          {(instance.featured || instance.pack.kind === "packwiz") && (
             <Card title={t("instanceSettings.feeds.title")} icon={<Newspaper size={14} />}>
               <Toggle
                 label={t("instanceSettings.feeds.showNews")}

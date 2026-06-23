@@ -52,6 +52,15 @@
     "category": "Game",
     "shortDescription": "Launcher for the Brassworks SMP",
     "longDescription": "The Brassworks Launcher installs and launches the Brassworks SMP modpack (NeoForge 1.21.1) and keeps you up to date.",
+    "fileAssociations": [
+      {
+        "ext": ["packwiz"],
+        "name": "Brassworks Pack",
+        "description": "Brassworks shareable modpack",
+        "mimeType": "application/x-brassworks-packwiz",
+        "role": "Viewer"
+      }
+    ],
     "macOS": {
       "entitlements": "Entitlements.plist"
     }
@@ -62,6 +71,11 @@
       "endpoints": [
         "https://github.com/Brassworks-smp/BrassworksLauncher/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["brassworks"]
+      }
     }
   }
 }

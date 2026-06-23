@@ -6,7 +6,7 @@ use brassworks_core::{
     LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload,
     McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
     ProjectDetail, SavedSkin, SearchHit, ServerEntry, ServerStatus, SkinLibraryView, SkinProfile,
-    WorldBackup, WorldInfo,
+    PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -955,6 +955,7 @@ pub(crate) async fn create_packwiz_instance(
     unsup: Option<bool>,
     flavors: Option<Vec<String>>,
     public_key: Option<String>,
+    meta: Option<PackInstallMeta>,
 ) -> CmdResult<Instance> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -966,6 +967,7 @@ pub(crate) async fn create_packwiz_instance(
                 unsup.unwrap_or(false),
                 flavors.unwrap_or_default(),
                 public_key,
+                meta.unwrap_or_default(),
             )
             .map_err(err)
     })
@@ -1940,11 +1942,27 @@ pub(crate) async fn export_world(
 
 #[tauri::command]
 pub(crate) fn cli_ready(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
+    state.frontend_ready.store(true, Ordering::Relaxed);
+    let open = state.pending_open.lock().map_err(|_| "lock poisoned")?.take();
+    if let Some(file) = open {
+        app.emit("packwiz://open", file).map_err(err)?;
+    }
     let cmd = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
     if let Some(cmd) = cmd {
         app.emit("cli://command", cmd).map_err(err)?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn resolve_packwiz_share(input: String) -> CmdResult<PackwizShare> {
+    if let Some(scheme_end) = input.find("://") {
+        if input[..scheme_end].eq_ignore_ascii_case("brassworks") {
+            let url = tauri::Url::parse(&input).map_err(err)?;
+            return PackwizShare::from_query_pairs(url.query_pairs()).map_err(err);
+        }
+    }
+    PackwizShare::from_file(&input).map_err(err)
 }
 
 #[tauri::command]

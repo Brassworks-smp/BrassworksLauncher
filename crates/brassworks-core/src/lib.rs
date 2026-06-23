@@ -20,6 +20,7 @@ pub mod launch;
 pub mod modpack;
 pub mod modrinth_plays;
 pub mod packs;
+pub mod packwiz_share;
 pub mod paths;
 pub mod ping;
 pub mod progress;
@@ -43,6 +44,7 @@ pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
 pub use packwiz::{FlavorChoice, FlavorGroup, PackwizBranch, SearchHit};
+pub use packwiz_share::{PackInstallMeta, PackwizShare};
 pub use paths::Paths;
 pub use ping::ServerStatus;
 pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
@@ -524,6 +526,7 @@ impl Launcher {
         Ok(packwiz::Installer::new().github_pack_branches(repo)?)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_packwiz_instance(
         &self,
         name: &str,
@@ -532,6 +535,7 @@ impl Launcher {
         unsup: bool,
         flavors: Vec<String>,
         public_key: Option<String>,
+        meta: PackInstallMeta,
     ) -> Result<Instance> {
         let installer = packwiz::Installer::new();
         let pack = installer.fetch_pack(url)?;
@@ -562,7 +566,22 @@ impl Launcher {
         inst.optional_mods = Some(optional);
         inst.unsup_flavors = Some(flavors);
         inst.unsup_public_key = public_key.filter(|k| !k.trim().is_empty());
-                        inst.icon = installer.find_pack_icon(url);
+        let clean = |s: Option<String>| s.filter(|v| !v.trim().is_empty());
+        inst.icon = clean(meta.icon).or_else(|| installer.find_pack_icon(url));
+        inst.banner = clean(meta.banner);
+        inst.notes = clean(meta.description);
+        inst.news_url = clean(meta.news_url);
+        inst.playercount_url = clean(meta.playercount_url);
+        inst.show_news = inst.news_url.is_some();
+        inst.show_playercount = inst.playercount_url.is_some();
+        inst.min_memory_mb = meta.min_memory_mb;
+        inst.max_memory_mb = meta.max_memory_mb;
+        if let Some(args) = meta.jvm_args {
+            let args: Vec<String> = args.into_iter().filter(|a| !a.trim().is_empty()).collect();
+            if !args.is_empty() {
+                inst.extra_jvm_args = args;
+            }
+        }
         mgr.create(inst)
     }
 

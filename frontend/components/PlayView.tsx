@@ -226,9 +226,10 @@ export function PlayView({
     !!modStatus?.update_available && !notInstalled && !running && !busy;
   const updateAvailable = hasUpdate && locked;
 
+  const feedsEnabled = !instance.featured || featuredEnabled;
   const showPlayers =
-    featuredEnabled && instance.show_playercount && !!instance.playercount_url;
-  const showNews = featuredEnabled && instance.show_news && !!instance.news_url;
+    feedsEnabled && instance.show_playercount && !!instance.playercount_url;
+  const showNews = feedsEnabled && instance.show_news && !!instance.news_url;
 
   
   const sidebarPx = sidebarWidth || (appliedPins(instance).length > 0 ? 300 : 248);

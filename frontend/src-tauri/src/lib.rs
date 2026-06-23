@@ -23,6 +23,33 @@ fn reveal_main(app: &tauri::AppHandle) {
     }
 }
 
+fn is_packwiz_scheme(s: &str) -> bool {
+    s.len() >= 13 && s[..13].eq_ignore_ascii_case("brassworks://")
+}
+
+fn packwiz_open_from_argv(args: &[String]) -> Option<String> {
+    args.iter()
+        .skip(1)
+        .find(|a| {
+            is_packwiz_scheme(a)
+                || (a.to_lowercase().ends_with(".packwiz") && std::path::Path::new(a).is_file())
+        })
+        .cloned()
+}
+
+fn packwiz_open_from_url(raw: &str) -> Option<String> {
+    if is_packwiz_scheme(raw) {
+        return Some(raw.to_string());
+    }
+    let path = raw.strip_prefix("file://").unwrap_or(raw);
+    let decoded = path.replace("%20", " ");
+    if decoded.to_lowercase().ends_with(".packwiz") && std::path::Path::new(&decoded).is_file() {
+        Some(decoded)
+    } else {
+        None
+    }
+}
+
 fn command_from_argv(args: &[String]) -> Option<String> {
     let mut tokens: Vec<String> = Vec::new();
     let mut started = false;
@@ -313,7 +340,9 @@ pub fn run() {
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             reveal_main(app);
-            if let Some(cmd) = command_from_argv(&argv) {
+            if let Some(open) = packwiz_open_from_argv(&argv) {
+                let _ = app.emit("packwiz://open", open);
+            } else if let Some(cmd) = command_from_argv(&argv) {
                 let _ = app.emit("cli://command", cmd);
             }
         }));
@@ -321,7 +350,8 @@ pub fn run() {
 
     builder = builder
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(desktop)]
     {
@@ -340,7 +370,13 @@ pub fn run() {
                 discord.set_idle();
             }
 
-            let cold_cli = command_from_argv(&std::env::args().collect::<Vec<_>>());
+            let cold_args = std::env::args().collect::<Vec<_>>();
+            let cold_open = packwiz_open_from_argv(&cold_args);
+            let cold_cli = if cold_open.is_some() {
+                None
+            } else {
+                command_from_argv(&cold_args)
+            };
 
             app.manage(AppState {
                 launcher,
@@ -349,9 +385,17 @@ pub fn run() {
                 cancels: Arc::new(Mutex::new(HashMap::new())),
                 discord,
                 pending_cli: Arc::new(Mutex::new(cold_cli)),
+                pending_open: Arc::new(Mutex::new(cold_open)),
+                frontend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             });
 
             setup_tray(app.handle())?;
+
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+            }
 
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             setup_menu(app.handle())?;
@@ -492,7 +536,30 @@ pub fn run() {
             commands::uninstall_cli,
             commands::cli_status,
             commands::set_menu_commands,
+            commands::resolve_packwiz_share,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Brassworks Launcher");
+        .build(tauri::generate_context!())
+        .expect("error while building Brassworks Launcher")
+        .run(|app, event| {
+            if let tauri::RunEvent::Opened { urls } = event {
+                let opens: Vec<String> = urls
+                    .iter()
+                    .filter_map(|u| packwiz_open_from_url(u.as_str()))
+                    .collect();
+                if let Some(file) = opens.into_iter().next() {
+                    reveal_main(app);
+                    let ready = app
+                        .try_state::<AppState>()
+                        .map(|s| s.frontend_ready.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(false);
+                    if ready {
+                        let _ = app.emit("packwiz://open", file);
+                    } else if let Some(slot) = app.try_state::<AppState>() {
+                        if let Ok(mut pending) = slot.pending_open.lock() {
+                            *pending = Some(file);
+                        }
+                    }
+                }
+            }
+        });
 }

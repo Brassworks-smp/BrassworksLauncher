@@ -12,6 +12,9 @@ import {
   Download,
   DownloadCloud,
   AlertTriangle,
+  Copy,
+  MemoryStick,
+  Terminal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import type {
@@ -22,6 +25,7 @@ import type {
   OptionalComponent,
   PreflightProgress,
   FeaturedPack,
+  PackwizShare,
 } from "@/lib/types";
 import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
 import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
@@ -48,6 +52,14 @@ type PendingInstall =
       name: string;
       unsup: boolean;
       publicKey: string | null;
+      icon?: string | null;
+      banner?: string | null;
+      description?: string | null;
+      newsUrl?: string | null;
+      playercountUrl?: string | null;
+      minMemoryMb?: number | null;
+      maxMemoryMb?: number | null;
+      jvmArgs?: string[] | null;
     };
 
 
@@ -120,6 +132,7 @@ export function AddInstanceModal({
   detailInstanceId,
   initialTab,
   importOnly,
+  initialPackwiz,
   onClose,
   onCreated,
   onInstallModpack,
@@ -133,8 +146,9 @@ export function AddInstanceModal({
   installing: boolean;
   detailInstanceId: string | null;
   initialTab?: Tab;
-  
+
   importOnly?: boolean;
+  initialPackwiz?: PackwizShare | null;
   onClose: () => void;
   onCreated: (instance: Instance) => void;
   onInstallModpack: (
@@ -284,9 +298,19 @@ export function AddInstanceModal({
     } else {
       setBusy(true);
       try {
+        const meta = {
+          icon: intent.icon,
+          banner: intent.banner,
+          description: intent.description,
+          newsUrl: intent.newsUrl,
+          playercountUrl: intent.playercountUrl,
+          minMemoryMb: intent.minMemoryMb,
+          maxMemoryMb: intent.maxMemoryMb,
+          jvmArgs: intent.jvmArgs,
+        };
         const inst = intent.unsup
-          ? await api.createPackwizInstance(intent.name, intent.url, [], true, ids, intent.publicKey)
-          : await api.createPackwizInstance(intent.name, intent.url, ids);
+          ? await api.createPackwizInstance(intent.name, intent.url, [], true, ids, intent.publicKey, meta)
+          : await api.createPackwizInstance(intent.name, intent.url, ids, false, [], null, meta);
         onCreated(inst);
       } catch (e) {
         onError(String(e));
@@ -465,6 +489,28 @@ export function AddInstanceModal({
     });
   };
 
+  const startShareInstall = () => {
+    if (!initialPackwiz) return;
+    const s = initialPackwiz;
+    void beginInstall({
+      kind: "packwiz",
+      url: s.pack_url,
+      name: s.name ?? "",
+      unsup: s.unsup,
+      publicKey: s.signing_key,
+      icon: s.icon,
+      banner: s.banner,
+      description: s.description,
+      newsUrl: s.news_url,
+      playercountUrl: s.playercount_url,
+      minMemoryMb: s.min_memory_mb,
+      maxMemoryMb: s.max_memory_mb,
+      jvmArgs: s.jvm_args,
+    });
+  };
+
+  const sharePreview = !!initialPackwiz && pending === null;
+
   return (
     <div
       className={`modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm ${
@@ -506,7 +552,7 @@ export function AddInstanceModal({
           </button>
         </div>
 
-        {!importOnly && (
+        {!importOnly && !initialPackwiz && (
           <div className="border-b border-edge px-3 py-2">
             <SegmentedTabs
               value={tab}
@@ -520,7 +566,14 @@ export function AddInstanceModal({
         )}
 
         <div className="flex min-h-0 flex-1 flex-col p-5">
-          {pending ? (
+          {sharePreview ? (
+            <SharePreview
+              share={initialPackwiz!}
+              busy={busy || installing}
+              onInstall={startShareInstall}
+              onCancel={close}
+            />
+          ) : pending ? (
             picker === null ? (
               <PreflightLoading stage={prefStage} />
             ) : picker.kind === "flavors" ? (
@@ -961,6 +1014,122 @@ function PreflightLoading({ stage }: { stage: PreflightProgress | null }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SharePreview({
+  share,
+  busy,
+  onInstall,
+  onCancel,
+}: {
+  share: PackwizShare;
+  busy: boolean;
+  onInstall: () => void;
+  onCancel: () => void;
+}) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const host = (() => {
+    try {
+      return new URL(share.pack_url).host;
+    } catch {
+      return share.pack_url;
+    }
+  })();
+  const name = share.name?.trim() || host || t("addInstance.modpackFallback");
+  const ram =
+    share.max_memory_mb || share.min_memory_mb
+      ? share.min_memory_mb && share.max_memory_mb
+        ? `${share.min_memory_mb}–${share.max_memory_mb} MB`
+        : `${share.max_memory_mb ?? share.min_memory_mb} MB`
+      : null;
+  const jvm = share.jvm_args?.length ? share.jvm_args.join(" ") : null;
+  const copyUrl = () => {
+    navigator.clipboard
+      .writeText(share.pack_url)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto pr-1 text-center">
+        <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-edge bg-ink-950/60">
+          {share.icon ? (
+            <img src={share.icon} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <Boxes size={34} className="text-brass-400" />
+          )}
+        </div>
+        <div>
+          <div className="font-mc text-xl tracking-wide text-gray-100">{name}</div>
+          <div className="mt-1 text-xs text-ink-600">{t("addInstance.share.subtitle")}</div>
+        </div>
+        {share.description && (
+          <p className="max-w-md text-sm leading-relaxed text-ink-500">
+            {share.description}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-ink-900/50 px-2 py-1 text-ink-500">
+            <GitBranch size={12} /> packwiz
+          </span>
+          {share.unsup && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-300">
+              <AlertTriangle size={12} /> {t("addInstance.share.unsup")}
+            </span>
+          )}
+          {ram && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-ink-900/50 px-2 py-1 text-ink-500">
+              <MemoryStick size={12} /> {ram}
+            </span>
+          )}
+        </div>
+        {jvm && (
+          <div className="w-full max-w-md text-left">
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] text-ink-600">
+              <Terminal size={12} /> {t("addInstance.share.jvmArgs")}
+            </div>
+            <div className="break-all rounded-md border border-edge bg-ink-950/50 px-3 py-2 font-mono text-[11px] text-ink-500">
+              {jvm}
+            </div>
+          </div>
+        )}
+        <div className="flex w-full max-w-md items-stretch gap-2">
+          <div className="min-w-0 flex-1 break-all rounded-md border border-edge bg-ink-950/50 px-3 py-2 text-left font-mono text-[11px] text-ink-600">
+            {share.pack_url}
+          </div>
+          <button
+            onClick={copyUrl}
+            title={t("addInstance.share.copyUrl")}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-edge px-2.5 text-xs text-ink-500 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            {copied ? t("addInstance.share.copied") : t("addInstance.share.copy")}
+          </button>
+        </div>
+      </div>
+      <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-500 transition hover:text-gray-200 disabled:opacity-40"
+        >
+          {t("common.cancel")}
+        </button>
+        <button
+          onClick={onInstall}
+          disabled={busy}
+          className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-40"
+        >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+          {t("addInstance.share.install")}
+        </button>
+      </div>
     </div>
   );
 }

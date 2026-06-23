@@ -21,6 +21,7 @@ import type {
   Instance,
   JavaInstall,
   FeaturedPack,
+  PackwizShare,
   JavaReport,
   LaunchProgress,
   LauncherSettings,
@@ -387,6 +388,16 @@ export const createPackwizInstance = (
   unsup = false,
   flavors: string[] = [],
   publicKey: string | null = null,
+  meta: {
+    icon?: string | null;
+    banner?: string | null;
+    description?: string | null;
+    newsUrl?: string | null;
+    playercountUrl?: string | null;
+    minMemoryMb?: number | null;
+    maxMemoryMb?: number | null;
+    jvmArgs?: string[] | null;
+  } = {},
 ): Promise<Instance> =>
   invoke("create_packwiz_instance", {
     name,
@@ -395,7 +406,20 @@ export const createPackwizInstance = (
     unsup,
     flavors,
     publicKey,
+    meta: {
+      icon: meta.icon ?? null,
+      banner: meta.banner ?? null,
+      description: meta.description ?? null,
+      newsUrl: meta.newsUrl ?? null,
+      playercountUrl: meta.playercountUrl ?? null,
+      minMemoryMb: meta.minMemoryMb ?? null,
+      maxMemoryMb: meta.maxMemoryMb ?? null,
+      jvmArgs: meta.jvmArgs ?? null,
+    },
   });
+
+export const resolvePackwizShare = (input: string): Promise<PackwizShare> =>
+  invoke("resolve_packwiz_share", { input });
 
 
 export const inspectPackwizFlavors = (
@@ -667,6 +691,11 @@ export const onCliCommand = (
   cb: (command: string) => void,
 ): Promise<UnlistenFn> =>
   listen<string>("cli://command", (e) => cb(e.payload));
+
+export const onPackwizOpen = (
+  cb: (path: string) => void,
+): Promise<UnlistenFn> =>
+  listen<string>("packwiz://open", (e) => cb(e.payload));
 
 export const cliReady = (): Promise<void> => invoke("cli_ready");
 
