@@ -702,7 +702,11 @@ export const onPackwizOpen = (
 ): Promise<UnlistenFn> =>
   listen<string>("packwiz://open", (e) => cb(e.payload));
 
-export const cliReady = (): Promise<void> => invoke("cli_ready");
+export interface PendingStartup {
+  open: string | null;
+  command: string | null;
+}
+export const cliReady = (): Promise<PendingStartup> => invoke("cli_ready");
 
 export const installCli = (): Promise<string> => invoke("install_cli");
 

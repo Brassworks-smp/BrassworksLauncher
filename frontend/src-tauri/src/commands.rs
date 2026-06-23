@@ -1954,17 +1954,17 @@ pub(crate) async fn export_world(
 }
 
 #[tauri::command]
-pub(crate) fn cli_ready(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
+pub(crate) fn cli_ready(state: State<AppState>) -> CmdResult<PendingStartup> {
     state.frontend_ready.store(true, Ordering::Relaxed);
     let open = state.pending_open.lock().map_err(|_| "lock poisoned")?.take();
-    if let Some(file) = open {
-        app.emit("packwiz://open", file).map_err(err)?;
-    }
-    let cmd = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
-    if let Some(cmd) = cmd {
-        app.emit("cli://command", cmd).map_err(err)?;
-    }
-    Ok(())
+    let command = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
+    Ok(PendingStartup { open, command })
+}
+
+#[derive(Serialize)]
+pub(crate) struct PendingStartup {
+    open: Option<String>,
+    command: Option<String>,
 }
 
 #[tauri::command]

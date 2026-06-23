@@ -998,7 +998,16 @@ export default function Home() {
         .onPackwizOpen((path) => void openPackwizShare(path))
         .then((u) => unsubs.push(u)),
     ]).then(() => {
-      api.cliReady().catch(() => {});
+      api
+        .cliReady()
+        .then((pending) => {
+          if (pending.open) void openPackwizShare(pending.open);
+          if (pending.command) {
+            getCurrentWindow().setFocus().catch(() => {});
+            void runScript(pending.command, REGISTRY, cmdCtx);
+          }
+        })
+        .catch(() => {});
     });
     api
       .onMenuAction((action) => {
