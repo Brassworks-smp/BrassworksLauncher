@@ -127,7 +127,6 @@ export function InstancesView({
   maintainingIds,
   workingIds,
   installingId,
-  onCancelInstall,
   onSelect,
   onOpenSettings,
   onStar,
@@ -144,7 +143,6 @@ export function InstancesView({
   maintainingIds: Set<string>;
   workingIds: Set<string>;
   installingId?: string | null;
-  onCancelInstall?: () => void;
   onSelect: (id: string) => void;
   onOpenSettings: (id: string) => void;
   onStar: (instance: Instance) => void;
@@ -229,11 +227,8 @@ export function InstancesView({
       folders={folders}
       selected={i.id === selectedId}
       running={runningIds.has(i.id)}
-      updating={
-        (maintainingIds.has(i.id) || workingIds.has(i.id)) && i.id !== installingId
-      }
+      updating={maintainingIds.has(i.id) || workingIds.has(i.id)}
       installing={i.id === installingId}
-      onCancelInstall={onCancelInstall}
       onSelect={() => onSelect(i.id)}
       onSettings={() => onOpenSettings(i.id)}
       onStar={() => onStar(i)}
@@ -733,7 +728,6 @@ function InstanceCard({
   running,
   updating,
   installing,
-  onCancelInstall,
   onSelect,
   onSettings,
   onStar,
@@ -751,7 +745,6 @@ function InstanceCard({
   running: boolean;
   updating?: boolean;
   installing?: boolean;
-  onCancelInstall?: () => void;
   onSelect: () => void;
   onSettings: () => void;
   onStar: () => void;
@@ -790,21 +783,19 @@ function InstanceCard({
     : {};
 
   
-  const stateCls = installing
-    ? "border-brass-500/40 cursor-default transition"
-    : selected
-      ? accent
-        ? "glow hover-lift cursor-pointer border-[var(--accent)]"
-        : "border-brass-500/60 glow hover-lift cursor-pointer"
-      : accent
-        ? "border-edge hover-lift cursor-pointer hover:border-[var(--accent)]/50"
-        : "border-edge hover-lift cursor-pointer hover:border-brass-600/40";
+  const stateCls = selected
+    ? accent
+      ? "glow hover-lift cursor-pointer border-[var(--accent)]"
+      : "border-brass-500/60 glow hover-lift cursor-pointer"
+    : accent
+      ? "border-edge hover-lift cursor-pointer hover:border-[var(--accent)]/50"
+      : "border-edge hover-lift cursor-pointer hover:border-brass-600/40";
 
   
   
   
   const dragProps = {
-    draggable: !instance.featured && !installing,
+    draggable: !instance.featured,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.setData("text/instance", instance.id);
       e.dataTransfer.setData("text/plain", instance.id);
@@ -938,32 +929,13 @@ function InstanceCard({
   if (compact) {
     return (
       <div
-        onClick={installing || editingName ? undefined : onSelect}
+        onClick={editingName ? undefined : onSelect}
         {...dragProps}
         style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
         className={`group relative flex items-center gap-2.5 overflow-hidden rounded-lg border bg-ink-900/40 px-2.5 py-2.5 transition-opacity ${stateCls} ${
           dragging ? "opacity-0" : ""
         }`}
       >
-        {installing && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-ink-950/75 backdrop-blur-[1px]">
-            <Loader2 size={15} className="animate-spin text-brass-300" />
-            <span className="font-mc text-[10px] tracking-wide text-brass-200">
-              Downloading…
-            </span>
-            {onCancelInstall && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancelInstall();
-                }}
-                className="flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-300 transition hover:bg-red-500/20"
-              >
-                <X size={11} /> Cancel
-              </button>
-            )}
-          </div>
-        )}
         <img
           src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent) ?? undefined}
           alt=""
@@ -1083,32 +1055,13 @@ function InstanceCard({
 
   return (
     <div
-      onClick={installing || editingName ? undefined : onSelect}
+      onClick={editingName ? undefined : onSelect}
       {...dragProps}
       style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
       className={`group relative flex aspect-square flex-col overflow-hidden rounded-xl border bg-ink-900/40 transition-opacity ${stateCls} ${
         dragging ? "opacity-0" : ""
       }`}
     >
-      {installing && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-ink-950/75 backdrop-blur-[1px]">
-          <Loader2 size={22} className="animate-spin text-brass-300" />
-          <span className="font-mc text-[11px] tracking-wide text-brass-200">
-            Downloading…
-          </span>
-          {onCancelInstall && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancelInstall();
-              }}
-              className="mt-1 flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 transition hover:bg-red-500/20"
-            >
-              <X size={12} /> Cancel
-            </button>
-          )}
-        </div>
-      )}
       <div className="relative flex h-24 items-center justify-center overflow-hidden">
         {instance.banner ? (
           <img src={brandingSrc(instance.banner) ?? undefined} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -1120,7 +1073,7 @@ function InstanceCard({
           <div className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md border border-brass-500/40 bg-ink-950/70 px-1.5 py-0.5 backdrop-blur-[1px]">
             <Loader2 size={11} className="animate-spin text-brass-300" />
             <span className="font-mc text-[10px] tracking-wide text-brass-200">
-              Updating
+              {tr(installing ? "instances.downloading" : "instances.updating")}
             </span>
           </div>
         )}

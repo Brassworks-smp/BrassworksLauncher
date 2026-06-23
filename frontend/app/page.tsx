@@ -169,6 +169,8 @@ export default function Home() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const skinsAvailableRef = useRef(false);
+  const installingIdRef = useRef<string | null>(null);
+  const deleteInstallOnCancelRef = useRef(false);
 
   
   
@@ -540,18 +542,10 @@ export default function Home() {
       api.onModpackProgress((p) => {
         setMaintainingIds((s) => withId(s, p.instance_id));
         setProgressById((m) => ({ ...m, [p.instance_id]: p }));
-        const pct =
-          p.total > 0 ? Math.min(100, Math.round((p.current / p.total) * 100)) : null;
-        toastProgress(
-          `modpack:${p.instance_id}`,
-          p.message || tr("page.updatingModpack"),
-          pct,
-          () => api.cancelOp(p.instance_id).catch(() => {}),
-        );
       }),
       api.onModpackDone((d) => {
         const id = d.instance_id;
-        dismissToast(`modpack:${id}`);
+        dismissToast(`download:${id}`);
         setMaintainingIds((s) => withoutId(s, id));
         setProgressById((m) => {
           if (!(id in m)) return m;
@@ -577,36 +571,68 @@ export default function Home() {
     if (!api.isTauri()) return;
     const unlisteners = [
       api.onPackStarted((created) => {
+        installingIdRef.current = created.id;
         setInstallingInstanceId(created.id);
         setAddOpen(false);
-        setView("instances");
-        refreshInstances().catch(() => {});
+        setMaintainingIds((s) => withId(s, created.id));
+        refreshInstances().then(() => {
+          void selectInstance(created.id);
+          setView("play");
+        });
       }),
       api.onPackProgress((p) => {
-        const pct =
-          p.total > 0 ? Math.min(100, Math.round((p.current / p.total) * 100)) : null;
-        toastProgress(
-          "install",
-          p.message || tr("page.installingModpack"),
-          pct,
-          () => api.cancelInstall().catch(() => {}),
-        );
+        const id = installingIdRef.current;
+        if (!id) return;
+        setMaintainingIds((s) => withId(s, id));
+        setProgressById((m) => ({ ...m, [id]: { ...p, instance_id: id } }));
       }),
       api.onPackDone((d) => {
         setInstalling(false);
+        const id = installingIdRef.current;
+        installingIdRef.current = null;
+        const deleteOnCancel = deleteInstallOnCancelRef.current;
+        deleteInstallOnCancelRef.current = false;
         setInstallingInstanceId(null);
-        dismissToast("install");
+        if (id) {
+          dismissToast(`download:${id}`);
+          setMaintainingIds((s) => withoutId(s, id));
+          setProgressById((m) => {
+            if (!(id in m)) return m;
+            const next = { ...m };
+            delete next[id];
+            return next;
+          });
+        }
         if (d.error) {
           setError(d.error);
           toast(tr("page.modpackInstallFailed"), "error");
           refreshInstances().catch(() => {});
         } else if (d.cancelled) {
           toast(tr("page.installCancelled"), "info");
-          refreshInstances().catch(() => {});
+          if (id && deleteOnCancel) {
+            api
+              .deleteInstance(id)
+              .catch(() => {})
+              .finally(() => {
+                refreshInstances()
+                  .then((list) => {
+                    if (selectedRef.current === id) {
+                      const next = defaultInstanceId(
+                        list,
+                        settingsRef.current?.show_featured ?? true,
+                      );
+                      if (next) void selectInstance(next);
+                      else setSelectedId(null);
+                    }
+                  })
+                  .catch(() => {});
+              });
+          } else {
+            refreshInstances().catch(() => {});
+          }
         } else if (d.instance) {
           const created = d.instance;
           toast(tr("page.installedInstance", { name: created.name }), "success");
-          setAddOpen(false);
           refreshInstances().then(() => {
             void selectInstance(created.id);
             setView("play");
@@ -722,11 +748,42 @@ export default function Home() {
   const onCancel = useCallback(async () => {
     if (!selectedId) return;
     try {
-      await api.cancelOp(selectedId);
+      if (selectedId === installingIdRef.current) await api.cancelInstall();
+      else await api.cancelOp(selectedId);
     } catch (e) {
       setError(String(e));
     }
   }, [selectedId]);
+
+  const cancelDownload = useCallback((id: string) => {
+    if (id === installingIdRef.current) {
+      deleteInstallOnCancelRef.current = true;
+      api.cancelInstall().catch(() => {});
+    } else {
+      api.cancelOp(id).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    maintainingIds.forEach((id) => {
+      if (view === "play" && selectedId === id) {
+        dismissToast(`download:${id}`);
+        return;
+      }
+      const p = progressById[id];
+      const pct =
+        p && p.total > 0
+          ? Math.min(100, Math.round((p.current / p.total) * 100))
+          : null;
+      const name = instances.find((i) => i.id === id)?.name;
+      toastProgress(
+        `download:${id}`,
+        name ?? p?.message ?? tr("page.installingModpack"),
+        pct,
+        () => cancelDownload(id),
+      );
+    });
+  }, [maintainingIds, progressById, view, selectedId, instances, cancelDownload, tr]);
 
   const onMicrosoftLogin = useCallback(() => {
     setMsAuth({ status: "starting" });
@@ -756,14 +813,10 @@ export default function Home() {
       manualMods: ManualMod[] = [],
     ) => {
       setInstalling(true);
-      toastProgress("install", "Starting install…", null, () =>
-        api.cancelInstall().catch(() => {}),
-      );
       api
         .installModpack(source, projectId, versionId, name, optional, manualMods)
         .catch((e) => {
           setInstalling(false);
-          dismissToast("install");
           setError(String(e));
         });
     },
@@ -779,12 +832,8 @@ export default function Home() {
       manualMods: ManualMod[] = [],
     ) => {
       setInstalling(true);
-      toastProgress("install", "Reading file…", null, () =>
-        api.cancelInstall().catch(() => {}),
-      );
       api.installModpackFile(path, source, name, optional, manualMods).catch((e) => {
         setInstalling(false);
-        dismissToast("install");
         setError(String(e));
       });
     },
@@ -1043,7 +1092,6 @@ export default function Home() {
               maintainingIds={maintainingIds}
               workingIds={workingIds}
               installingId={installingInstanceId}
-              onCancelInstall={() => api.cancelInstall().catch(() => {})}
               onSelect={(id) => {
                 void selectInstance(id);
                 setView("play");
