@@ -112,7 +112,7 @@ COMMANDS:
     modpack repair                           repair the modpack files
     modpack reinstall                        reinstall from scratch
     modpack lock | unlock                    lock / unlock the modpack
-    modpack export <modrinth|curseforge>     export to Downloads
+    modpack export <packwiz|modrinth|curseforge>  export to Downloads
 
   World
     world list                               show singleplayer worlds
@@ -485,6 +485,7 @@ pub fn run() {
             commands::set_active_instance,
             commands::create_custom_instance,
             commands::create_packwiz_instance,
+            commands::extract_packwiz_pack,
             commands::inspect_packwiz_flavors,
             commands::set_packwiz_flavors,
             commands::list_packwiz_branches,
@@ -533,6 +534,12 @@ pub fn run() {
             commands::ping_server,
             commands::toggle_star,
             commands::export_modpack,
+            commands::export_tree,
+            commands::export_modpack_selected,
+            commands::list_export_configs,
+            commands::save_export_config,
+            commands::delete_export_config,
+            commands::run_export_config,
             commands::backup_world,
             commands::list_world_backups,
             commands::export_world,
