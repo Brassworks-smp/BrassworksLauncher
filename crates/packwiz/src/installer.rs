@@ -837,6 +837,10 @@ pub fn sha1_hex(data: &[u8]) -> String {
     hex_digest("sha1", data)
 }
 
+pub fn sha256_hex(data: &[u8]) -> String {
+    hex_digest("sha256", data)
+}
+
 fn hex_digest(format: &str, data: &[u8]) -> String {
     match format {
         "sha512" => {
