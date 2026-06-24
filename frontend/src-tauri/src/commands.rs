@@ -1003,6 +1003,19 @@ pub(crate) async fn create_packwiz_instance(
 }
 
 #[tauri::command]
+pub(crate) async fn extract_packwiz_pack(
+    state: State<'_, AppState>,
+    path: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.extract_packwiz_pack(&path).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn inspect_packwiz_flavors(
     state: State<'_, AppState>,
     url: String,
@@ -1935,6 +1948,88 @@ pub(crate) async fn export_modpack(
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher.export_modpack(&instance_id, &format).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn export_tree(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<brassworks_core::export::ExportTree> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.export_tree(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn export_modpack_selected(
+    state: State<'_, AppState>,
+    instance_id: String,
+    format: String,
+    selection: brassworks_core::export::ExportSelection,
+    meta: Option<brassworks_core::export::ExportMeta>,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .export_modpack_selected(&instance_id, &format, selection, meta)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn list_export_configs(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<brassworks_core::export::ExportConfig>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.list_export_configs(&instance_id)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn save_export_config(
+    state: State<'_, AppState>,
+    instance_id: String,
+    config: brassworks_core::export::ExportConfig,
+) -> CmdResult<brassworks_core::export::ExportConfig> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.save_export_config(&instance_id, config).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn delete_export_config(
+    state: State<'_, AppState>,
+    instance_id: String,
+    config_id: String,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.delete_export_config(&instance_id, &config_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn run_export_config(
+    state: State<'_, AppState>,
+    instance_id: String,
+    config_id: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.run_export_config(&instance_id, &config_id).map_err(err)
     })
     .await
     .map_err(err)?
