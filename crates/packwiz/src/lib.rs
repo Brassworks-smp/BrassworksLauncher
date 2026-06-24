@@ -31,6 +31,7 @@
 
 mod curseforge;
 mod error;
+pub mod export;
 mod installer;
 mod manifest;
 mod model;
@@ -46,7 +47,9 @@ use std::path::PathBuf;
 
 pub use curseforge::{Curseforge, CurseforgeProject};
 pub use error::{PackwizError, Result};
-pub use installer::{sha1_hex, sha512_hex, Installer, OptionalMod, PackwizBranch};
+pub use installer::{
+    local_pack_url, sha1_hex, sha256_hex, sha512_hex, Installer, OptionalMod, PackwizBranch,
+};
 pub use manifest::{FileFailure, FileRecord, ManagedMod, Manifest};
 pub use model::{Index, IndexFile, MetaFile, ModOption, Pack, Versions};
 pub use modrinth::{Modrinth, ModrinthProject, ResolvedVersion, SearchHit, VersionDep};
