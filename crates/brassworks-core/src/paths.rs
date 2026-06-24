@@ -53,6 +53,10 @@ impl Paths {
         self.instance_dir(id).join("user_content.json")
     }
 
+    pub fn export_configs(&self, id: &str) -> PathBuf {
+        self.instance_dir(id).join("export_configs.json")
+    }
+
     pub fn stars_file(&self, id: &str) -> PathBuf {
         self.instance_dir(id).join("stars.json")
     }
