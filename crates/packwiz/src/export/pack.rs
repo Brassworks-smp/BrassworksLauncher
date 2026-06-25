@@ -41,6 +41,7 @@ pub struct PackMeta {
     pub mc_version: String,
     pub loader: Option<Loader>,
     pub loader_version: Option<String>,
+    pub unsup: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -73,11 +74,14 @@ struct VersionsToml {
     fabric: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     quilt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unsup: Option<String>,
 }
 
 pub fn render_pack_toml(meta: &PackMeta, index_hash: &str) -> Result<String> {
     let mut versions = VersionsToml {
         minecraft: meta.mc_version.clone(),
+        unsup: meta.unsup.clone(),
         ..Default::default()
     };
     if let Some(loader) = meta.loader {
@@ -117,7 +121,18 @@ mod tests {
             mc_version: "1.21.1".to_string(),
             loader: Some(Loader::NeoForge),
             loader_version: Some("21.1.0".to_string()),
+            unsup: None,
         }
+    }
+
+    #[test]
+    fn unsup_version_is_written_when_set() {
+        let mut m = meta();
+        m.unsup = Some("1.2.5".to_string());
+        let pack: Pack = toml::from_str(&render_pack_toml(&m, "abc").unwrap()).unwrap();
+        assert_eq!(pack.versions.unsup.as_deref(), Some("1.2.5"));
+        let no = toml::from_str::<Pack>(&render_pack_toml(&meta(), "abc").unwrap()).unwrap();
+        assert!(no.versions.unsup.is_none());
     }
 
     #[test]
