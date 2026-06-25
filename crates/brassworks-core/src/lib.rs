@@ -1396,7 +1396,13 @@ impl Launcher {
         let mp = self.modpack_for(instance_id);
         let selection = mp.full_selection()?;
         let (mut meta, _) = self.export_meta_for(&instance);
-        self.write_export(&instance, fmt, &mut meta, &selection)
+        self.write_export(
+            &instance,
+            fmt,
+            &mut meta,
+            &selection,
+            &modpack::ExportOpts::default(),
+        )
     }
 
     pub fn export_modpack_selected(
@@ -1406,11 +1412,73 @@ impl Launcher {
         selection: export::ExportSelection,
         meta: Option<export::ExportMeta>,
     ) -> Result<String> {
+        self.export_modpack_selected_opts(instance_id, format, selection, meta, false, false, "")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn export_modpack_selected_opts(
+        &self,
+        instance_id: &str,
+        format: &str,
+        selection: export::ExportSelection,
+        meta: Option<export::ExportMeta>,
+        unsup: bool,
+        sign: bool,
+        sign_format: &str,
+    ) -> Result<String> {
         let instance = self.instances().get(instance_id)?;
         let fmt = export::ExportFormat::parse(format)
             .ok_or_else(|| CoreError::Modpack(format!("unknown export format '{format}'")))?;
         let mut meta = meta.unwrap_or_else(|| self.export_meta_for(&instance).0);
-        self.write_export(&instance, fmt, &mut meta, &selection)
+        let unsup = unsup && fmt == export::ExportFormat::Packwiz;
+        let opts = self.build_export_opts(instance_id, unsup, sign, sign_format);
+        self.write_export(&instance, fmt, &mut meta, &selection, &opts)
+    }
+
+    fn build_export_opts(
+        &self,
+        instance_id: &str,
+        unsup: bool,
+        sign: bool,
+        sign_format: &str,
+    ) -> modpack::ExportOpts {
+        let signing = if unsup && sign {
+            let (seed, key_id) = self.ensure_unsup_key(instance_id);
+            Some(packwiz::export::SigningInput {
+                seed,
+                key_id,
+                format: packwiz::unsup::SignFormat::parse(sign_format),
+            })
+        } else {
+            None
+        };
+        modpack::ExportOpts { unsup, signing }
+    }
+
+    fn ensure_unsup_key(&self, instance_id: &str) -> ([u8; 32], u64) {
+        if let Some(key) = export::load_unsup_key(&self.paths, instance_id) {
+            return key;
+        }
+        let seed = packwiz::unsup::generate_seed();
+        let key_id = packwiz::unsup::generate_key_id();
+        let _ = export::save_unsup_key(&self.paths, instance_id, &seed, key_id);
+        (seed, key_id)
+    }
+
+    pub fn unsup_public_key(&self, instance_id: &str, format: &str) -> String {
+        let (seed, key_id) = self.ensure_unsup_key(instance_id);
+        packwiz::unsup::public_key_spec(&seed, key_id, packwiz::unsup::SignFormat::parse(format))
+    }
+
+    pub fn regenerate_unsup_key(&self, instance_id: &str, format: &str) -> Result<String> {
+        let seed = packwiz::unsup::generate_seed();
+        let key_id = packwiz::unsup::generate_key_id();
+        export::save_unsup_key(&self.paths, instance_id, &seed, key_id)?;
+        Ok(packwiz::unsup::public_key_spec(
+            &seed,
+            key_id,
+            packwiz::unsup::SignFormat::parse(format),
+        ))
     }
 
     fn write_export(
@@ -1419,6 +1487,7 @@ impl Launcher {
         fmt: export::ExportFormat,
         meta: &mut export::ExportMeta,
         selection: &export::ExportSelection,
+        opts: &modpack::ExportOpts,
     ) -> Result<String> {
         if meta.mc_version.is_empty() {
             meta.mc_version = instance.minecraft_version.clone();
@@ -1432,7 +1501,7 @@ impl Launcher {
         let icon = self.resolve_export_icon(instance);
         let bytes = self
             .modpack_for(&instance.id)
-            .run_export(fmt, meta, selection, icon)?;
+            .run_export_opts(fmt, meta, selection, icon, opts)?;
         let safe = export::sanitize_filename(if meta.name.is_empty() {
             &instance.name
         } else {
@@ -1491,7 +1560,20 @@ impl Launcher {
             loader: instance.loader.as_str().to_string(),
             loader_version: self.export_meta_for(&instance).0.loader_version,
         };
-        self.export_modpack_selected(instance_id, format, config.selection, Some(meta))
+        let sign_format = if config.sign_format.is_empty() {
+            "signify"
+        } else {
+            &config.sign_format
+        };
+        self.export_modpack_selected_opts(
+            instance_id,
+            format,
+            config.selection,
+            Some(meta),
+            config.unsup,
+            config.sign,
+            sign_format,
+        )
     }
 
 
