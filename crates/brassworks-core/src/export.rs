@@ -119,14 +119,7 @@ fn is_hidden_or_system(name: &str) -> bool {
 fn default_selected_root(name: &str) -> bool {
     matches!(
         name,
-        "config"
-            | "defaultconfigs"
-            | "kubejs"
-            | "scripts"
-            | "options.txt"
-            | "mods"
-            | "resourcepacks"
-            | "shaderpacks"
+        "defaultconfigs" | "kubejs" | "scripts" | "mods" | "resourcepacks" | "shaderpacks"
     )
 }
 
@@ -356,13 +349,19 @@ mod tests {
         std::fs::create_dir_all(game.join("saves/world")).unwrap();
         std::fs::write(game.join("saves/world/level.dat"), b"x").unwrap();
 
+        std::fs::create_dir_all(game.join("scripts")).unwrap();
+        std::fs::write(game.join("scripts/main.js"), b"//").unwrap();
+
         let tree = build_file_tree(game, &HashSet::new());
         let config = tree.iter().find(|n| n.rel_path == "config").unwrap();
         assert!(config.is_dir);
-        assert!(config.default_selected);
+        assert!(!config.default_selected);
         assert_eq!(config.size, 3);
         let options = tree.iter().find(|n| n.rel_path == "options.txt").unwrap();
         assert!(!options.is_dir);
+        assert!(!options.default_selected);
+        let scripts = tree.iter().find(|n| n.rel_path == "scripts").unwrap();
+        assert!(scripts.default_selected);
         let saves = tree.iter().find(|n| n.rel_path == "saves").unwrap();
         assert!(!saves.default_selected);
     }
