@@ -1122,6 +1122,8 @@ impl<'a> Modpack<'a> {
             mods,
             files,
             optional: std::collections::HashMap::new(),
+            flavor_groups: Vec::new(),
+            flavor_assignments: std::collections::HashMap::new(),
         })
     }
 
@@ -1132,8 +1134,19 @@ impl<'a> Modpack<'a> {
         selection: &ExportSelection,
         icon: Option<Vec<u8>>,
     ) -> Result<Vec<u8>> {
+        self.run_export_opts(format, meta, selection, icon, &ExportOpts::default())
+    }
+
+    pub fn run_export_opts(
+        &self,
+        format: export::ExportFormat,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
+    ) -> Result<Vec<u8>> {
         match format {
-            export::ExportFormat::Packwiz => self.export_packwiz(meta, selection, icon),
+            export::ExportFormat::Packwiz => self.export_packwiz(meta, selection, icon, opts),
             export::ExportFormat::Modrinth => self.export_modrinth(meta, selection, icon),
             export::ExportFormat::Curseforge => self.export_curseforge(meta, selection, icon),
         }
@@ -1214,6 +1227,7 @@ impl<'a> Modpack<'a> {
         meta: &ExportMeta,
         selection: &ExportSelection,
         icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
     ) -> Result<Vec<u8>> {
         let game_dir = self.game_dir();
         let installer = self.installer();
@@ -1228,12 +1242,28 @@ impl<'a> Modpack<'a> {
             |m, _stop| {
                 let bytes = std::fs::read(game_dir.join(&m.path)).ok()?;
                 let source = self.packwiz_source(m, &bytes, &http, cf.as_ref());
-                let optional = selection.optional.get(&m.path).map(|o| {
-                    packwiz::export::OptionMeta {
+                let flavors = if opts.unsup {
+                    selection
+                        .flavor_assignments
+                        .get(&m.path)
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                let optional = selection
+                    .optional
+                    .get(&m.path)
+                    .map(|o| packwiz::export::OptionMeta {
                         default: o.default,
                         description: o.description.clone(),
-                    }
-                });
+                    })
+                    .or_else(|| {
+                        (!flavors.is_empty()).then(|| packwiz::export::OptionMeta {
+                            default: true,
+                            description: String::new(),
+                        })
+                    });
                 Some(packwiz::export::ExportMod {
                     category: metafile_dir(&m.path),
                     name: if m.name.is_empty() {
@@ -1246,6 +1276,7 @@ impl<'a> Modpack<'a> {
                     bytes,
                     source,
                     optional,
+                    flavors,
                 })
             },
             |_d, _t, _i| {},
@@ -1271,10 +1302,20 @@ impl<'a> Modpack<'a> {
             mc_version: meta.mc_version.clone(),
             loader: packwiz::export::Loader::from_str_loose(&meta.loader),
             loader_version: meta.loader_version.clone(),
+            unsup: None,
         };
 
-        packwiz::export::build_packwiz_zip(&pmeta, &mods, &files, icon.as_deref())
-            .map_err(|e| CoreError::Modpack(format!("packwiz export: {e}")))
+        if opts.unsup {
+            let unsup_export = packwiz::export::UnsupExport {
+                groups: flavor_group_defs(selection),
+                signing: opts.signing.clone(),
+            };
+            packwiz::export::build_unsup_zip(&pmeta, &mods, &files, icon.as_deref(), &unsup_export)
+                .map_err(|e| CoreError::Modpack(format!("unsup export: {e}")))
+        } else {
+            packwiz::export::build_packwiz_zip(&pmeta, &mods, &files, icon.as_deref())
+                .map_err(|e| CoreError::Modpack(format!("packwiz export: {e}")))
+        }
     }
 
     fn export_modrinth(
@@ -1475,6 +1516,39 @@ impl From<serde_json::Value> for MrEntry {
     }
 }
 
+#[derive(Default)]
+pub struct ExportOpts {
+    pub unsup: bool,
+    pub signing: Option<packwiz::export::SigningInput>,
+}
+
+fn opt_str(s: &str) -> Option<String> {
+    let t = s.trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
+fn flavor_group_defs(selection: &ExportSelection) -> Vec<packwiz::export::FlavorGroupDef> {
+    selection
+        .flavor_groups
+        .iter()
+        .map(|g| packwiz::export::FlavorGroupDef {
+            id: g.id.clone(),
+            name: g.name.clone(),
+            description: opt_str(&g.description),
+            side: g.side.clone(),
+            choices: g
+                .choices
+                .iter()
+                .map(|c| packwiz::export::FlavorChoiceDef {
+                    id: c.id.clone(),
+                    name: c.name.clone(),
+                    description: opt_str(&c.description),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
 fn metafile_dir(path: &str) -> String {
     match path.replace('\\', "/").rfind('/') {
         Some(i) => path[..i].to_string(),
@@ -1541,6 +1615,42 @@ mod modpack_tests {
 
     fn settings() -> LauncherSettings {
         serde_json::from_str::<LauncherSettings>("{}").unwrap()
+    }
+
+    #[test]
+    fn flavor_group_defs_maps_and_trims_descriptions() {
+        let selection = ExportSelection {
+            mods: Vec::new(),
+            files: Vec::new(),
+            optional: std::collections::HashMap::new(),
+            flavor_groups: vec![export::FlavorGroupSpec {
+                id: "rendering".to_string(),
+                name: "Rendering".to_string(),
+                description: "  ".to_string(),
+                side: "client".to_string(),
+                choices: vec![
+                    export::FlavorChoiceSpec {
+                        id: "sodium".to_string(),
+                        name: "Sodium".to_string(),
+                        description: "Fast".to_string(),
+                        default: true,
+                    },
+                    export::FlavorChoiceSpec {
+                        id: "iris".to_string(),
+                        name: "Iris".to_string(),
+                        description: String::new(),
+                        default: false,
+                    },
+                ],
+            }],
+            flavor_assignments: std::collections::HashMap::new(),
+        };
+        let defs = flavor_group_defs(&selection);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].side, "client");
+        assert_eq!(defs[0].description, None, "blank group description dropped");
+        assert_eq!(defs[0].choices[0].description.as_deref(), Some("Fast"));
+        assert_eq!(defs[0].choices[1].description, None);
     }
 
     #[test]
