@@ -19,12 +19,21 @@ import {
   Pencil,
   LayoutGrid,
   LayoutList,
+  Play,
+  Share2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Collapse, placeMenu, useMenuDismiss, Toggle, SegmentedTabs } from "./ui";
+import { ExportModal } from "./ExportModal";
 
-type MenuPos = { top?: number; bottom?: number; right: number; maxHeight: number };
+type MenuPos = {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  maxHeight: number;
+};
 import { ACCENT_COLORS as FOLDER_COLORS, DEFAULT_ACCENT } from "@/lib/colors";
 import { CustomColorChip } from "@/components/ColorPicker";
 import { iconSrc, brandingSrc, DEFAULT_INSTANCE_ICON, BrandingImage } from "@/lib/instanceIcons";
@@ -133,6 +142,8 @@ export function InstancesView({
   onAdd,
   onSaveFolders,
   onSaveInstance,
+  onPlay,
+  onDelete,
 }: {
   instances: Instance[];
   showFeatured?: boolean;
@@ -149,10 +160,13 @@ export function InstancesView({
   onAdd: () => void;
   onSaveFolders: (folders: InstanceFolder[]) => void;
   onSaveInstance: (instance: Instance) => void;
+  onPlay?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }) {
   const tr = useT();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
+  const [exportTarget, setExportTarget] = useState<Instance | null>(null);
   
   
   
@@ -237,6 +251,9 @@ export function InstancesView({
       onRename={(name) => onSaveInstance({ ...i, name })}
       onTagClick={setTagFilter}
       onDragStateChange={setDraggingFrom}
+      onPlay={onPlay ? () => onPlay(i.id) : undefined}
+      onDelete={onDelete ? () => onDelete(i.id) : undefined}
+      onExport={() => setExportTarget(i)}
       accent={accent}
       compact={compact}
     />
@@ -361,6 +378,16 @@ export function InstancesView({
           </FolderGroup>
         ))}
       </div>
+
+      {exportTarget && (
+        <ExportModal
+          instanceId={exportTarget.id}
+          mcVersion={exportTarget.minecraft_version}
+          loader={exportTarget.loader.replace("_", "")}
+          defaultName={exportTarget.name}
+          onClose={() => setExportTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -736,6 +763,9 @@ function InstanceCard({
   onRename,
   onTagClick,
   onDragStateChange,
+  onPlay,
+  onDelete,
+  onExport,
   accent,
   compact,
 }: {
@@ -753,12 +783,29 @@ function InstanceCard({
   onRename: (name: string) => void;
   onTagClick: (tag: string) => void;
   onDragStateChange?: (from: string | null | undefined) => void;
+  onPlay?: () => void;
+  onDelete?: () => void;
+  onExport?: () => void;
   accent?: string;
   compact?: boolean;
 }) {
   const tr = useT();
   const [folderMenu, setFolderMenu] = useState<MenuPos | null>(null);
-  useMenuDismiss(!!folderMenu, useCallback(() => setFolderMenu(null), []));
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useMenuDismiss(!!folderMenu, useCallback(() => setFolderMenu(null), []), menuRef);
+  useEffect(() => {
+    if (!folderMenu) return;
+    const onDown = (e: Event) => {
+      if (!menuRef.current?.contains(e.target as Node)) setFolderMenu(null);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("contextmenu", onDown, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("contextmenu", onDown, true);
+    };
+  }, [folderMenu]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [nameDraft, setNameDraft] = useState(instance.name);
@@ -783,13 +830,17 @@ function InstanceCard({
     : {};
 
   
+  const menuOpen = !!folderMenu;
+  const openBorder = accent ? "border-[var(--accent)]/60" : "border-brass-600/50";
   const stateCls = selected
     ? accent
       ? "glow hover-lift cursor-pointer border-[var(--accent)]"
       : "border-brass-500/60 glow hover-lift cursor-pointer"
-    : accent
-      ? "border-edge hover-lift cursor-pointer hover:border-[var(--accent)]/50"
-      : "border-edge hover-lift cursor-pointer hover:border-brass-600/40";
+    : menuOpen
+      ? `hover-lift lifted cursor-pointer bg-brass-500/[0.05] ${openBorder}`
+      : accent
+        ? "border-edge hover-lift cursor-pointer hover:border-[var(--accent)]/50"
+        : "border-edge hover-lift cursor-pointer hover:border-brass-600/40";
 
   
   
@@ -818,83 +869,206 @@ function InstanceCard({
       return;
     }
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setFolderMenu({ ...placeMenu(r, 320), right: window.innerWidth - r.right });
+    setFolderMenu({ ...placeMenu(r, 360), right: window.innerWidth - r.right });
+  };
+
+  const openContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const W = 224;
+    const H = 380;
+    const left = Math.min(e.clientX, window.innerWidth - W - 8);
+    if (e.clientY > window.innerHeight - H) {
+      setFolderMenu({
+        bottom: window.innerHeight - e.clientY,
+        left,
+        maxHeight: Math.min(H, e.clientY - 12),
+      });
+    } else {
+      setFolderMenu({
+        top: e.clientY,
+        left,
+        maxHeight: Math.min(H, window.innerHeight - e.clientY - 12),
+      });
+    }
+  };
+
+  const item =
+    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-200 transition hover:bg-ink-800";
+
+  const close = () => setFolderMenu(null);
+  const run = (fn?: () => void) => () => {
+    close();
+    fn?.();
   };
 
   const folderMenuPortal =
     folderMenu &&
     createPortal(
-      <>
-        <div
-          className="fixed inset-0 z-[60]"
-          onClick={(e) => {
-            e.stopPropagation();
-            setFolderMenu(null);
-          }}
-        />
-        <div
+      <div
           style={{
             ...(folderMenu.top != null
               ? { top: folderMenu.top }
               : { bottom: folderMenu.bottom }),
-            right: folderMenu.right,
-            maxHeight: folderMenu.maxHeight,
+            ...(folderMenu.left != null
+              ? { left: folderMenu.left }
+              : { right: folderMenu.right }),
           }}
-          className="rise fixed z-[61] w-48 overflow-y-auto rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
+          ref={menuRef}
+          className="rise fixed z-[61] w-56 rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              setFolderMenu(null);
-              startRename();
-            }}
-            className="mb-0.5 flex w-full items-center gap-2 rounded-md border-b border-edge px-2 py-1.5 text-xs text-gray-200 transition hover:bg-ink-800"
-          >
-            <Pencil size={12} className="text-ink-600" /> {tr("common.rename")}
-          </button>
-          <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-ink-600">
-            {tr("instances.moveToFolder")}
-          </div>
-          <button
-            onClick={() => {
-              onAssign(null);
-              setFolderMenu(null);
-            }}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-200 transition hover:bg-ink-800"
-          >
-            <X size={12} className="text-ink-600" /> {tr("instances.noFolder")}
-            {!instance.folder_id && <Check size={12} className="ml-auto text-brass-400" />}
-          </button>
-          {folders.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => {
-                onAssign(f.id);
-                setFolderMenu(null);
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-200 transition hover:bg-ink-800"
+          <div className="mb-1 flex shrink-0 items-center gap-2 border-b border-edge px-2 pb-2 pt-1">
+            <BrandingImage
+              value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+              src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON, accent)}
+              alt=""
+              className="h-7 w-7 shrink-0 rounded-md object-cover shadow"
+            />
+            <span
+              className="min-w-0 flex-1 truncate font-mc text-[13px] leading-tight text-gray-100"
+              title={instance.name}
             >
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: f.color ?? "#9b9b9b" }}
-              />
-              <span className="truncate">{f.name}</span>
-              {instance.folder_id === f.id && (
-                <Check size={12} className="ml-auto shrink-0 text-brass-400" />
-              )}
-            </button>
-          ))}
-          <button
-            onClick={() => {
-              onNewFolder();
-              setFolderMenu(null);
-            }}
-            className="mt-0.5 flex w-full items-center gap-2 rounded-md border-t border-edge px-2 py-1.5 text-xs text-brass-300 transition hover:bg-ink-800"
+              {instance.name}
+            </span>
+          </div>
+          <div
+            className="menu-scroll overflow-y-auto"
+            style={{ maxHeight: Math.max(140, folderMenu.maxHeight - 56) }}
           >
-            <FolderPlus size={12} /> {tr("instances.newFolderDots")}
+          {onPlay && (
+            <button
+              onClick={run(onPlay)}
+              className={`${item} disabled:cursor-not-allowed disabled:opacity-50`}
+              disabled={running}
+            >
+              <Play size={12} className="text-patina-300" />
+              {running ? tr("instances.running") : tr("instances.play")}
+            </button>
+          )}
+          <button onClick={run(onSelect)} className={item}>
+            <Check size={12} className="text-ink-600" /> {tr("instances.select")}
           </button>
+          <button onClick={run(onSettings)} className={item}>
+            <Settings size={12} className="text-ink-600" />
+            {tr("instances.instanceSettings")}
+          </button>
+          {canRename && (
+            <button onClick={run(startRename)} className={item}>
+              <Pencil size={12} className="text-ink-600" /> {tr("common.rename")}
+            </button>
+          )}
+          <button
+            onClick={run(() => {
+              api.openDir(instance.id).catch(() => {});
+            })}
+            className={item}
+          >
+            <FolderOpen size={12} className="text-ink-600" />
+            {tr("instances.openFolder")}
+          </button>
+          {!instance.featured && (
+            <button onClick={run(onStar)} className={item}>
+              <Star
+                size={12}
+                className={instance.pinned ? "fill-current text-brass-300" : "text-ink-600"}
+              />
+              {instance.pinned ? tr("instances.unpin") : tr("instances.pin")}
+            </button>
+          )}
+          {onExport && (
+            <button onClick={run(onExport)} className={item}>
+              <Share2 size={12} className="text-ink-600" /> {tr("instances.exportDots")}
+            </button>
+          )}
+
+          {!instance.featured && (
+            <>
+              <div className="my-1 border-t border-edge" />
+              <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-ink-600">
+                {tr("instances.moveToFolder")}
+              </div>
+              <button onClick={run(() => onAssign(null))} className={item}>
+                <X size={12} className="text-ink-600" /> {tr("instances.noFolder")}
+                {!instance.folder_id && <Check size={12} className="ml-auto text-brass-400" />}
+              </button>
+              {folders.map((f) => (
+                <button key={f.id} onClick={run(() => onAssign(f.id))} className={item}>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: f.color ?? "#9b9b9b" }}
+                  />
+                  <span className="truncate">{f.name}</span>
+                  {instance.folder_id === f.id && (
+                    <Check size={12} className="ml-auto shrink-0 text-brass-400" />
+                  )}
+                </button>
+              ))}
+              <button
+                onClick={run(onNewFolder)}
+                className={`${item} text-brass-300`}
+              >
+                <FolderPlus size={12} /> {tr("instances.newFolderDots")}
+              </button>
+            </>
+          )}
+
+          {onDelete && !instance.featured && (
+            <>
+              <div className="my-1 border-t border-edge" />
+              <button
+                onClick={run(() => setConfirmDelete(true))}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10"
+              >
+                <Trash2 size={12} /> {tr("instances.delete")}
+              </button>
+            </>
+          )}
+          </div>
+      </div>,
+      document.body,
+    );
+
+  const confirmDeletePortal =
+    confirmDelete &&
+    createPortal(
+      <div
+        className="modal-overlay fixed inset-0 z-[70] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setConfirmDelete(false);
+        }}
+      >
+        <div
+          className="w-[340px] max-w-[90%] rounded-xl border border-red-600/30 bg-ink-900 p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-2 flex items-center gap-2 font-mc text-sm tracking-wide text-gray-100">
+            <Trash2 size={16} className="text-red-400" />
+            {tr("instances.deleteTitle")}
+          </div>
+          <p className="mb-4 text-xs leading-relaxed text-ink-500">
+            {tr("instances.deleteBody", { name: instance.name })}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:text-gray-200"
+            >
+              {tr("common.cancel")}
+            </button>
+            <button
+              onClick={() => {
+                setConfirmDelete(false);
+                onDelete?.();
+              }}
+              className="rounded-md bg-red-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-red-400"
+            >
+              {tr("instances.delete")}
+            </button>
+          </div>
         </div>
-      </>,
+      </div>,
       document.body,
     );
 
@@ -930,6 +1104,7 @@ function InstanceCard({
     return (
       <div
         onClick={editingName ? undefined : onSelect}
+        onContextMenu={openContextMenu}
         {...dragProps}
         style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
         className={`group relative flex items-center gap-2.5 overflow-hidden rounded-lg border bg-ink-900/40 px-2.5 py-2.5 transition-opacity ${stateCls} ${
@@ -1050,6 +1225,7 @@ function InstanceCard({
           </div>
         )}
         {folderMenuPortal}
+        {confirmDeletePortal}
       </div>
     );
   }
@@ -1057,6 +1233,7 @@ function InstanceCard({
   return (
     <div
       onClick={editingName ? undefined : onSelect}
+      onContextMenu={openContextMenu}
       {...dragProps}
       style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
       className={`group relative flex aspect-square flex-col overflow-hidden rounded-xl border bg-ink-900/40 transition-opacity ${stateCls} ${
@@ -1140,6 +1317,7 @@ function InstanceCard({
         </div>
 
         {folderMenuPortal}
+        {confirmDeletePortal}
       </div>
 
       <div className="flex flex-1 flex-col p-3">

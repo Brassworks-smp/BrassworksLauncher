@@ -13,6 +13,7 @@
 pub mod account;
 pub mod auth;
 pub mod error;
+pub mod export;
 pub mod featured;
 pub mod image_cache;
 pub mod import;
@@ -569,6 +570,13 @@ impl Launcher {
         inst.unsup_public_key = public_key.filter(|k| !k.trim().is_empty());
         let clean = |s: Option<String>| s.filter(|v| !v.trim().is_empty());
         inst.icon = clean(meta.icon).or_else(|| installer.find_pack_icon(url));
+        if inst.icon.is_none() {
+            if let Some(bytes) =
+                packwiz::Installer::local_icon_path(url).and_then(|p| std::fs::read(p).ok())
+            {
+                inst.icon = self.write_branding_icon(&id, &bytes);
+            }
+        }
         inst.banner = clean(meta.banner);
         inst.notes = clean(meta.description);
         inst.news_url = clean(meta.news_url);
@@ -586,6 +594,20 @@ impl Launcher {
         mgr.create(inst)
     }
 
+    pub fn extract_packwiz_pack(&self, path: &str) -> Result<String> {
+        let bytes =
+            std::fs::read(path).map_err(|e| CoreError::io(std::path::Path::new(path), e))?;
+        let unique = format!(
+            "pw-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let dest = self.paths.root().join("imported").join(unique);
+        let pack_rel = extract_packwiz_zip(&bytes, &dest)?;
+        Ok(packwiz::local_pack_url(&dest.join(&pack_rel)))
+    }
 
                 pub fn switch_packwiz_branch(&self, instance_id: &str, url: &str) -> Result<Instance> {
         let installer = packwiz::Installer::new();
@@ -803,11 +825,16 @@ impl Launcher {
                 if instance.name.trim().is_empty() {
                     instance.name = if res.name.is_empty() { id.clone() } else { res.name };
                 }
-                instance.icon = if source == "curseforge" {
+                let icon_url = if source == "curseforge" {
                     cf.project(project_id).and_then(|p| p.icon_url)
                 } else {
                     modrinth.project(project_id).and_then(|p| p.icon_url)
                 };
+                instance.icon = icon_url
+                    .as_deref()
+                    .and_then(image_cache::download)
+                    .and_then(|b| self.write_branding_icon(&id, &b))
+                    .or(icon_url);
                 mgr.update(&instance)?;
                 Ok(instance)
             }
@@ -880,6 +907,7 @@ impl Launcher {
             return Err(e);
         }
 
+        let icon_bytes = read_zip_icon(&bytes);
         let modrinth = self.modrinth_client();
         let cf = self.cf_client();
         let optional = packs::optional_set(&Some(optional));
@@ -892,6 +920,12 @@ impl Launcher {
                     .loader_version
                     .map(LoaderVersion::Exact)
                     .unwrap_or(LoaderVersion::Stable);
+                if let Some(p) = icon_bytes
+                    .as_deref()
+                    .and_then(|b| self.write_branding_icon(&id, b))
+                {
+                    instance.icon = Some(p);
+                }
                 mgr.update(&instance)?;
                 Ok(instance)
             }
@@ -1308,39 +1342,238 @@ impl Launcher {
         self.modpack_for(instance_id).uninstall()
     }
 
-            pub fn export_modpack(&self, instance_id: &str, format: &str) -> Result<String> {
-        let instance = self.instances().get(instance_id)?;
-        let mp = self.modpack_for(instance_id);
-        let loader = instance.loader.as_str();
+    fn export_meta_for(&self, instance: &instance::Instance) -> (export::ExportMeta, String) {
+        let mp = self.modpack_for(&instance.id);
+        let loader = instance.loader.as_str().to_string();
         let loader_version = match &instance.loader_version {
             instance::LoaderVersion::Exact(v) => Some(v.clone()),
             _ => mp.installed_neoforge(),
         };
-        let bytes = if format == "curseforge" {
-            mp.export_curseforge(
-                &instance.name,
-                &instance.minecraft_version,
-                loader,
-                loader_version.as_deref(),
-            )?
-        } else {
-            mp.export_modrinth(
-                &instance.name,
-                &instance.minecraft_version,
-                loader,
-                loader_version.as_deref(),
-            )?
+        let meta = export::ExportMeta {
+            name: instance.name.clone(),
+            author: String::new(),
+            version: "1.0.0".to_string(),
+            mc_version: instance.minecraft_version.clone(),
+            loader: loader.clone(),
+            loader_version,
         };
-        let ext = if format == "curseforge" { "zip" } else { "mrpack" };
-        let safe: String = instance
-            .name
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '-' })
-            .collect();
+        (meta, loader)
+    }
+
+    fn resolve_export_icon(&self, instance: &instance::Instance) -> Option<Vec<u8>> {
+        let icon = instance.icon.as_deref()?;
+        if icon.is_empty() || icon.starts_with("builtin:") {
+            return None;
+        }
+        if icon.starts_with("http://") || icon.starts_with("https://") {
+            if let Some(path) = image_cache::cached_image(&self.paths.image_cache_dir(), icon) {
+                return std::fs::read(path).ok();
+            }
+            return image_cache::cache_image(&self.paths.image_cache_dir(), icon)
+                .and_then(|p| std::fs::read(p).ok());
+        }
+        std::fs::read(icon).ok()
+    }
+
+    fn write_branding_icon(&self, id: &str, bytes: &[u8]) -> Option<String> {
+        let dir = self.paths.instance_dir(id).join("branding");
+        let dest = dir.join("icon.png");
+        if std::fs::create_dir_all(&dir).is_ok() && std::fs::write(&dest, bytes).is_ok() {
+            Some(dest.to_string_lossy().into_owned())
+        } else {
+            None
+        }
+    }
+
+    pub fn export_tree(&self, instance_id: &str) -> Result<export::ExportTree> {
+        self.modpack_for(instance_id).export_tree()
+    }
+
+    pub fn export_modpack(&self, instance_id: &str, format: &str) -> Result<String> {
+        let instance = self.instances().get(instance_id)?;
+        let fmt = export::ExportFormat::parse(format)
+            .ok_or_else(|| CoreError::Modpack(format!("unknown export format '{format}'")))?;
+        let mp = self.modpack_for(instance_id);
+        let selection = mp.full_selection()?;
+        let (mut meta, _) = self.export_meta_for(&instance);
+        self.write_export(
+            &instance,
+            fmt,
+            &mut meta,
+            &selection,
+            &modpack::ExportOpts::default(),
+        )
+    }
+
+    pub fn export_modpack_selected(
+        &self,
+        instance_id: &str,
+        format: &str,
+        selection: export::ExportSelection,
+        meta: Option<export::ExportMeta>,
+    ) -> Result<String> {
+        self.export_modpack_selected_opts(instance_id, format, selection, meta, false, false, "")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn export_modpack_selected_opts(
+        &self,
+        instance_id: &str,
+        format: &str,
+        selection: export::ExportSelection,
+        meta: Option<export::ExportMeta>,
+        unsup: bool,
+        sign: bool,
+        sign_format: &str,
+    ) -> Result<String> {
+        let instance = self.instances().get(instance_id)?;
+        let fmt = export::ExportFormat::parse(format)
+            .ok_or_else(|| CoreError::Modpack(format!("unknown export format '{format}'")))?;
+        let mut meta = meta.unwrap_or_else(|| self.export_meta_for(&instance).0);
+        let unsup = unsup && fmt == export::ExportFormat::Packwiz;
+        let opts = self.build_export_opts(instance_id, unsup, sign, sign_format);
+        self.write_export(&instance, fmt, &mut meta, &selection, &opts)
+    }
+
+    fn build_export_opts(
+        &self,
+        instance_id: &str,
+        unsup: bool,
+        sign: bool,
+        sign_format: &str,
+    ) -> modpack::ExportOpts {
+        let signing = if unsup && sign {
+            let (seed, key_id) = self.ensure_unsup_key(instance_id);
+            Some(packwiz::export::SigningInput {
+                seed,
+                key_id,
+                format: packwiz::unsup::SignFormat::parse(sign_format),
+            })
+        } else {
+            None
+        };
+        modpack::ExportOpts { unsup, signing }
+    }
+
+    fn ensure_unsup_key(&self, instance_id: &str) -> ([u8; 32], u64) {
+        if let Some(key) = export::load_unsup_key(&self.paths, instance_id) {
+            return key;
+        }
+        let seed = packwiz::unsup::generate_seed();
+        let key_id = packwiz::unsup::generate_key_id();
+        let _ = export::save_unsup_key(&self.paths, instance_id, &seed, key_id);
+        (seed, key_id)
+    }
+
+    pub fn unsup_public_key(&self, instance_id: &str, format: &str) -> String {
+        let (seed, key_id) = self.ensure_unsup_key(instance_id);
+        packwiz::unsup::public_key_spec(&seed, key_id, packwiz::unsup::SignFormat::parse(format))
+    }
+
+    pub fn regenerate_unsup_key(&self, instance_id: &str, format: &str) -> Result<String> {
+        let seed = packwiz::unsup::generate_seed();
+        let key_id = packwiz::unsup::generate_key_id();
+        export::save_unsup_key(&self.paths, instance_id, &seed, key_id)?;
+        Ok(packwiz::unsup::public_key_spec(
+            &seed,
+            key_id,
+            packwiz::unsup::SignFormat::parse(format),
+        ))
+    }
+
+    fn write_export(
+        &self,
+        instance: &instance::Instance,
+        fmt: export::ExportFormat,
+        meta: &mut export::ExportMeta,
+        selection: &export::ExportSelection,
+        opts: &modpack::ExportOpts,
+    ) -> Result<String> {
+        if meta.mc_version.is_empty() {
+            meta.mc_version = instance.minecraft_version.clone();
+        }
+        if meta.loader.is_empty() {
+            meta.loader = instance.loader.as_str().to_string();
+        }
+        if meta.loader_version.is_none() {
+            meta.loader_version = self.export_meta_for(instance).0.loader_version;
+        }
+        let icon = self.resolve_export_icon(instance);
+        let bytes = self
+            .modpack_for(&instance.id)
+            .run_export_opts(fmt, meta, selection, icon, opts)?;
+        let safe = export::sanitize_filename(if meta.name.is_empty() {
+            &instance.name
+        } else {
+            &meta.name
+        });
         let dir = dirs::download_dir().unwrap_or_else(|| self.paths.root().to_path_buf());
-        let dest = dir.join(format!("{}.{ext}", safe.trim_matches('-')));
+        let ext = fmt.extension();
+        let mut dest = dir.join(format!("{safe}.{ext}"));
+        let mut n = 1;
+        while dest.exists() {
+            dest = dir.join(format!("{safe} ({n}).{ext}"));
+            n += 1;
+        }
         std::fs::write(&dest, bytes).map_err(|e| CoreError::io(&dest, e))?;
         Ok(dest.to_string_lossy().into_owned())
+    }
+
+    pub fn list_export_configs(&self, instance_id: &str) -> Vec<export::ExportConfig> {
+        export::load_configs(&self.paths, instance_id)
+    }
+
+    pub fn save_export_config(
+        &self,
+        instance_id: &str,
+        mut config: export::ExportConfig,
+    ) -> Result<export::ExportConfig> {
+        if config.id.trim().is_empty() {
+            config.id = format!("export-{}", export::now_secs());
+        }
+        if config.created_at == 0 {
+            config.created_at = export::now_secs();
+        }
+        export::upsert_config(&self.paths, instance_id, config)
+    }
+
+    pub fn delete_export_config(&self, instance_id: &str, config_id: &str) -> Result<()> {
+        export::delete_config(&self.paths, instance_id, config_id)
+    }
+
+    pub fn run_export_config(&self, instance_id: &str, config_id: &str) -> Result<String> {
+        let config = export::load_configs(&self.paths, instance_id)
+            .into_iter()
+            .find(|c| c.id == config_id)
+            .ok_or_else(|| CoreError::Modpack(format!("export config '{config_id}' not found")))?;
+        let format = match config.format {
+            export::ExportFormat::Packwiz => "packwiz",
+            export::ExportFormat::Modrinth => "modrinth",
+            export::ExportFormat::Curseforge => "curseforge",
+        };
+        let instance = self.instances().get(instance_id)?;
+        let meta = export::ExportMeta {
+            name: config.pack_name.clone(),
+            author: config.author.clone(),
+            version: config.version.clone(),
+            mc_version: instance.minecraft_version.clone(),
+            loader: instance.loader.as_str().to_string(),
+            loader_version: self.export_meta_for(&instance).0.loader_version,
+        };
+        let sign_format = if config.sign_format.is_empty() {
+            "signify"
+        } else {
+            &config.sign_format
+        };
+        self.export_modpack_selected_opts(
+            instance_id,
+            format,
+            config.selection,
+            Some(meta),
+            config.unsup,
+            config.sign,
+            sign_format,
+        )
     }
 
 
@@ -1636,6 +1869,56 @@ impl Launcher {
     }
 }
 
+fn read_zip_icon(bytes: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
+    let mut file = archive.by_name("icon.png").ok()?;
+    let mut out = Vec::new();
+    file.read_to_end(&mut out).ok()?;
+    Some(out)
+}
+
+fn extract_packwiz_zip(bytes: &[u8], dest: &std::path::Path) -> Result<String> {
+    use std::io::{Read, Write};
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+        .map_err(|e| CoreError::Modpack(format!("not a valid zip: {e}")))?;
+    let mut pack_rel: Option<String> = None;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| CoreError::Modpack(format!("zip entry: {e}")))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        let out_path = dest.join(&rel);
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| CoreError::io(parent, e))?;
+        }
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry
+            .read_to_end(&mut buf)
+            .map_err(|e| CoreError::io(&out_path, e))?;
+        std::fs::File::create(&out_path)
+            .and_then(|mut f| f.write_all(&buf))
+            .map_err(|e| CoreError::io(&out_path, e))?;
+        if rel_str == "pack.toml" || rel_str.ends_with("/pack.toml") {
+            let depth = rel_str.matches('/').count();
+            let replace = pack_rel
+                .as_ref()
+                .map(|p| p.matches('/').count() > depth)
+                .unwrap_or(true);
+            if replace {
+                pack_rel = Some(rel_str);
+            }
+        }
+    }
+    pack_rel.ok_or_else(|| CoreError::Modpack("no pack.toml found in the zip".to_string()))
+}
+
 fn loader_from_pack(pack: &packwiz::Pack) -> (LoaderKind, LoaderVersion) {
     if let Some(v) = &pack.versions.neoforge {
         (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
@@ -1739,4 +2022,56 @@ fn unique_folder_id(settings: &LauncherSettings, name: &str) -> String {
         n += 1;
     }
     id
+}
+
+#[cfg(test)]
+mod packwiz_import_tests {
+    use super::extract_packwiz_zip;
+    use std::io::Write;
+
+    fn zip_with(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        {
+            let mut w = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts = zip::write::SimpleFileOptions::default();
+            for (name, bytes) in entries {
+                w.start_file(*name, opts).unwrap();
+                w.write_all(bytes).unwrap();
+            }
+            w.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn extracts_files_and_finds_root_pack_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("out");
+        let bytes = zip_with(&[
+            ("pack.toml", b"name = \"x\""),
+            ("index.toml", b"hash-format = \"sha256\""),
+            ("mods/a.pw.toml", b"name = \"a\""),
+            ("nested/pack.toml", b"name = \"deep\""),
+        ]);
+        let rel = extract_packwiz_zip(&bytes, &dest).unwrap();
+        assert_eq!(rel, "pack.toml");
+        assert!(dest.join("mods/a.pw.toml").exists());
+        assert!(dest.join("index.toml").exists());
+    }
+
+    #[test]
+    fn errors_when_no_pack_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let bytes = zip_with(&[("readme.txt", b"hi")]);
+        assert!(extract_packwiz_zip(&bytes, &dir.path().join("out")).is_err());
+    }
+
+    #[test]
+    fn read_zip_icon_extracts_root_icon() {
+        use super::read_zip_icon;
+        let with = zip_with(&[("manifest.json", b"{}"), ("icon.png", b"PNGDATA")]);
+        assert_eq!(read_zip_icon(&with).as_deref(), Some(&b"PNGDATA"[..]));
+        let without = zip_with(&[("modrinth.index.json", b"{}")]);
+        assert!(read_zip_icon(&without).is_none());
+    }
 }

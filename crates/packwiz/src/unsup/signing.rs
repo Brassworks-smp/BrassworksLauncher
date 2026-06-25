@@ -1,9 +1,84 @@
 use base64::Engine;
-use ed25519_dalek::{Signature, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use rand::RngCore;
 
 use crate::error::{PackwizError, Result};
 
 pub const INSECURE_HASHES: [&str; 3] = ["md5", "sha1", "murmur2"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignFormat {
+    Ed25519,
+    Signify,
+}
+
+impl SignFormat {
+    pub fn parse(s: &str) -> SignFormat {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "ed25519" => SignFormat::Ed25519,
+            _ => SignFormat::Signify,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SignFormat::Ed25519 => "ed25519",
+            SignFormat::Signify => "signify",
+        }
+    }
+}
+
+pub fn generate_seed() -> [u8; 32] {
+    let mut seed = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut seed);
+    seed
+}
+
+pub fn generate_key_id() -> u64 {
+    let mut buf = [0u8; 8];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    u64::from_be_bytes(buf)
+}
+
+fn signing_key(seed: &[u8; 32]) -> SigningKey {
+    SigningKey::from_bytes(seed)
+}
+
+pub fn public_key_spec(seed: &[u8; 32], key_id: u64, format: SignFormat) -> String {
+    let vk = signing_key(seed).verifying_key();
+    match format {
+        SignFormat::Ed25519 => format!("ed25519 {}", b64encode(vk.as_bytes())),
+        SignFormat::Signify => {
+            let mut pk = Vec::with_capacity(42);
+            pk.extend_from_slice(b"Ed");
+            pk.extend_from_slice(&key_id.to_be_bytes());
+            pk.extend_from_slice(vk.as_bytes());
+            format!("signify {}", b64encode(&pk))
+        }
+    }
+}
+
+pub fn sign(seed: &[u8; 32], key_id: u64, msg: &[u8], format: SignFormat) -> Vec<u8> {
+    let sig = signing_key(seed).sign(msg).to_bytes();
+    match format {
+        SignFormat::Ed25519 => sig.to_vec(),
+        SignFormat::Signify => {
+            let mut blob = Vec::with_capacity(74);
+            blob.extend_from_slice(b"Ed");
+            blob.extend_from_slice(&key_id.to_be_bytes());
+            blob.extend_from_slice(&sig);
+            format!(
+                "untrusted comment: signature from brassworks\n{}\n",
+                b64encode(&blob)
+            )
+            .into_bytes()
+        }
+    }
+}
+
+fn b64encode(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
 
 #[derive(Debug, Clone)]
 pub enum PublicKey {
@@ -174,6 +249,48 @@ mod tests {
         assert!(PublicKey::parse("rsa AAAA").is_err());
         assert!(PublicKey::parse("ed25519 not-base64!!").is_err());
         assert!(PublicKey::parse("ed25519 QQ==").is_err(), "wrong key length");
+    }
+
+    #[test]
+    fn sign_ed25519_verifies_with_public_spec() {
+        let seed = generate_seed();
+        let key_id = generate_key_id();
+        let msg = b"pack.toml with index hash";
+        let sig = sign(&seed, key_id, msg, SignFormat::Ed25519);
+        assert_eq!(sig.len(), 64);
+        let spec = public_key_spec(&seed, key_id, SignFormat::Ed25519);
+        assert!(spec.starts_with("ed25519 "));
+        let key = PublicKey::parse(&spec).unwrap();
+        assert!(key.verify(msg, &sig));
+        assert!(!key.verify(b"tampered", &sig));
+    }
+
+    #[test]
+    fn sign_signify_verifies_with_public_spec() {
+        let seed = generate_seed();
+        let key_id = generate_key_id();
+        let msg = b"pack.toml with index hash";
+        let sig = sign(&seed, key_id, msg, SignFormat::Signify);
+        let text = std::str::from_utf8(&sig).unwrap();
+        assert!(text.starts_with("untrusted comment:"));
+        let spec = public_key_spec(&seed, key_id, SignFormat::Signify);
+        assert!(spec.starts_with("signify "));
+        let key = PublicKey::parse(&spec).unwrap();
+        assert!(key.verify(msg, &sig));
+        assert!(!key.verify(b"tampered", &sig));
+
+        let other = public_key_spec(&seed, key_id ^ 1, SignFormat::Signify);
+        assert!(
+            !PublicKey::parse(&other).unwrap().verify(msg, &sig),
+            "mismatched key id rejected"
+        );
+    }
+
+    #[test]
+    fn sign_format_parse_defaults_to_signify() {
+        assert_eq!(SignFormat::parse("ed25519"), SignFormat::Ed25519);
+        assert_eq!(SignFormat::parse("Signify"), SignFormat::Signify);
+        assert_eq!(SignFormat::parse("nonsense"), SignFormat::Signify);
     }
 
     #[test]

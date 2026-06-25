@@ -25,6 +25,8 @@ import {
   Pin,
   UserRound,
   Play,
+  Pencil,
+  Plus,
 } from "lucide-react";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
@@ -39,6 +41,11 @@ import {
   BrandingImage,
 } from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
+import {
+  ExportModal,
+  FORMAT_COLOR,
+  FORMAT_LABEL,
+} from "@/components/ExportModal";
 import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
 import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { FlavorPicker } from "@/components/FlavorPicker";
@@ -48,6 +55,7 @@ import type {
   LaunchProgress,
   ModpackStatus,
   ContentVersion,
+  ExportConfig,
   FlavorGroup,
   JavaReport,
   LoaderKind,
@@ -338,7 +346,7 @@ export function InstanceSettingsView({
               </div>
             </div>
           </Card>
-          <ExportCard instanceId={instance.id} />
+          <ExportCard instance={instance} />
           {canEditVersion && <VersionLoaderCard instance={instance} onSave={patch} />}
 
           <Card title={t("instanceSettings.account.title")} icon={<UserRound size={14} />}>
@@ -1228,15 +1236,39 @@ function DeleteButton({
   );
 }
 
-function ExportCard({ instanceId }: { instanceId: string }) {
+function ExportCard({ instance }: { instance: Instance }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [configs, setConfigs] = useState<ExportConfig[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const run = (format: "modrinth" | "curseforge") => {
-    setBusy(format);
-    const key = `export:${instanceId}:${format}`;
+
+  const reload = () =>
+    api
+      .listExportConfigs(instance.id)
+      .then(setConfigs)
+      .catch(() => setConfigs([]));
+
+  useEffect(() => {
+    reload();
+  }, [instance.id]);
+
+  const openNew = () => {
+    setEditId(null);
+    setOpen(true);
+  };
+
+  const openEdit = (cfg: ExportConfig) => {
+    setEditId(cfg.id);
+    setOpen(true);
+  };
+
+  const rerun = (cfg: ExportConfig) => {
+    setBusy(cfg.id);
+    const key = `export:${instance.id}:${cfg.id}`;
     toastProgress(key, t("instanceSettings.export.exportingToast"), null);
     api
-      .exportModpack(instanceId, format)
+      .runExportConfig(instance.id, cfg.id)
       .then((path) => {
         dismissToast(key);
         toast(t("instanceSettings.export.exportedToast", { path }), "success");
@@ -1247,36 +1279,104 @@ function ExportCard({ instanceId }: { instanceId: string }) {
       })
       .finally(() => setBusy(null));
   };
-  const btn =
-    "flex flex-1 items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50";
+
+  const remove = (cfg: ExportConfig) => {
+    api
+      .deleteExportConfig(instance.id, cfg.id)
+      .then(reload)
+      .catch((e) => toast(String(e), "error"));
+  };
+
   return (
-    <Card title={t("instanceSettings.export.title")} icon={<Share2 size={14} />}>
-      <p className="text-xs text-ink-600">
-        {t("instanceSettings.export.desc")}
-      </p>
-      <div className="flex gap-2">
-        <button onClick={() => run("modrinth")} disabled={!!busy} className={btn}>
-          {busy === "modrinth" ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Download size={15} />
-          )}
-          {t("instanceSettings.export.mrpack")}
-        </button>
+    <>
+      <Card title={t("instanceSettings.export.title")} icon={<Share2 size={14} />}>
+        <p className="text-xs text-ink-600">
+          {t("instanceSettings.export.desc")}
+        </p>
+
+        {configs.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
+              {t("instanceSettings.export.savedConfigs")}
+            </div>
+            {configs.map((cfg) => (
+              <div
+                key={cfg.id}
+                onClick={() => openEdit(cfg)}
+                title={t("instanceSettings.export.editConfig")}
+                className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-edge bg-ink-950/40 px-3 py-2 text-sm transition hover:border-brass-600/40 hover:bg-ink-900/60"
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: FORMAT_COLOR[cfg.format] }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-gray-200">{cfg.name}</div>
+                  <div className="truncate text-[11px] text-ink-600">
+                    {FORMAT_LABEL[cfg.format]} ·{" "}
+                    {t("instanceSettings.export.fileCount", {
+                      count:
+                        cfg.selection.mods.length + cfg.selection.files.length,
+                    })}
+                  </div>
+                </div>
+                <span className="hidden items-center gap-1 pr-1 text-[11px] text-brass-300 group-hover:flex">
+                  <Pencil size={11} />
+                  {t("instanceSettings.export.editConfig")}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rerun(cfg);
+                  }}
+                  disabled={busy === cfg.id}
+                  title={t("instanceSettings.export.reexport")}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-50"
+                >
+                  {busy === cfg.id ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={13} />
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(cfg);
+                  }}
+                  title={t("instanceSettings.export.deleteConfig")}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-600 transition hover:text-red-300"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <button
-          onClick={() => run("curseforge")}
-          disabled={!!busy}
-          className={btn}
+          onClick={openNew}
+          className="flex items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
         >
-          {busy === "curseforge" ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Download size={15} />
-          )}
-          {t("instanceSettings.export.cfzip")}
+          <Plus size={15} />
+          {t("instanceSettings.export.newExport")}
         </button>
-      </div>
-    </Card>
+      </Card>
+
+      {open && (
+        <ExportModal
+          instanceId={instance.id}
+          mcVersion={instance.minecraft_version}
+          loader={instance.loader.replace("_", "")}
+          defaultName={instance.name}
+          initialConfigId={editId}
+          onClose={() => {
+            setOpen(false);
+            reload();
+          }}
+        />
+      )}
+    </>
   );
 }
 

@@ -112,7 +112,7 @@ COMMANDS:
     modpack repair                           repair the modpack files
     modpack reinstall                        reinstall from scratch
     modpack lock | unlock                    lock / unlock the modpack
-    modpack export <modrinth|curseforge>     export to Downloads
+    modpack export <packwiz|modrinth|curseforge>  export to Downloads
 
   World
     world list                               show singleplayer worlds
@@ -324,6 +324,13 @@ fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        unsafe {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     if let Some(first) = std::env::args().nth(1) {
         if matches!(first.as_str(), "help" | "--help" | "-h") {
             print_cli_help();
@@ -485,6 +492,7 @@ pub fn run() {
             commands::set_active_instance,
             commands::create_custom_instance,
             commands::create_packwiz_instance,
+            commands::extract_packwiz_pack,
             commands::inspect_packwiz_flavors,
             commands::set_packwiz_flavors,
             commands::list_packwiz_branches,
@@ -533,6 +541,14 @@ pub fn run() {
             commands::ping_server,
             commands::toggle_star,
             commands::export_modpack,
+            commands::export_tree,
+            commands::export_modpack_selected,
+            commands::list_export_configs,
+            commands::save_export_config,
+            commands::delete_export_config,
+            commands::run_export_config,
+            commands::unsup_public_key,
+            commands::regenerate_unsup_key,
             commands::backup_world,
             commands::list_world_backups,
             commands::export_world,

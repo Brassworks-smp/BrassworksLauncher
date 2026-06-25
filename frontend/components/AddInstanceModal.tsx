@@ -489,6 +489,25 @@ export function AddInstanceModal({
     });
   };
 
+  const importPackwizZip = async () => {
+    const picked = await api.pickPackwizZip().catch(() => null);
+    if (!picked) return;
+    let url: string;
+    try {
+      url = await api.extractPackwizPack(picked);
+    } catch (e) {
+      onError(String(e));
+      return;
+    }
+    await beginInstall({
+      kind: "packwiz",
+      url,
+      name: "",
+      unsup: packUnsup,
+      publicKey: packUnsup && packPublicKey.trim() ? packPublicKey.trim() : null,
+    });
+  };
+
   const startShareInstall = () => {
     if (!initialPackwiz) return;
     const s = initialPackwiz;
@@ -691,6 +710,25 @@ export function AddInstanceModal({
                   spellCheck={false}
                 />
               </div>
+
+              <div className="flex items-center gap-2 text-xs text-ink-600">
+                <span className="h-px flex-1 bg-edge" />
+                {t("addInstance.orSeparator")}
+                <span className="h-px flex-1 bg-edge" />
+              </div>
+
+              <button
+                onClick={importPackwizZip}
+                disabled={busy}
+                className="flex items-center justify-center gap-2 self-start rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Upload size={15} />
+                )}
+                {t("addInstance.importPackwizZip")}
+              </button>
 
               {looksLikeRepo(packUrl) && !packBranches && (
                 <button

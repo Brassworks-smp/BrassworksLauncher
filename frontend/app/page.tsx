@@ -1141,6 +1141,24 @@ export default function Home() {
               }}
               onStar={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
               onAdd={() => setAddOpen(true)}
+              onPlay={(id) => void launchNow(id)}
+              onDelete={(id) => {
+                api
+                  .deleteInstance(id)
+                  .then(() =>
+                    refreshInstances().then((list) => {
+                      if (selectedRef.current === id) {
+                        const next = defaultInstanceId(
+                          list,
+                          settingsRef.current?.show_featured ?? true,
+                        );
+                        if (next) void selectInstance(next);
+                        else setSelectedId(null);
+                      }
+                    }),
+                  )
+                  .catch((e) => setError(String(e)));
+              }}
             />
           )}
 

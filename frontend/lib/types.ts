@@ -292,6 +292,85 @@ export interface InstalledMod {
   icon_url: string | null;
 }
 
+export type ExportFormat = "packwiz" | "modrinth" | "curseforge";
+
+export interface ExportTreeMod {
+  path: string;
+  name: string;
+  filename: string;
+  category: string;
+  side: string;
+  source: ContentSource;
+  project_id: string | null;
+  version_id: string | null;
+  enabled: boolean;
+}
+
+export interface ExportNode {
+  rel_path: string;
+  name: string;
+  is_dir: boolean;
+  size: number;
+  default_selected: boolean;
+  children: ExportNode[];
+}
+
+export interface ExportTree {
+  mods: ExportTreeMod[];
+  files: ExportNode[];
+}
+
+export interface ExportOptional {
+  default: boolean;
+  description: string;
+}
+
+export interface FlavorChoiceSpec {
+  id: string;
+  name: string;
+  description: string;
+  default: boolean;
+}
+
+export interface FlavorGroupSpec {
+  id: string;
+  name: string;
+  description: string;
+  side: string;
+  choices: FlavorChoiceSpec[];
+}
+
+export interface ExportSelection {
+  mods: string[];
+  files: string[];
+  optional: Record<string, ExportOptional>;
+  flavor_groups: FlavorGroupSpec[];
+  flavor_assignments: Record<string, string[]>;
+}
+
+export interface ExportMeta {
+  name: string;
+  author: string;
+  version: string;
+  mc_version: string;
+  loader: string;
+  loader_version: string | null;
+}
+
+export interface ExportConfig {
+  id: string;
+  name: string;
+  format: ExportFormat;
+  pack_name: string;
+  author: string;
+  version: string;
+  selection: ExportSelection;
+  created_at: number;
+  unsup: boolean;
+  sign: boolean;
+  sign_format: string;
+}
+
 export interface ModInfo {
   title: string | null;
   description: string | null;

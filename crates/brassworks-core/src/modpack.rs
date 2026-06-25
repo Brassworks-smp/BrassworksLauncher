@@ -4,13 +4,14 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use packwiz::{
-    Curseforge, FlavorGroup, Installer, Manifest, OptionalChoice, ResolvedVersion, SearchHit, Side,
-    SyncOptions, SyncProgress,
+    Curseforge, FlavorGroup, Installer, Manifest, Modrinth, OptionalChoice, ResolvedVersion,
+    SearchHit, Side, SyncOptions, SyncProgress,
 };
 
 use crate::packs::OptionalComponent;
 
 use crate::error::{CoreError, Result};
+use crate::export::{self, ExportMeta, ExportSelection, ExportTree, ExportTreeMod};
 use crate::instance::{Instance, PackSource};
 use crate::paths::Paths;
 use crate::settings::LauncherSettings;
@@ -1067,12 +1068,261 @@ impl<'a> Modpack<'a> {
         Ok(())
     }
 
-    pub fn export_modrinth(
+    fn is_managed_source(source: &str) -> bool {
+        source == "modrinth" || source == "curseforge"
+    }
+
+    fn managed_paths(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        for m in self.list_mods().unwrap_or_default() {
+            if Self::is_managed_source(&m.source) {
+                set.insert(format!("{}.disabled", m.path));
+                set.insert(m.path);
+            }
+        }
+        set
+    }
+
+    pub fn export_tree(&self) -> Result<ExportTree> {
+        let mods = self
+            .list_mods()?
+            .into_iter()
+            .filter(|m| Self::is_managed_source(&m.source))
+            .map(|m| ExportTreeMod {
+                path: m.path,
+                name: m.name,
+                filename: m.filename,
+                category: m.category,
+                side: m.side,
+                source: m.source,
+                project_id: m.project_id,
+                version_id: m.version_id,
+                enabled: m.enabled,
+            })
+            .collect();
+        let files = export::build_file_tree(&self.game_dir(), &self.managed_paths());
+        Ok(ExportTree { mods, files })
+    }
+
+    pub fn full_selection(&self) -> Result<ExportSelection> {
+        let tree = self.export_tree()?;
+        let mods = tree
+            .mods
+            .iter()
+            .filter(|m| m.enabled)
+            .map(|m| m.path.clone())
+            .collect();
+        let files = tree
+            .files
+            .iter()
+            .filter(|n| n.default_selected)
+            .map(|n| n.rel_path.clone())
+            .collect();
+        Ok(ExportSelection {
+            mods,
+            files,
+            optional: std::collections::HashMap::new(),
+            flavor_groups: Vec::new(),
+            flavor_assignments: std::collections::HashMap::new(),
+        })
+    }
+
+    pub fn run_export(
         &self,
-        name: &str,
-        mc_version: &str,
-        loader: &str,
-        loader_version: Option<&str>,
+        format: export::ExportFormat,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+    ) -> Result<Vec<u8>> {
+        self.run_export_opts(format, meta, selection, icon, &ExportOpts::default())
+    }
+
+    pub fn run_export_opts(
+        &self,
+        format: export::ExportFormat,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
+    ) -> Result<Vec<u8>> {
+        match format {
+            export::ExportFormat::Packwiz => self.export_packwiz(meta, selection, icon, opts),
+            export::ExportFormat::Modrinth => self.export_modrinth(meta, selection, icon),
+            export::ExportFormat::Curseforge => self.export_curseforge(meta, selection, icon),
+        }
+    }
+
+    fn selected_mods(&self, selection: &ExportSelection) -> Vec<InstalledMod> {
+        let set: HashSet<&str> = selection.mods.iter().map(|s| s.as_str()).collect();
+        self.list_mods()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| set.contains(m.path.as_str()))
+            .collect()
+    }
+
+    fn selected_override_files(&self, selection: &ExportSelection) -> Vec<(String, Vec<u8>)> {
+        let game_dir = self.game_dir();
+        let tree = export::build_file_tree(&game_dir, &self.managed_paths());
+        let mut rels = Vec::new();
+        export::collect_selected_files(&tree, &selection.files, &mut rels);
+        rels.into_iter()
+            .filter_map(|rel| std::fs::read(game_dir.join(&rel)).ok().map(|b| (rel, b)))
+            .collect()
+    }
+
+    fn packwiz_source(
+        &self,
+        m: &InstalledMod,
+        bytes: &[u8],
+        http: &Modrinth,
+        cf: Option<&Curseforge>,
+    ) -> packwiz::export::ModSource {
+        use packwiz::export::ModSource;
+        match m.source.as_str() {
+            "modrinth" => {
+                if let (Some(pid), Some(vid)) = (m.project_id.clone(), m.version_id.clone()) {
+                    if let Some(rv) = http.resolve_version(&vid).ok().flatten() {
+                        if let Some(sha512) = rv.sha512.clone() {
+                            return ModSource::Modrinth {
+                                project_id: pid,
+                                version_id: vid,
+                                url: rv.url,
+                                sha512,
+                            };
+                        }
+                    }
+                }
+                ModSource::Embed
+            }
+            "curseforge" => {
+                if let (Some(pid), Some(fid)) = (
+                    m.project_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
+                    m.version_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
+                ) {
+                    let blocked = cf
+                        .and_then(|c| {
+                            c.resolve_version(&pid.to_string(), &fid.to_string())
+                                .ok()
+                                .flatten()
+                        })
+                        .map(|r| r.manual_only)
+                        .unwrap_or(false);
+                    if !blocked {
+                        return ModSource::Curseforge {
+                            project_id: pid,
+                            file_id: fid,
+                            sha1: packwiz::sha1_hex(bytes),
+                        };
+                    }
+                }
+                ModSource::Embed
+            }
+            _ => ModSource::Embed,
+        }
+    }
+
+    fn export_packwiz(
+        &self,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
+    ) -> Result<Vec<u8>> {
+        let game_dir = self.game_dir();
+        let installer = self.installer();
+        let http = installer.modrinth(self.paths.modrinth_cache_dir());
+        let cf = self.curseforge().ok();
+
+        let selected = self.selected_mods(selection);
+        let mods: Vec<packwiz::export::ExportMod> = packwiz::parallel_run(
+            &selected,
+            packwiz::DEFAULT_CONCURRENCY,
+            || false,
+            |m, _stop| {
+                let bytes = std::fs::read(game_dir.join(&m.path)).ok()?;
+                let source = self.packwiz_source(m, &bytes, &http, cf.as_ref());
+                let flavors = if opts.unsup {
+                    selection
+                        .flavor_assignments
+                        .get(&m.path)
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                let optional = selection
+                    .optional
+                    .get(&m.path)
+                    .map(|o| packwiz::export::OptionMeta {
+                        default: o.default,
+                        description: o.description.clone(),
+                    })
+                    .or_else(|| {
+                        (!flavors.is_empty()).then(|| packwiz::export::OptionMeta {
+                            default: true,
+                            description: String::new(),
+                        })
+                    });
+                Some(packwiz::export::ExportMod {
+                    category: metafile_dir(&m.path),
+                    name: if m.name.is_empty() {
+                        m.filename.clone()
+                    } else {
+                        m.name.clone()
+                    },
+                    filename: m.filename.clone(),
+                    side: pw_side(&m.side).to_string(),
+                    bytes,
+                    source,
+                    optional,
+                    flavors,
+                })
+            },
+            |_d, _t, _i| {},
+        )
+        .into_iter()
+        .flatten()
+        .collect();
+
+        let files: Vec<packwiz::export::ExportFile> = self
+            .selected_override_files(selection)
+            .into_iter()
+            .map(|(rel_path, bytes)| packwiz::export::ExportFile { rel_path, bytes })
+            .collect();
+
+        let pmeta = packwiz::export::PackMeta {
+            name: meta.name.clone(),
+            author: meta.author.clone(),
+            version: if meta.version.is_empty() {
+                "1.0.0".to_string()
+            } else {
+                meta.version.clone()
+            },
+            mc_version: meta.mc_version.clone(),
+            loader: packwiz::export::Loader::from_str_loose(&meta.loader),
+            loader_version: meta.loader_version.clone(),
+            unsup: None,
+        };
+
+        if opts.unsup {
+            let unsup_export = packwiz::export::UnsupExport {
+                groups: flavor_group_defs(selection),
+                signing: opts.signing.clone(),
+            };
+            packwiz::export::build_unsup_zip(&pmeta, &mods, &files, icon.as_deref(), &unsup_export)
+                .map_err(|e| CoreError::Modpack(format!("unsup export: {e}")))
+        } else {
+            packwiz::export::build_packwiz_zip(&pmeta, &mods, &files, icon.as_deref())
+                .map_err(|e| CoreError::Modpack(format!("packwiz export: {e}")))
+        }
+    }
+
+    fn export_modrinth(
+        &self,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
     ) -> Result<Vec<u8>> {
         let game_dir = self.game_dir();
         let installer = self.installer();
@@ -1080,74 +1330,89 @@ impl<'a> Modpack<'a> {
 
         let mut files: Vec<serde_json::Value> = Vec::new();
         let mut overrides: Vec<(String, Vec<u8>)> = Vec::new();
-        for m in self.list_mods().unwrap_or_default() {
-            if !m.enabled {
-                continue;
-            }
-            let Ok(bytes) = std::fs::read(game_dir.join(&m.path)) else {
-                continue;
-            };
-            if m.source == "modrinth" {
-                if let Some(rv) = m
-                    .version_id
-                    .as_deref()
-                    .and_then(|v| http.resolve_version(v).ok().flatten())
-                {
-                    if let (Some(sha1), Some(sha512)) = (rv.sha1.clone(), rv.sha512.clone()) {
-                        files.push(serde_json::json!({
-                            "path": m.path,
-                            "hashes": { "sha1": sha1, "sha512": sha512 },
-                            "env": { "client": "required", "server": "required" },
-                            "downloads": [rv.url],
-                            "fileSize": bytes.len(),
-                        }));
-                        continue;
+        let selected = self.selected_mods(selection);
+        let resolved = packwiz::parallel_run(
+            &selected,
+            packwiz::DEFAULT_CONCURRENCY,
+            || false,
+            |m, _stop| {
+                let bytes = std::fs::read(game_dir.join(&m.path)).ok()?;
+                if m.source == "modrinth" {
+                    if let Some(rv) = m
+                        .version_id
+                        .as_deref()
+                        .and_then(|v| http.resolve_version(v).ok().flatten())
+                    {
+                        if let (Some(sha1), Some(sha512)) = (rv.sha1.clone(), rv.sha512.clone())
+                        {
+                            let state = if selection.optional.contains_key(&m.path) {
+                                "optional"
+                            } else {
+                                "required"
+                            };
+                            return Some(serde_json::json!({
+                                "path": m.path,
+                                "hashes": { "sha1": sha1, "sha512": sha512 },
+                                "env": { "client": state, "server": state },
+                                "downloads": [rv.url],
+                                "fileSize": bytes.len(),
+                            })
+                            .into());
+                        }
                     }
                 }
+                Some(MrEntry::Override(m.path.clone(), bytes))
+            },
+            |_d, _t, _i| {},
+        );
+        for entry in resolved.into_iter().flatten() {
+            match entry {
+                MrEntry::File(v) => files.push(v),
+                MrEntry::Override(path, bytes) => overrides.push((path, bytes)),
             }
-            overrides.push((m.path.clone(), bytes));
         }
-        collect_config_overrides(&game_dir, &mut overrides);
+        for (rel, bytes) in self.selected_override_files(selection) {
+            overrides.push((rel, bytes));
+        }
 
         let mut deps = serde_json::Map::new();
-        deps.insert("minecraft".into(), serde_json::json!(mc_version));
-        if let (Some(key), Some(v)) = (modrinth_loader_key(loader), loader_version) {
+        deps.insert("minecraft".into(), serde_json::json!(meta.mc_version));
+        if let (Some(key), Some(v)) =
+            (modrinth_loader_key(&meta.loader), meta.loader_version.as_deref())
+        {
             deps.insert(key.into(), serde_json::json!(v));
         }
         let index = serde_json::json!({
             "formatVersion": 1,
             "game": "minecraft",
-            "versionId": "1.0.0",
-            "name": name,
+            "versionId": if meta.version.is_empty() { "1.0.0" } else { meta.version.as_str() },
+            "name": meta.name,
             "files": files,
             "dependencies": serde_json::Value::Object(deps),
         });
 
-        zip_pack("modrinth.index.json", &index, &overrides)
+        zip_pack("modrinth.index.json", &index, &overrides, icon.as_deref())
     }
 
-    pub fn export_curseforge(
+    fn export_curseforge(
         &self,
-        name: &str,
-        mc_version: &str,
-        loader: &str,
-        loader_version: Option<&str>,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
     ) -> Result<Vec<u8>> {
         let game_dir = self.game_dir();
 
         let mut cf_files: Vec<serde_json::Value> = Vec::new();
         let mut overrides: Vec<(String, Vec<u8>)> = Vec::new();
-        for m in self.list_mods().unwrap_or_default() {
-            if !m.enabled {
-                continue;
-            }
+        for m in self.selected_mods(selection) {
             if m.source == "curseforge" {
                 if let (Some(pid), Some(fid)) = (
                     m.project_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
                     m.version_id.as_deref().and_then(|s| s.parse::<i64>().ok()),
                 ) {
+                    let required = !selection.optional.contains_key(&m.path);
                     cf_files.push(serde_json::json!({
-                        "projectID": pid, "fileID": fid, "required": true,
+                        "projectID": pid, "fileID": fid, "required": required,
                     }));
                     continue;
                 }
@@ -1156,33 +1421,35 @@ impl<'a> Modpack<'a> {
                 overrides.push((m.path.clone(), bytes));
             }
         }
-        collect_config_overrides(&game_dir, &mut overrides);
+        for (rel, bytes) in self.selected_override_files(selection) {
+            overrides.push((rel, bytes));
+        }
 
-        let loader_id = match loader {
+        let loader_id = match meta.loader.as_str() {
             "neoforge" => "neoforge",
             "fabric" => "fabric",
             "quilt" => "quilt",
             _ => "forge",
         };
-        let loader_str = match loader_version {
+        let loader_str = match meta.loader_version.as_deref() {
             Some(v) => format!("{loader_id}-{v}"),
             None => loader_id.to_string(),
         };
         let manifest = serde_json::json!({
             "minecraft": {
-                "version": mc_version,
+                "version": meta.mc_version,
                 "modLoaders": [{ "id": loader_str, "primary": true }],
             },
             "manifestType": "minecraftModpack",
             "manifestVersion": 1,
-            "name": name,
-            "version": "1.0.0",
-            "author": "",
+            "name": meta.name,
+            "version": if meta.version.is_empty() { "1.0.0" } else { meta.version.as_str() },
+            "author": meta.author,
             "files": cf_files,
             "overrides": "overrides",
         });
 
-        zip_pack("manifest.json", &manifest, &overrides)
+        zip_pack("manifest.json", &manifest, &overrides, icon.as_deref())
     }
 
     pub fn uninstall(&self) -> Result<()> {
@@ -1228,44 +1495,6 @@ fn folder_for(project_type: &str) -> &'static str {
     }
 }
 
-fn collect_config_overrides(
-    game_dir: &std::path::Path,
-    overrides: &mut Vec<(String, Vec<u8>)>,
-) {
-    for sub in ["config", "defaultconfigs", "kubejs", "scripts", "options.txt"] {
-        let root = game_dir.join(sub);
-        if root.is_file() {
-            if let Ok(bytes) = std::fs::read(&root) {
-                overrides.push((sub.to_string(), bytes));
-            }
-            continue;
-        }
-        let mut stack = vec![root];
-        while let Some(d) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&d) else {
-                continue;
-            };
-            for entry in entries.flatten() {
-                let path = entry.path();
-                match entry.file_type() {
-                    Ok(ft) if ft.is_dir() => stack.push(path),
-                    Ok(ft) if ft.is_file() => {
-                        if let Ok(rel) = path.strip_prefix(game_dir) {
-                            if let Ok(bytes) = std::fs::read(&path) {
-                                overrides.push((
-                                    rel.to_string_lossy().replace('\\', "/"),
-                                    bytes,
-                                ));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-}
-
 fn modrinth_loader_key(loader: &str) -> Option<&'static str> {
     match loader {
         "neoforge" => Some("neoforge"),
@@ -1276,10 +1505,70 @@ fn modrinth_loader_key(loader: &str) -> Option<&'static str> {
     }
 }
 
+enum MrEntry {
+    File(serde_json::Value),
+    Override(String, Vec<u8>),
+}
+
+impl From<serde_json::Value> for MrEntry {
+    fn from(v: serde_json::Value) -> Self {
+        MrEntry::File(v)
+    }
+}
+
+#[derive(Default)]
+pub struct ExportOpts {
+    pub unsup: bool,
+    pub signing: Option<packwiz::export::SigningInput>,
+}
+
+fn opt_str(s: &str) -> Option<String> {
+    let t = s.trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
+fn flavor_group_defs(selection: &ExportSelection) -> Vec<packwiz::export::FlavorGroupDef> {
+    selection
+        .flavor_groups
+        .iter()
+        .map(|g| packwiz::export::FlavorGroupDef {
+            id: g.id.clone(),
+            name: g.name.clone(),
+            description: opt_str(&g.description),
+            side: g.side.clone(),
+            choices: g
+                .choices
+                .iter()
+                .map(|c| packwiz::export::FlavorChoiceDef {
+                    id: c.id.clone(),
+                    name: c.name.clone(),
+                    description: opt_str(&c.description),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn metafile_dir(path: &str) -> String {
+    match path.replace('\\', "/").rfind('/') {
+        Some(i) => path[..i].to_string(),
+        None => "mods".to_string(),
+    }
+}
+
+fn pw_side(side: &str) -> &'static str {
+    match side {
+        "client" => "client",
+        "server" => "server",
+        _ => "both",
+    }
+}
+
 fn zip_pack(
     index_name: &str,
     index: &serde_json::Value,
     overrides: &[(String, Vec<u8>)],
+    icon: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     use std::io::Write;
     let zip_err = |e: zip::result::ZipError| CoreError::Modpack(format!("zip: {e}"));
@@ -1292,7 +1581,16 @@ fn zip_pack(
         zip.start_file(index_name.to_string(), opts).map_err(zip_err)?;
         zip.write_all(&json)
             .map_err(|e| CoreError::Modpack(format!("zip write: {e}")))?;
+        if let Some(icon) = icon {
+            zip.start_file("icon.png".to_string(), opts).map_err(zip_err)?;
+            zip.write_all(icon)
+                .map_err(|e| CoreError::Modpack(format!("zip write: {e}")))?;
+        }
+        let mut seen = std::collections::HashSet::new();
         for (path, bytes) in overrides {
+            if !seen.insert(path.clone()) {
+                continue;
+            }
             zip.start_file(format!("overrides/{path}"), opts)
                 .map_err(zip_err)?;
             zip.write_all(bytes)
@@ -1317,6 +1615,42 @@ mod modpack_tests {
 
     fn settings() -> LauncherSettings {
         serde_json::from_str::<LauncherSettings>("{}").unwrap()
+    }
+
+    #[test]
+    fn flavor_group_defs_maps_and_trims_descriptions() {
+        let selection = ExportSelection {
+            mods: Vec::new(),
+            files: Vec::new(),
+            optional: std::collections::HashMap::new(),
+            flavor_groups: vec![export::FlavorGroupSpec {
+                id: "rendering".to_string(),
+                name: "Rendering".to_string(),
+                description: "  ".to_string(),
+                side: "client".to_string(),
+                choices: vec![
+                    export::FlavorChoiceSpec {
+                        id: "sodium".to_string(),
+                        name: "Sodium".to_string(),
+                        description: "Fast".to_string(),
+                        default: true,
+                    },
+                    export::FlavorChoiceSpec {
+                        id: "iris".to_string(),
+                        name: "Iris".to_string(),
+                        description: String::new(),
+                        default: false,
+                    },
+                ],
+            }],
+            flavor_assignments: std::collections::HashMap::new(),
+        };
+        let defs = flavor_group_defs(&selection);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].side, "client");
+        assert_eq!(defs[0].description, None, "blank group description dropped");
+        assert_eq!(defs[0].choices[0].description.as_deref(), Some("Fast"));
+        assert_eq!(defs[0].choices[1].description, None);
     }
 
     #[test]

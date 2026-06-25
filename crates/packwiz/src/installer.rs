@@ -63,6 +63,10 @@ impl Installer {
 
 
     fn get_text(&self, url: &str) -> Result<String> {
+        if let Some(path) = local_path(url) {
+            return std::fs::read_to_string(&path)
+                .map_err(|e| PackwizError::io(path.display().to_string(), e));
+        }
         let resp = self.client.get(url).send().map_err(PackwizError::http)?;
         if !resp.status().is_success() {
             return Err(PackwizError::Http(format!("GET {url} -> {}", resp.status())));
@@ -89,6 +93,9 @@ impl Installer {
     }
 
     fn get_bytes(&self, url: &str) -> Result<Vec<u8>> {
+        if let Some(path) = local_path(url) {
+            return std::fs::read(&path).map_err(|e| PackwizError::io(path.display().to_string(), e));
+        }
         let resp = self.client.get(url).send().map_err(PackwizError::http)?;
         if !resp.status().is_success() {
             return Err(PackwizError::Http(format!("GET {url} -> {}", resp.status())));
@@ -101,6 +108,9 @@ impl Installer {
         use std::io::Read;
         if stop.load(Ordering::Relaxed) {
             return Err(PackwizError::Cancelled);
+        }
+        if let Some(path) = local_path(url) {
+            return std::fs::read(&path).map_err(|e| PackwizError::io(path.display().to_string(), e));
         }
         let mut resp = self.client.get(url).send().map_err(PackwizError::http)?;
         if !resp.status().is_success() {
@@ -127,6 +137,11 @@ impl Installer {
 
     pub fn pack_icon_url(pack_url: &str) -> String {
         format!("{}icon.png", base_url(pack_url))
+    }
+
+    pub fn local_icon_path(pack_url: &str) -> Option<std::path::PathBuf> {
+        let path = local_path(&Self::pack_icon_url(pack_url))?;
+        path.exists().then_some(path)
     }
 
     pub fn find_pack_icon(&self, pack_url: &str) -> Option<String> {
@@ -754,6 +769,52 @@ fn base_url(url: &str) -> String {
     }
 }
 
+pub fn local_pack_url(pack_toml: &std::path::Path) -> String {
+    let s = pack_toml.to_string_lossy().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("file://{s}")
+    } else {
+        format!("file:///{s}")
+    }
+}
+
+fn local_path(url: &str) -> Option<std::path::PathBuf> {
+    let rest = url.strip_prefix("file://")?;
+    let decoded = percent_decode(rest);
+    if cfg!(windows) {
+        let trimmed = decoded.strip_prefix('/').unwrap_or(&decoded);
+        Some(std::path::PathBuf::from(trimmed))
+    } else {
+        Some(std::path::PathBuf::from(decoded))
+    }
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    let hex = |b: u8| -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        }
+    };
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 fn join_url(base: &str, rel: &str) -> String {
     let encoded: Vec<String> = rel.split('/').map(encode_segment).collect();
     format!("{base}{}", encoded.join("/"))
@@ -837,6 +898,10 @@ pub fn sha1_hex(data: &[u8]) -> String {
     hex_digest("sha1", data)
 }
 
+pub fn sha256_hex(data: &[u8]) -> String {
+    hex_digest("sha256", data)
+}
+
 fn hex_digest(format: &str, data: &[u8]) -> String {
     match format {
         "sha512" => {
@@ -880,6 +945,46 @@ fn verify_hash(file: &str, format: &str, expected: &str, data: &[u8]) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn percent_decode_handles_unicode_and_plain() {
+        assert_eq!(percent_decode("mods/a.jar"), "mods/a.jar");
+        assert_eq!(percent_decode("a%20b"), "a b");
+        assert_eq!(percent_decode("%E4%BD%A0"), "你");
+    }
+
+    #[test]
+    fn local_pack_url_roundtrips_to_readable_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let pack = dir.path().join("pack.toml");
+        std::fs::write(&pack, b"name = \"x\"").unwrap();
+        let url = local_pack_url(&pack);
+        assert!(url.starts_with("file://"));
+        let installer = Installer::new();
+        assert_eq!(installer.get_text(&url).unwrap(), "name = \"x\"");
+    }
+
+    #[test]
+    fn local_icon_path_found_only_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = local_pack_url(&dir.path().join("pack.toml"));
+        assert!(Installer::local_icon_path(&url).is_none());
+        std::fs::write(dir.path().join("icon.png"), b"png").unwrap();
+        let found = Installer::local_icon_path(&url).unwrap();
+        assert_eq!(found, dir.path().join("icon.png"));
+    }
+
+    #[test]
+    fn local_path_reads_encoded_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = local_pack_url(&dir.path().join("pack.toml"));
+        let base = base_url(&base);
+        let nested = dir.path().join("mods");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("你好.jar"), b"hi").unwrap();
+        let url = join_url(&base, "mods/你好.jar");
+        assert_eq!(Installer::new().get_bytes(&url).unwrap(), b"hi");
+    }
 
             #[test]
     #[ignore = "network: inspects the real BlanketCon 25 unsup pack"]

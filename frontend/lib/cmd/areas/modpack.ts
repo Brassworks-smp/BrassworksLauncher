@@ -81,14 +81,17 @@ export const modpackCommands: CommandSpec[] = [
         name: "format",
         type: "enum",
         required: true,
-        description: "modrinth | curseforge",
-        enumValues: ["modrinth", "curseforge"],
+        description: "packwiz | modrinth | curseforge",
+        enumValues: ["packwiz", "modrinth", "curseforge"],
       },
     ],
     listable: false,
     run: async (args, ctx) => {
       const inst = selected(ctx);
-      const fmt = (args.get("format") ?? "modrinth") as "modrinth" | "curseforge";
+      const fmt = (args.get("format") ?? "modrinth") as
+        | "packwiz"
+        | "modrinth"
+        | "curseforge";
       const path = await ctx.api.exportModpack(inst.id, fmt);
       return { ok: true, message: `Exported to ${path}` };
     },

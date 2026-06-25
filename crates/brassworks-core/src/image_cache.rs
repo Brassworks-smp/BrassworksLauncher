@@ -74,6 +74,14 @@ fn fetch(value: &str) -> Option<Vec<u8>> {
     }
 }
 
+pub fn download(url: &str) -> Option<Vec<u8>> {
+    if is_remote(url) {
+        fetch(url)
+    } else {
+        None
+    }
+}
+
 pub fn cache_image(dir: &Path, value: &str) -> Option<PathBuf> {
     let path = cache_path(dir, value);
     if is_fresh(&path) {
