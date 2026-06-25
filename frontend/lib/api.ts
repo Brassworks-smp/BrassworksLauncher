@@ -30,6 +30,11 @@ import type {
   ModInfo,
   ModpackDone,
   ModpackStatus,
+  ExportTree,
+  ExportSelection,
+  ExportMeta,
+  ExportConfig,
+  ExportFormat,
   NewsItem,
   PlayerCount,
   ProjectDetail,
@@ -202,8 +207,33 @@ export const uninstallGame = (instanceId: string): Promise<void> =>
   invoke("uninstall_game", { instanceId });
 export const exportModpack = (
   instanceId: string,
-  format: "modrinth" | "curseforge",
+  format: ExportFormat,
 ): Promise<string> => invoke("export_modpack", { instanceId, format });
+export const exportTree = (instanceId: string): Promise<ExportTree> =>
+  invoke("export_tree", { instanceId });
+export const exportModpackSelected = (
+  instanceId: string,
+  format: ExportFormat,
+  selection: ExportSelection,
+  meta: ExportMeta | null,
+): Promise<string> =>
+  invoke("export_modpack_selected", { instanceId, format, selection, meta });
+export const listExportConfigs = (
+  instanceId: string,
+): Promise<ExportConfig[]> => invoke("list_export_configs", { instanceId });
+export const saveExportConfig = (
+  instanceId: string,
+  config: ExportConfig,
+): Promise<ExportConfig> =>
+  invoke("save_export_config", { instanceId, config });
+export const deleteExportConfig = (
+  instanceId: string,
+  configId: string,
+): Promise<void> => invoke("delete_export_config", { instanceId, configId });
+export const runExportConfig = (
+  instanceId: string,
+  configId: string,
+): Promise<string> => invoke("run_export_config", { instanceId, configId });
 export const contentDetail = (
   instanceId: string,
   projectId: string,
@@ -422,6 +452,9 @@ export const createPackwizInstance = (
     },
   });
 
+export const extractPackwizPack = (path: string): Promise<string> =>
+  invoke("extract_packwiz_pack", { path });
+
 export const resolvePackwizShare = (input: string): Promise<PackwizShare> =>
   invoke("resolve_packwiz_share", { input });
 
@@ -566,6 +599,15 @@ export const pickModpackFile = async (): Promise<{
     ? "modrinth"
     : "curseforge";
   return { path: picked, source };
+};
+
+export const pickPackwizZip = async (): Promise<string | null> => {
+  const picked = await openFileDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "packwiz pack", extensions: ["zip"] }],
+  });
+  return typeof picked === "string" ? picked : null;
 };
 
 export const pickBrandingImage = async (): Promise<string | null> => {
