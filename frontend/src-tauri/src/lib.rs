@@ -540,6 +540,8 @@ pub fn run() {
             commands::save_export_config,
             commands::delete_export_config,
             commands::run_export_config,
+            commands::unsup_public_key,
+            commands::regenerate_unsup_key,
             commands::backup_world,
             commands::list_world_backups,
             commands::export_world,
