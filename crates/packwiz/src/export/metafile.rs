@@ -165,6 +165,7 @@ mod tests {
                 sha512: "f".repeat(128),
             },
             optional: None,
+            flavors: Vec::new(),
         }
     }
 
@@ -181,6 +182,7 @@ mod tests {
                 sha1: "a".repeat(40),
             },
             optional: None,
+            flavors: Vec::new(),
         }
     }
 
