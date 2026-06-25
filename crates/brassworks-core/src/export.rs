@@ -86,6 +86,34 @@ pub struct OptionalSpec {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlavorChoiceSpec {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlavorGroupSpec {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_side")]
+    pub side: String,
+    #[serde(default)]
+    pub choices: Vec<FlavorChoiceSpec>,
+}
+
+fn default_side() -> String {
+    "both".to_string()
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ExportSelection {
     #[serde(default)]
@@ -94,6 +122,10 @@ pub struct ExportSelection {
     pub files: Vec<String>,
     #[serde(default)]
     pub optional: HashMap<String, OptionalSpec>,
+    #[serde(default)]
+    pub flavor_groups: Vec<FlavorGroupSpec>,
+    #[serde(default)]
+    pub flavor_assignments: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +140,12 @@ pub struct ExportConfig {
     pub selection: ExportSelection,
     #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
+    pub unsup: bool,
+    #[serde(default)]
+    pub sign: bool,
+    #[serde(default)]
+    pub sign_format: String,
 }
 
 fn is_hidden_or_system(name: &str) -> bool {
@@ -270,6 +308,38 @@ pub fn delete_config(paths: &Paths, instance_id: &str, config_id: &str) -> Resul
     save_configs(paths, instance_id, &configs)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredUnsupKey {
+    seed: Vec<u8>,
+    key_id: u64,
+}
+
+pub fn load_unsup_key(paths: &Paths, instance_id: &str) -> Option<([u8; 32], u64)> {
+    let bytes = std::fs::read(paths.unsup_signing(instance_id)).ok()?;
+    let stored: StoredUnsupKey = serde_json::from_slice(&bytes).ok()?;
+    let seed: [u8; 32] = stored.seed.try_into().ok()?;
+    Some((seed, stored.key_id))
+}
+
+pub fn save_unsup_key(
+    paths: &Paths,
+    instance_id: &str,
+    seed: &[u8; 32],
+    key_id: u64,
+) -> Result<()> {
+    let path = paths.unsup_signing(instance_id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| CoreError::io(parent, e))?;
+    }
+    let stored = StoredUnsupKey {
+        seed: seed.to_vec(),
+        key_id,
+    };
+    let json =
+        serde_json::to_vec_pretty(&stored).map_err(|e| CoreError::serde("unsup signing key", e))?;
+    std::fs::write(&path, json).map_err(|e| CoreError::io(&path, e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -413,6 +483,58 @@ mod tests {
     }
 
     #[test]
+    fn legacy_config_without_unsup_fields_parses() {
+        let json = r#"[{
+            "id": "c1",
+            "name": "Old",
+            "format": "packwiz",
+            "pack_name": "Pack",
+            "author": "swzo",
+            "version": "1.0.0",
+            "selection": { "mods": [], "files": ["config"], "optional": {} },
+            "created_at": 5
+        }]"#;
+        let configs: Vec<ExportConfig> = serde_json::from_str(json).unwrap();
+        assert_eq!(configs.len(), 1);
+        assert!(!configs[0].unsup);
+        assert!(!configs[0].sign);
+        assert!(configs[0].selection.flavor_groups.is_empty());
+        assert!(configs[0].selection.flavor_assignments.is_empty());
+    }
+
+    #[test]
+    fn flavor_selection_roundtrips() {
+        let mut assignments = HashMap::new();
+        assignments.insert(
+            "mods/sodium.jar".to_string(),
+            vec!["sodium".to_string(), "iris".to_string()],
+        );
+        let sel = ExportSelection {
+            mods: vec!["mods/sodium.jar".to_string()],
+            files: Vec::new(),
+            optional: HashMap::new(),
+            flavor_groups: vec![FlavorGroupSpec {
+                id: "rendering".to_string(),
+                name: "Rendering".to_string(),
+                description: String::new(),
+                side: "client".to_string(),
+                choices: vec![FlavorChoiceSpec {
+                    id: "sodium".to_string(),
+                    name: "Sodium".to_string(),
+                    description: String::new(),
+                    default: true,
+                }],
+            }],
+            flavor_assignments: assignments,
+        };
+        let json = serde_json::to_string(&sel).unwrap();
+        let back: ExportSelection = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.flavor_groups.len(), 1);
+        assert_eq!(back.flavor_groups[0].choices[0].id, "sodium");
+        assert_eq!(back.flavor_assignments["mods/sodium.jar"], vec!["sodium", "iris"]);
+    }
+
+    #[test]
     fn config_crud_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::with_root(dir.path());
@@ -429,8 +551,13 @@ mod tests {
                 mods: vec!["mods/a.jar".to_string()],
                 files: vec!["config".to_string()],
                 optional: HashMap::new(),
+                flavor_groups: Vec::new(),
+                flavor_assignments: HashMap::new(),
             },
             created_at: 123,
+            unsup: false,
+            sign: false,
+            sign_format: String::new(),
         };
         upsert_config(&paths, "inst", cfg.clone()).unwrap();
         let loaded = load_configs(&paths, "inst");
