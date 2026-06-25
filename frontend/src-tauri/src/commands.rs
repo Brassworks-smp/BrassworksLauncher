@@ -1971,11 +1971,50 @@ pub(crate) async fn export_modpack_selected(
     format: String,
     selection: brassworks_core::export::ExportSelection,
     meta: Option<brassworks_core::export::ExportMeta>,
+    unsup: Option<bool>,
+    sign: Option<bool>,
+    sign_format: Option<String>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .export_modpack_selected(&instance_id, &format, selection, meta)
+            .export_modpack_selected_opts(
+                &instance_id,
+                &format,
+                selection,
+                meta,
+                unsup.unwrap_or(false),
+                sign.unwrap_or(false),
+                &sign_format.unwrap_or_default(),
+            )
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn unsup_public_key(
+    state: State<'_, AppState>,
+    instance_id: String,
+    format: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(launcher.unsup_public_key(&instance_id, &format)))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn regenerate_unsup_key(
+    state: State<'_, AppState>,
+    instance_id: String,
+    format: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .regenerate_unsup_key(&instance_id, &format)
             .map_err(err)
     })
     .await
