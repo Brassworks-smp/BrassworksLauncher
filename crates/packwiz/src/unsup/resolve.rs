@@ -104,7 +104,8 @@ pub fn resolve(unsup: &UnsupToml, metafiles: &[MetafileRef]) -> Resolution {
 
         for mf in metafiles {
         let name = mf.name();
-        if !mf.optional || owned.contains_key(name) {
+        let exact = format!("/{}", mf.path);
+        if !mf.optional || owned.contains_key(name) || owned.contains_key(&exact) {
             continue;
         }
         if !client_eligible(&mf.side) {
@@ -170,15 +171,16 @@ pub fn metafile_flavors_one(unsup: &UnsupToml, path: &str, optional: bool) -> Ve
         .and_then(|m| m.flavors.clone())
         .map(|f| f.into_vec());
 
+    let has_path = by_path.is_some();
+    let has_name = by_name.is_some();
     let mut out = Vec::new();
     if let Some(p) = by_path {
         out.extend(p);
     }
-    let has_name = by_name.is_some();
     if let Some(n) = by_name {
         out.extend(n);
     }
-    if optional && !has_name {
+    if optional && !has_name && !has_path {
         out.push(format!("{name}_on"));
     }
     out
@@ -311,6 +313,48 @@ mod tests {
         let res = resolve(&unsup, &metafiles);
         assert!(res.groups.is_empty(), "no synthetic group for explicitly-flavored mod");
         assert_eq!(res.metafile_flavors["mods/sodium.pw.toml"], vec!["rendering"]);
+    }
+
+    #[test]
+    fn exact_path_flavor_suppresses_synthetic_group() {
+        // Regression: a flavor-owned, optional mod whose ownership is declared with the
+        // exact-path form `[metafile."/mods/x.pw.toml"]` (what our exporter writes) must NOT
+        // also get an auto-generated on/off optional group.
+        let unsup: UnsupToml = toml::from_str(
+            r#"
+            [flavor_groups.rendering_mod]
+            name = "Rendering Mod"
+            side = "client"
+            [[flavor_groups.rendering_mod.choices]]
+            id = "sodium"
+            [[flavor_groups.rendering_mod.choices]]
+            id = "iris"
+
+            [metafile."/mods/sodium.pw.toml"]
+            flavors = ["sodium", "iris"]
+        "#,
+        )
+        .unwrap();
+        let metafiles = vec![mf("mods/sodium.pw.toml", true, true, "client")];
+        let res = resolve(&unsup, &metafiles);
+
+        let ids: Vec<&str> = res.groups.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(ids, vec!["rendering_mod"], "no synthetic 'sodium' on/off group");
+        assert_eq!(
+            res.metafile_flavors["mods/sodium.pw.toml"],
+            vec!["sodium", "iris"]
+        );
+        assert!(
+            !res.metafile_flavors["mods/sodium.pw.toml"]
+                .iter()
+                .any(|f| f == "sodium_on"),
+            "no synthetic _on flavor leaked onto the mod"
+        );
+
+        // metafile_flavors_one must agree even when told the mod is optional
+        let one = metafile_flavors_one(&unsup, "mods/sodium.pw.toml", true);
+        assert_eq!(one, vec!["sodium", "iris"]);
+        assert!(!one.iter().any(|f| f == "sodium_on"));
     }
 
     #[test]
