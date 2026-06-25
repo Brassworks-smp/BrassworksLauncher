@@ -1,9 +1,9 @@
 ### **Additions:**
-* **Offline branding** - modpack icons, banners, and logos are now cached locally the first time they load, so instances still look right when you're offline or a source can't be reached. The live image is still used whenever you're online, and the cached copies are cleared along with everything else from the cache control in Settings.
+* **Export your modpacks** - turn any instance into a shareable pack in three formats: packwiz, Modrinth (`.mrpack`), or CurseForge (`.zip`). A guided window lets you pick exactly which mods, configs, and files to include, name the pack and set its author and version, and export straight to your Downloads folder.
+* **Optional mods** - mark any Modrinth or CurseForge mod as optional so players can turn it on or off when they install. On packwiz packs you can also add a description and choose whether it starts enabled.
+* **Saved exports** - keep an export setup as a reusable config and re-export the same pack with a single click whenever it changes.
+* **Import packwiz packs from a file** - import a packwiz `.zip` from your computer, with the same optional and flavor pickers you get when installing from a URL.
 
 ### **Improvements:**
-* **Verified downloads** - mods and modpack files are now checked against their published SHA-1 hashes, empty or corrupt downloads are rejected, manually supplied files are validated before they're used, and blocked content is verified in the optional/blocked content picker.
-
-### **Fixes:**
-* **Launches offline again** - the launcher no longer hangs on a blank screen at startup when you're offline with Discord open. Discord Rich Presence now connects in the background, and network requests time out instead of stalling forever.
-* **Opening a pack file while closed** - double-clicking a `.packwiz` file (or following an install link) while the launcher is closed now opens the install confirmation on first launch, instead of just starting the app and making you click again.
+* **Pack icons stick around** - exported packs now embed their icon, importing a pack reads it back in, and installing a Modrinth or CurseForge modpack saves its icon locally so it shows up offline.
+* **Blocked mods stay installable** - CurseForge mods that can't be redistributed are bundled directly into packwiz and Modrinth exports, and hashes are written correctly for every format so packs verify cleanly.
