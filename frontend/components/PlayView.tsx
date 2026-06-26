@@ -15,8 +15,11 @@ import {
   UserRound,
   Globe,
   Server,
+  Share2,
+  Copy,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { ShareModal } from "./ShareModal";
 import { iconSrc, DEFAULT_INSTANCE_ICON, BrandingImage } from "@/lib/instanceIcons";
 import type {
   Instance,
@@ -147,6 +150,7 @@ export function PlayView({
   onStop,
   onCancel,
   onSaveInstance,
+  onShareChanged,
   onOpenSettings,
   launcherSettings,
   overrideAccount,
@@ -173,11 +177,26 @@ export function PlayView({
   onStop: () => void;
   onCancel: () => void;
   onSaveInstance: (i: Instance) => void;
+  onShareChanged: () => void;
   onOpenSettings: () => void;
   launcherSettings: LauncherSettings | null;
   overrideAccount?: string | null;
 }) {
   const t = useT();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharePending, setSharePending] = useState(false);
+  const canShare = !!instance && !instance.modpack_locked && !instance.featured;
+  const shared = !!instance?.share;
+  useEffect(() => {
+    if (canShare && shared && instance) {
+      api
+        .sharePendingChanges(instance.id)
+        .then(setSharePending)
+        .catch(() => setSharePending(false));
+    } else {
+      setSharePending(false);
+    }
+  }, [canShare, shared, instance?.id]);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem("bw-play-sidebar-w"));
@@ -285,6 +304,26 @@ export function PlayView({
                   {t("play.lastPlayedChip", {
                     date: new Date(instance.last_played).toLocaleDateString(),
                   })}
+                </Chip>
+              )}
+              {canShare && instance.share && (
+                <button
+                  onClick={() => setShareOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full border border-brass-500/50 bg-brass-500/15 px-2.5 py-1 text-sm text-brass-200 transition hover:bg-brass-500/25"
+                >
+                  <Share2 size={13} />
+                  {t("share.sharedChip")}
+                  {sharePending && (
+                    <span
+                      title={t("share.cardPending")}
+                      className="h-1.5 w-1.5 rounded-full bg-amber-400"
+                    />
+                  )}
+                </button>
+              )}
+              {instance.shared_by && (
+                <Chip icon={<Share2 size={13} />}>
+                  {t("share.sharedByChip", { user: instance.shared_by })}
                 </Chip>
               )}
             </div>
@@ -422,9 +461,105 @@ export function PlayView({
         {showNews && (
           <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
         )}
+        {canShare && (
+          <ShareCard instance={instance} onManage={() => setShareOpen(true)} />
+        )}
         <InstanceMetaCard instance={instance} modStatus={modStatus} />
       </div>
+
+      {shareOpen && (
+        <ShareModal
+          instance={instance}
+          onChanged={onShareChanged}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function ShareCard({
+  instance,
+  onManage,
+}: {
+  instance: Instance;
+  onManage: () => void;
+}) {
+  const t = useT();
+  const [link, setLink] = useState("");
+  const [pending, setPending] = useState(false);
+  const share = instance.share;
+
+  useEffect(() => {
+    if (!share) {
+      setLink("");
+      setPending(false);
+      return;
+    }
+    api.shareLink(instance.id).then(setLink).catch(() => {});
+    api
+      .sharePendingChanges(instance.id)
+      .then(setPending)
+      .catch(() => setPending(false));
+  }, [instance.id, share]);
+
+  if (!share) {
+    return (
+      <SideCard title={t("share.cardTitle")}>
+        <p className="mb-3 text-xs leading-relaxed text-ink-600">
+          {t("share.cardEmpty")}
+        </p>
+        <button
+          onClick={onManage}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-brass-500 px-3 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
+        >
+          <Share2 size={14} />
+          {t("share.cardShareCta")}
+        </button>
+      </SideCard>
+    );
+  }
+
+  return (
+    <SideCard title={t("share.cardTitle")}>
+      <div className="mb-2 flex items-center gap-1.5 text-xs text-brass-300">
+        <Share2 size={13} />
+        {t("share.liveTitle")}
+        {pending && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] text-amber-300/90">
+            <AlertTriangle size={10} />
+            {t("share.cardPending")}
+          </span>
+        )}
+      </div>
+      <div className="mb-2 flex items-center gap-1.5">
+        <input
+          readOnly
+          value={link}
+          onFocus={(e) => e.currentTarget.select()}
+          className="min-w-0 flex-1 rounded-md bg-ink-950/70 px-2 py-1 text-[11px] text-gray-400 outline-none ring-1 ring-edge"
+        />
+        <button
+          onClick={() => {
+            if (link) {
+              void navigator.clipboard?.writeText(link);
+              toast(t("share.linkCopied"), "success");
+            }
+          }}
+          title={t("share.copy")}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+        >
+          <Copy size={12} />
+        </button>
+      </div>
+      <button
+        onClick={onManage}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge px-3 py-1.5 text-xs text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
+      >
+        <Settings size={12} />
+        {t("share.cardManage")}
+      </button>
+    </SideCard>
   );
 }
 
