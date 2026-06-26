@@ -71,6 +71,36 @@ fn build_zip_inner(
     icon: Option<&[u8]>,
     unsup: Option<&UnsupExport>,
 ) -> Result<Vec<u8>> {
+    let entries = pack_entries(meta, mods, files, icon, unsup)?;
+    zip::build_zip(&entries)
+}
+
+pub fn pack_files(
+    meta: &PackMeta,
+    mods: &[ExportMod],
+    files: &[ExportFile],
+    icon: Option<&[u8]>,
+) -> Result<Vec<(String, Vec<u8>)>> {
+    pack_entries(meta, mods, files, icon, None)
+}
+
+pub fn unsup_pack_files(
+    meta: &PackMeta,
+    mods: &[ExportMod],
+    files: &[ExportFile],
+    icon: Option<&[u8]>,
+    unsup: &UnsupExport,
+) -> Result<Vec<(String, Vec<u8>)>> {
+    pack_entries(meta, mods, files, icon, Some(unsup))
+}
+
+fn pack_entries(
+    meta: &PackMeta,
+    mods: &[ExportMod],
+    files: &[ExportFile],
+    icon: Option<&[u8]>,
+    unsup: Option<&UnsupExport>,
+) -> Result<Vec<(String, Vec<u8>)>> {
     let mut index = IndexBuilder::new();
     let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
     let mut used_slugs: HashSet<String> = HashSet::new();
@@ -137,7 +167,7 @@ fn build_zip_inner(
         zip_entries.push(("icon.png".to_string(), icon.to_vec()));
     }
     zip_entries.extend(entries);
-    zip::build_zip(&zip_entries)
+    Ok(zip_entries)
 }
 
 fn unique_slug(filename: &str, used: &mut HashSet<String>) -> String {
@@ -460,6 +490,35 @@ mod tests {
         let spec = crate::unsup::public_key_spec(&sig_in.seed, sig_in.key_id, sig_in.format);
         let key = crate::unsup::PublicKey::parse(&spec).unwrap();
         assert!(key.verify(&pack_bytes, &sig_bytes));
+    }
+
+    #[test]
+    fn pack_files_match_zip_contents() {
+        let zip = build_packwiz_zip(&meta(), &sample_mods(), &sample_files(), Some(b"i")).unwrap();
+        let files = pack_files(&meta(), &sample_mods(), &sample_files(), Some(b"i")).unwrap();
+        let zip_names: std::collections::BTreeSet<String> =
+            entry_names(&zip).into_iter().collect();
+        let file_names: std::collections::BTreeSet<String> =
+            files.iter().map(|(p, _)| p.clone()).collect();
+        assert_eq!(zip_names, file_names);
+        for (path, bytes) in &files {
+            assert_eq!(read_entry(&zip, path).as_ref(), Some(bytes), "bytes for {path}");
+        }
+    }
+
+    #[test]
+    fn unsup_pack_files_match_unsup_zip() {
+        let export = unsup_export();
+        let zip =
+            build_unsup_zip(&meta(), &flavored_mods(), &sample_files(), None, &export).unwrap();
+        let files =
+            unsup_pack_files(&meta(), &flavored_mods(), &sample_files(), None, &export).unwrap();
+        let zip_names: std::collections::BTreeSet<String> =
+            entry_names(&zip).into_iter().collect();
+        let file_names: std::collections::BTreeSet<String> =
+            files.iter().map(|(p, _)| p.clone()).collect();
+        assert_eq!(zip_names, file_names);
+        assert!(file_names.contains("unsup.toml"));
     }
 
     #[test]
