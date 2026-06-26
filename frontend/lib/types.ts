@@ -325,10 +325,27 @@ export interface ExportOptional {
   description: string;
 }
 
+export interface FlavorChoiceSpec {
+  id: string;
+  name: string;
+  description: string;
+  default: boolean;
+}
+
+export interface FlavorGroupSpec {
+  id: string;
+  name: string;
+  description: string;
+  side: string;
+  choices: FlavorChoiceSpec[];
+}
+
 export interface ExportSelection {
   mods: string[];
   files: string[];
   optional: Record<string, ExportOptional>;
+  flavor_groups: FlavorGroupSpec[];
+  flavor_assignments: Record<string, string[]>;
 }
 
 export interface ExportMeta {
@@ -349,6 +366,9 @@ export interface ExportConfig {
   version: string;
   selection: ExportSelection;
   created_at: number;
+  unsup: boolean;
+  sign: boolean;
+  sign_format: string;
 }
 
 export interface ModInfo {

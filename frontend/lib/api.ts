@@ -216,8 +216,27 @@ export const exportModpackSelected = (
   format: ExportFormat,
   selection: ExportSelection,
   meta: ExportMeta | null,
+  unsup = false,
+  sign = false,
+  signFormat = "signify",
 ): Promise<string> =>
-  invoke("export_modpack_selected", { instanceId, format, selection, meta });
+  invoke("export_modpack_selected", {
+    instanceId,
+    format,
+    selection,
+    meta,
+    unsup,
+    sign,
+    signFormat,
+  });
+export const unsupPublicKey = (
+  instanceId: string,
+  format: string,
+): Promise<string> => invoke("unsup_public_key", { instanceId, format });
+export const regenerateUnsupKey = (
+  instanceId: string,
+  format: string,
+): Promise<string> => invoke("regenerate_unsup_key", { instanceId, format });
 export const listExportConfigs = (
   instanceId: string,
 ): Promise<ExportConfig[]> => invoke("list_export_configs", { instanceId });
