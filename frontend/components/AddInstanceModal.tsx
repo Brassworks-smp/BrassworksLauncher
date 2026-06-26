@@ -15,6 +15,7 @@ import {
   Copy,
   MemoryStick,
   Terminal,
+  Share2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import type {
@@ -60,6 +61,7 @@ type PendingInstall =
       minMemoryMb?: number | null;
       maxMemoryMb?: number | null;
       jvmArgs?: string[] | null;
+      sharedBy?: string | null;
     };
 
 
@@ -307,6 +309,7 @@ export function AddInstanceModal({
           minMemoryMb: intent.minMemoryMb,
           maxMemoryMb: intent.maxMemoryMb,
           jvmArgs: intent.jvmArgs,
+          sharedBy: intent.sharedBy,
         };
         const inst = intent.unsup
           ? await api.createPackwizInstance(intent.name, intent.url, [], true, ids, intent.publicKey, meta)
@@ -525,6 +528,7 @@ export function AddInstanceModal({
       minMemoryMb: s.min_memory_mb,
       maxMemoryMb: s.max_memory_mb,
       jvmArgs: s.jvm_args,
+      sharedBy: s.shared_by,
     });
   };
 
@@ -1096,6 +1100,9 @@ function SharePreview({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto pr-1 text-center">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-brass-600/40 bg-brass-500/10 px-3 py-1 text-[11px] font-medium text-brass-300">
+          <Share2 size={12} /> {t("addInstance.share.badge")}
+        </span>
         <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-edge bg-ink-950/60">
           {share.icon ? (
             <img src={share.icon} alt="" className="h-full w-full object-cover" />
@@ -1106,6 +1113,11 @@ function SharePreview({
         <div>
           <div className="font-mc text-xl tracking-wide text-gray-100">{name}</div>
           <div className="mt-1 text-xs text-ink-600">{t("addInstance.share.subtitle")}</div>
+          {share.shared_by && (
+            <div className="mt-1.5 text-xs text-brass-300">
+              {t("addInstance.share.sharedBy", { user: share.shared_by })}
+            </div>
+          )}
         </div>
         {share.description && (
           <p className="max-w-md text-sm leading-relaxed text-ink-500">
