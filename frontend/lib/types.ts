@@ -398,6 +398,7 @@ export interface FlavorGroupSpec {
 export interface ExportSelection {
   mods: string[];
   files: string[];
+  known_mods?: string[];
   optional: Record<string, ExportOptional>;
   flavor_groups: FlavorGroupSpec[];
   flavor_assignments: Record<string, string[]>;

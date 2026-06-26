@@ -121,6 +121,8 @@ pub struct ExportSelection {
     #[serde(default)]
     pub files: Vec<String>,
     #[serde(default)]
+    pub known_mods: Vec<String>,
+    #[serde(default)]
     pub optional: HashMap<String, OptionalSpec>,
     #[serde(default)]
     pub flavor_groups: Vec<FlavorGroupSpec>,
@@ -512,6 +514,7 @@ mod tests {
         let sel = ExportSelection {
             mods: vec!["mods/sodium.jar".to_string()],
             files: Vec::new(),
+            known_mods: Vec::new(),
             optional: HashMap::new(),
             flavor_groups: vec![FlavorGroupSpec {
                 id: "rendering".to_string(),
@@ -550,6 +553,7 @@ mod tests {
             selection: ExportSelection {
                 mods: vec!["mods/a.jar".to_string()],
                 files: vec!["config".to_string()],
+                known_mods: Vec::new(),
                 optional: HashMap::new(),
                 flavor_groups: Vec::new(),
                 flavor_assignments: HashMap::new(),

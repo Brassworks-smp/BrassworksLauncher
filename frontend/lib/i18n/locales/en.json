@@ -1325,6 +1325,7 @@
     "diffInSync": "Up to date",
     "diffInSyncBody": "Your local content matches the published version.",
     "diffHint": "Compared to the published version, based on your current Content selection. Newly-installed mods only count once you tick them in the Content tab.",
+    "diffPackSettings": "Pack settings (description, memory, JVM args…)",
     "diffError": "Couldn't compute the diff."
   }
 }

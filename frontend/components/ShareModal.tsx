@@ -45,6 +45,8 @@ import type {
 const TOKEN_URL =
   "https://github.com/settings/tokens/new?scopes=repo&description=Brassworks%20Launcher";
 
+const PACK_SETTINGS_DIFF_PATH = "__pack_settings__";
+
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -120,6 +122,7 @@ export function ShareModal({
           setInitialValue({
             mods: c.selection.mods,
             files: c.selection.files,
+            known_mods: c.selection.known_mods ?? [],
             optional: c.selection.optional,
             flavor_groups: c.selection.flavor_groups,
             flavor_assignments: c.selection.flavor_assignments,
@@ -230,6 +233,7 @@ export function ShareModal({
       selection: {
         mods: v.mods,
         files: v.files,
+        known_mods: v.known_mods,
         optional: v.optional,
         flavor_groups: v.flavor_groups,
         flavor_assignments: v.flavor_assignments,
@@ -327,6 +331,8 @@ export function ShareModal({
       setSavedParams(params);
       onChanged();
       api.shareLink(instance.id).then(setLink).catch(() => {});
+      api.sharePendingChanges(instance.id).then(setPending).catch(() => {});
+      setDiff(null);
       toast(t("share.paramsSaved"), "success");
     } catch (e) {
       toast(String(e), "error");
@@ -1246,12 +1252,16 @@ function DiffTab({
               )}
               <span
                 className={`truncate ${
-                  r.status === "removed"
-                    ? "text-ink-500 line-through"
-                    : "text-gray-300"
+                  r.path === PACK_SETTINGS_DIFF_PATH
+                    ? "font-sans text-brass-200"
+                    : r.status === "removed"
+                      ? "text-ink-500 line-through"
+                      : "text-gray-300"
                 }`}
               >
-                {r.path}
+                {r.path === PACK_SETTINGS_DIFF_PATH
+                  ? t("share.diffPackSettings")
+                  : r.path}
               </span>
             </li>
           ))}

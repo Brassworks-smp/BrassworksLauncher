@@ -1128,6 +1128,7 @@ impl<'a> Modpack<'a> {
         Ok(ExportSelection {
             mods,
             files,
+            known_mods: Vec::new(),
             optional: std::collections::HashMap::new(),
             flavor_groups: Vec::new(),
             flavor_assignments: std::collections::HashMap::new(),
@@ -1692,6 +1693,7 @@ mod modpack_tests {
         let selection = ExportSelection {
             mods: Vec::new(),
             files: Vec::new(),
+            known_mods: Vec::new(),
             optional: std::collections::HashMap::new(),
             flavor_groups: vec![export::FlavorGroupSpec {
                 id: "rendering".to_string(),

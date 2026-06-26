@@ -29,6 +29,7 @@ import type {
 export interface PackContentValue {
   mods: string[];
   files: string[];
+  known_mods: string[];
   optional: Record<string, { default: boolean; description: string }>;
   flavor_groups: FlavorGroupSpec[];
   flavor_assignments: Record<string, string[]>;
@@ -56,6 +57,9 @@ export function PackContentEditor({
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(
     new Set(initial?.files ?? []),
   );
+  const [knownMods, setKnownMods] = useState<Set<string>>(
+    new Set(initial?.known_mods ?? []),
+  );
   const [optional, setOptional] = useState<
     Record<string, { default: boolean; description: string }>
   >({ ...(initial?.optional ?? {}) });
@@ -77,30 +81,46 @@ export function PackContentEditor({
   const [pubKey, setPubKey] = useState("");
 
   const seeded = useRef(false);
-  const loadTree = useCallback(
-    (seedDefaults: boolean) => {
-      setRefreshing(true);
-      api
-        .exportTree(instanceId)
-        .then((tr) => {
-          setTree(tr);
-          if (seedDefaults && !seeded.current && !initial) {
-            seeded.current = true;
+  const loadTree = useCallback(() => {
+    setRefreshing(true);
+    api
+      .exportTree(instanceId)
+      .then((tr) => {
+        setTree(tr);
+        const allPaths = tr.mods.map((m) => m.path);
+        if (!seeded.current) {
+          seeded.current = true;
+          if (!initial) {
             setSelectedMods(
               new Set(tr.mods.filter((m) => m.enabled).map((m) => m.path)),
             );
             const leaves: string[] = [];
             defaultLeaves(tr.files, leaves);
             setSelectedFiles(new Set(leaves));
+            setKnownMods(new Set(allPaths));
+          } else {
+            const baseline = new Set(
+              initial.known_mods?.length ? initial.known_mods : allPaths,
+            );
+            const fresh = allPaths.filter((p) => !baseline.has(p));
+            if (fresh.length)
+              setSelectedMods((prev) => new Set([...prev, ...fresh]));
+            setKnownMods(new Set(allPaths));
           }
-        })
-        .catch((e) => toast(String(e), "error"))
-        .finally(() => setRefreshing(false));
-    },
-    [instanceId, initial],
-  );
+        } else {
+          setKnownMods((prevKnown) => {
+            const fresh = allPaths.filter((p) => !prevKnown.has(p));
+            if (fresh.length)
+              setSelectedMods((prevSel) => new Set([...prevSel, ...fresh]));
+            return new Set([...prevKnown, ...allPaths]);
+          });
+        }
+      })
+      .catch((e) => toast(String(e), "error"))
+      .finally(() => setRefreshing(false));
+  }, [instanceId, initial]);
 
-  useEffect(() => loadTree(true), [loadTree]);
+  useEffect(() => loadTree(), [loadTree]);
 
   useEffect(() => {
     if (!tree) return;
@@ -191,6 +211,7 @@ export function PackContentEditor({
     onChange({
       mods: [...selectedMods],
       files: [...selectedFiles],
+      known_mods: [...knownMods],
       optional: optOut,
       flavor_groups: flavor.groups,
       flavor_assignments: flavor.assignments,
@@ -201,6 +222,7 @@ export function PackContentEditor({
   }, [
     selectedMods,
     selectedFiles,
+    knownMods,
     optional,
     flavorGroups,
     flavorAssign,
@@ -508,7 +530,7 @@ export function PackContentEditor({
 
       <div className="flex items-center justify-end">
         <button
-          onClick={() => loadTree(false)}
+          onClick={() => loadTree()}
           disabled={refreshing}
           className="flex items-center gap-1 rounded-md border border-edge px-2 py-1 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-50"
         >

@@ -217,9 +217,11 @@ pub struct PackShare {
     pub incomplete: bool,
     #[serde(default)]
     pub params: SharePackParams,
+    #[serde(default)]
+    pub published_params: SharePackParams,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SharePackParams {
     #[serde(default)]
     pub description: Option<String>,

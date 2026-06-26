@@ -50,6 +50,47 @@ pub use packwiz::{FlavorChoice, FlavorGroup, PackwizBranch, SearchHit};
 pub use packwiz_share::{PackInstallMeta, PackwizShare};
 pub use paths::Paths;
 
+pub const PACK_SETTINGS_DIFF_PATH: &str = "__pack_settings__";
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SharedConfigFile {
+    #[serde(flatten)]
+    config: export::ExportConfig,
+    #[serde(default)]
+    params: instance::SharePackParams,
+}
+
+fn apply_shared_params(inst: &mut instance::Instance, p: &instance::SharePackParams) {
+    if inst.notes.is_none() {
+        inst.notes = p.description.clone().filter(|d| !d.trim().is_empty());
+    }
+    if inst.min_memory_mb.is_none() {
+        inst.min_memory_mb = p.min_memory_mb;
+    }
+    if inst.max_memory_mb.is_none() {
+        inst.max_memory_mb = p.max_memory_mb;
+    }
+    if inst.extra_jvm_args.is_empty() {
+        let args: Vec<String> = p
+            .jvm_args
+            .iter()
+            .filter(|a| !a.trim().is_empty())
+            .cloned()
+            .collect();
+        if !args.is_empty() {
+            inst.extra_jvm_args = args;
+        }
+    }
+    if inst.news_url.is_none() {
+        inst.news_url = p.news_url.clone().filter(|u| !u.trim().is_empty());
+        inst.show_news = inst.news_url.is_some();
+    }
+    if inst.playercount_url.is_none() {
+        inst.playercount_url = p.playercount_url.clone().filter(|u| !u.trim().is_empty());
+        inst.show_playercount = inst.playercount_url.is_some();
+    }
+}
+
 fn newest_mtime(dir: &std::path::Path) -> Option<std::time::SystemTime> {
     let mut newest: Option<std::time::SystemTime> = None;
     let mut stack = vec![dir.to_path_buf()];
@@ -743,28 +784,28 @@ impl Launcher {
                 inst.extra_jvm_args = args;
             }
         }
+        let shared = Self::fetch_shared_config(url);
+        if let Some(sf) = &shared {
+            apply_shared_params(&mut inst, &sf.params);
+        }
         let created = mgr.create(inst)?;
-        self.copy_shared_export_config(&created.id, url);
+        if let Some(sf) = shared {
+            let mut cfg = sf.config;
+            cfg.id = String::new();
+            cfg.created_at = 0;
+            let _ = self.save_export_config(&created.id, cfg);
+        }
         Ok(created)
     }
 
-    fn copy_shared_export_config(&self, instance_id: &str, pack_url: &str) {
+    fn fetch_shared_config(pack_url: &str) -> Option<SharedConfigFile> {
         if !pack_url.starts_with("http") {
-            return;
+            return None;
         }
-        let Some((base, _)) = pack_url.rsplit_once('/') else {
-            return;
-        };
+        let (base, _) = pack_url.rsplit_once('/')?;
         let cfg_url = format!("{base}/brassworks.share.json");
-        let Ok(text) = github::fetch_text(&cfg_url) else {
-            return;
-        };
-        let Ok(mut cfg) = serde_json::from_str::<export::ExportConfig>(&text) else {
-            return;
-        };
-        cfg.id = String::new();
-        cfg.created_at = 0;
-        let _ = self.save_export_config(instance_id, cfg);
+        let text = github::fetch_text(&cfg_url).ok()?;
+        serde_json::from_str::<SharedConfigFile>(&text).ok()
     }
 
     pub fn extract_packwiz_pack(&self, path: &str) -> Result<String> {
@@ -1940,6 +1981,7 @@ impl Launcher {
             published_index_hash: None,
             incomplete,
             params: existing_params.clone(),
+            published_params: instance::SharePackParams::default(),
         };
 
         if first_time {
@@ -1960,7 +2002,11 @@ impl Launcher {
             &install_url,
         );
         out.files.push(("README.md".to_string(), readme.into_bytes()));
-        if let Ok(cfg_json) = serde_json::to_vec_pretty(&config) {
+        let shared_file = SharedConfigFile {
+            config: config.clone(),
+            params: existing_params.clone(),
+        };
+        if let Ok(cfg_json) = serde_json::to_vec_pretty(&shared_file) {
             out.files.push(("brassworks.share.json".to_string(), cfg_json));
         }
         if let Ok(packwiz_json) = serde_json::to_vec_pretty(&descriptor) {
@@ -1993,6 +2039,7 @@ impl Launcher {
                     published_version: Some(out.version),
                     published_index_hash: Some(out.index_hash),
                     incomplete: false,
+                    published_params: existing_params.clone(),
                     ..base_share(false)
                 };
                 instance.share = Some(share.clone());
@@ -2019,7 +2066,6 @@ impl Launcher {
         instance_id: &str,
         repo_url: &str,
     ) -> Result<instance::PackShare> {
-        let token = self.require_github_token()?;
         let mut instance = self.instances().get(instance_id)?;
         if instance.modpack_locked {
             return Err(CoreError::Modpack(
@@ -2028,6 +2074,7 @@ impl Launcher {
         }
         let (owner, repo) = github::parse_repo_url(repo_url)
             .ok_or_else(|| CoreError::Modpack("not a valid GitHub repository URL".to_string()))?;
+        let token = self.require_github_token()?;
         let branch =
             github::repo_default_branch(&token, &owner, &repo).unwrap_or_else(|_| "main".to_string());
         let cfg_url = github::raw_url(&owner, &repo, &branch, "brassworks.share.json");
@@ -2036,10 +2083,12 @@ impl Launcher {
                 "this repository wasn't shared from Brassworks (no share config found)".to_string(),
             )
         })?;
-        let mut cfg: export::ExportConfig =
+        let shared: SharedConfigFile =
             serde_json::from_str(&text).map_err(|e| CoreError::serde("share config", e))?;
-        cfg.id = String::new();
-        let saved = self.save_export_config(instance_id, cfg)?;
+        let SharedConfigFile { mut config, params } = shared;
+        config.id = String::new();
+        let saved = self.save_export_config(instance_id, config)?;
+        apply_shared_params(&mut instance, &params);
         let share = instance::PackShare {
             repo_owner: owner.clone(),
             repo_name: repo.clone(),
@@ -2052,7 +2101,8 @@ impl Launcher {
             published_version: None,
             published_index_hash: None,
             incomplete: false,
-            params: instance::SharePackParams::default(),
+            published_params: params.clone(),
+            params,
         };
         instance.share = Some(share.clone());
         self.instances().update(&instance)?;
@@ -2098,6 +2148,9 @@ impl Launcher {
         let Some(published) = share.last_published else {
             return Ok(true);
         };
+        if share.params != share.published_params {
+            return Ok(true);
+        }
         let game = self.paths.instance_game_dir(instance_id);
         let newest = ["mods", "config", "defaultconfigs", "kubejs", "scripts"]
             .iter()
@@ -2224,12 +2277,12 @@ impl Launcher {
     }
 
     pub fn share_repo_info(&self, instance_id: &str) -> Result<ShareRepoInfo> {
-        let token = self.require_github_token()?;
         let instance = self.instances().get(instance_id)?;
         let share = instance
             .share
             .as_ref()
             .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let token = self.require_github_token()?;
         let stats = github::repo_stats(&token, &share.repo_owner, &share.repo_name)?;
         let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
         Ok(ShareRepoInfo {
@@ -2245,12 +2298,12 @@ impl Launcher {
     }
 
     pub fn share_diff(&self, instance_id: &str) -> Result<Vec<ShareDiffEntry>> {
-        let token = self.require_github_token()?;
         let instance = self.instances().get(instance_id)?;
         let share = instance
             .share
             .clone()
             .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let token = self.require_github_token()?;
         let config = export::load_configs(&self.paths, instance_id)
             .into_iter()
             .find(|c| c.id == share.config_id)
@@ -2307,6 +2360,12 @@ impl Launcher {
             }
         }
         current.clear();
+        if share.params != share.published_params {
+            entries.push(ShareDiffEntry {
+                path: PACK_SETTINGS_DIFF_PATH.to_string(),
+                status: "modified".to_string(),
+            });
+        }
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(entries)
     }
@@ -2828,6 +2887,56 @@ mod share_link_tests {
         assert!(r.contains("icon.png"));
         assert!(r.contains("Steve"));
         assert!(r.contains("install?pack_url=x"));
+    }
+}
+
+#[cfg(test)]
+mod shared_config_file_tests {
+    use super::{export, SharedConfigFile};
+
+    fn sample_config() -> export::ExportConfig {
+        export::ExportConfig {
+            id: "c1".to_string(),
+            name: "Shared".to_string(),
+            format: export::ExportFormat::Packwiz,
+            pack_name: "Pack".to_string(),
+            author: String::new(),
+            version: "1.0.0".to_string(),
+            selection: export::ExportSelection::default(),
+            created_at: 0,
+            unsup: false,
+            sign: false,
+            sign_format: String::new(),
+        }
+    }
+
+    #[test]
+    fn legacy_bare_config_parses_with_default_params() {
+        let json = serde_json::to_string(&sample_config()).unwrap();
+        let parsed: SharedConfigFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.config.name, "Shared");
+        assert!(parsed.params.jvm_args.is_empty());
+        assert!(parsed.params.description.is_none());
+    }
+
+    #[test]
+    fn new_file_still_parses_as_bare_config_and_roundtrips_params() {
+        let file = SharedConfigFile {
+            config: sample_config(),
+            params: crate::instance::SharePackParams {
+                description: Some("cozy".to_string()),
+                jvm_args: vec!["-XX:+UseG1GC".to_string()],
+                max_memory_mb: Some(6144),
+                ..Default::default()
+            },
+        };
+        let json = serde_json::to_string(&file).unwrap();
+        let as_cfg: export::ExportConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(as_cfg.name, "Shared");
+        let back: SharedConfigFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.params.description.as_deref(), Some("cozy"));
+        assert_eq!(back.params.max_memory_mb, Some(6144));
+        assert_eq!(back.params.jvm_args.len(), 1);
     }
 }
 
