@@ -22,6 +22,8 @@ pub struct LauncherSettings {
     pub pack_url: Option<String>,
     pub dev_mode: bool,
     pub curseforge_api_key: Option<String>,
+    #[serde(default)]
+    pub github_token: Option<String>,
     pub selected_instance: Option<String>,
 
     pub pre_launch_command: Option<String>,
@@ -99,6 +101,7 @@ impl Default for LauncherSettings {
             pack_url: None,
             dev_mode: false,
             curseforge_api_key: None,
+            github_token: None,
             selected_instance: None,
 
             pre_launch_command: None,
