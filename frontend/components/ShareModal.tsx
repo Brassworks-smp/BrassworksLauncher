@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   X,
   Share2,
@@ -26,12 +26,14 @@ import {
   FileMinus2,
   FilePen,
   Save,
+  ChevronDown,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import { useClosable } from "./ui";
+import { useClosable, SegmentedTabs, Collapse } from "./ui";
 import { useT } from "@/lib/i18n";
 import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import { PackContentEditor, type PackContentValue } from "./PackContentEditor";
+import { CheckBox } from "./ExportModal";
 import { PROVIDERS, providerInfo } from "@/lib/providers";
 import type {
   GitProvider,
@@ -94,6 +96,16 @@ export function ShareModal({
   const [relinking, setRelinking] = useState(false);
 
   const [tab, setTab] = useState<"content" | "details" | "diff">("content");
+  const [tabDir, setTabDir] = useState<"fwd" | "back">("fwd");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const TAB_ORDER = ["content", "details", "diff"] as const;
+  const changeTab = (next: "content" | "details" | "diff") => {
+    setTabDir(
+      TAB_ORDER.indexOf(next) >= TAB_ORDER.indexOf(tab) ? "fwd" : "back",
+    );
+    setTab(next);
+  };
 
   const [params, setParams] = useState<SharePackParams | null>(null);
   const [savedParams, setSavedParams] = useState<SharePackParams | null>(null);
@@ -106,11 +118,19 @@ export function ShareModal({
   const [diffLoading, setDiffLoading] = useState(false);
 
   useEffect(() => {
-    setConnected(null);
+    // Re-check the new provider's token in the background. We intentionally
+    // don't blank `connected` to null here — doing so flashes the loader and
+    // makes a provider switch look like a full screen change. The current view
+    // stays put (only the segmented tab + provider-specific bits update) until
+    // the check resolves and a real connect/share transition is warranted.
+    let cancelled = false;
     api
       .forgeTokenPresent(provider)
-      .then(setConnected)
-      .catch(() => setConnected(false));
+      .then((v) => !cancelled && setConnected(v))
+      .catch(() => !cancelled && setConnected(false));
+    return () => {
+      cancelled = true;
+    };
   }, [provider]);
 
   useEffect(() => {
@@ -444,7 +464,7 @@ export function ShareModal({
             <Loader2 className="animate-spin text-ink-600" size={20} />
           </div>
         ) : !connected ? (
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div key="connect" className="swap-in-back min-h-0 flex-1 overflow-y-auto p-6">
             <ConnectView
               provider={provider}
               setProvider={setProvider}
@@ -459,7 +479,7 @@ export function ShareModal({
             />
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1">
+          <div key="main" className="swap-in flex min-h-0 flex-1">
             <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-edge bg-ink-950/40 p-4">
               {share ? (
                 <>
@@ -584,10 +604,11 @@ export function ShareModal({
                         </div>
                       </div>
 
-                      <details className="rounded-lg border border-edge bg-ink-950/20">
-                        <summary className="cursor-pointer px-3 py-2 text-[11px] text-ink-600 transition hover:text-brass-300">
-                          {t("share.advanced")}
-                        </summary>
+                      <AdvancedSection
+                        open={advancedOpen}
+                        onToggle={() => setAdvancedOpen((o) => !o)}
+                        label={t("share.advanced")}
+                      >
                         <div className="flex flex-col gap-1.5 border-t border-edge p-2.5">
                           <button
                             onClick={() =>
@@ -611,7 +632,7 @@ export function ShareModal({
                             {t("share.copyPackUrl")}
                           </button>
                         </div>
-                      </details>
+                      </AdvancedSection>
                     </>
                   )}
 
@@ -658,10 +679,11 @@ export function ShareModal({
                     </button>
                   )}
 
-                  <details className="rounded-lg border border-edge bg-ink-950/20">
-                    <summary className="cursor-pointer px-3 py-2 text-[11px] text-ink-600 transition hover:text-brass-300">
-                      {t("share.advanced")}
-                    </summary>
+                  <AdvancedSection
+                    open={advancedOpen}
+                    onToggle={() => setAdvancedOpen((o) => !o)}
+                    label={t("share.advanced")}
+                  >
                     <div className="border-t border-edge p-2.5">
                       <button onClick={() => setRelinkOpen(true)} className={railBtn}>
                         <Link2 size={14} />
@@ -671,7 +693,7 @@ export function ShareModal({
                         {t("share.relinkHint")}
                       </p>
                     </div>
-                  </details>
+                  </AdvancedSection>
 
                   <button
                     onClick={async () => {
@@ -688,24 +710,28 @@ export function ShareModal({
 
             <div className="flex min-w-0 flex-1 flex-col">
               {showTabs ? (
-                <div className="flex items-center gap-1 border-b border-edge px-3">
-                  <TabBtn
-                    active={tab === "content"}
-                    onClick={() => setTab("content")}
-                    icon={<Files size={13} />}
-                    label={t("share.tabContent")}
-                  />
-                  <TabBtn
-                    active={tab === "details"}
-                    onClick={() => setTab("details")}
-                    icon={<Settings2 size={13} />}
-                    label={t("share.tabDetails")}
-                  />
-                  <TabBtn
-                    active={tab === "diff"}
-                    onClick={() => setTab("diff")}
-                    icon={<GitCompare size={13} />}
-                    label={t("share.tabChanges")}
+                <div className="flex items-center border-b border-edge px-3 py-2.5">
+                  <SegmentedTabs
+                    size="sm"
+                    value={tab}
+                    onChange={(v) => changeTab(v as "content" | "details" | "diff")}
+                    options={[
+                      {
+                        id: "content",
+                        label: t("share.tabContent"),
+                        icon: <Files size={13} />,
+                      },
+                      {
+                        id: "details",
+                        label: t("share.tabDetails"),
+                        icon: <Settings2 size={13} />,
+                      },
+                      {
+                        id: "diff",
+                        label: t("share.tabChanges"),
+                        icon: <GitCompare size={13} />,
+                      },
+                    ]}
                   />
                 </div>
               ) : (
@@ -721,37 +747,39 @@ export function ShareModal({
                     : ""
                 }`}
               >
-                <div className={tab === "content" ? "" : "hidden"}>
-                  {configLoaded && (
-                    <PackContentEditor
-                      instanceId={instance.id}
-                      initial={initialValue}
-                      onChange={(v) => (valueRef.current = v)}
+                <AnimatedPanel token={showTabs ? tab : "content"} dir={tabDir}>
+                  <div className={tab === "content" ? "" : "hidden"}>
+                    {configLoaded && (
+                      <PackContentEditor
+                        instanceId={instance.id}
+                        initial={initialValue}
+                        onChange={(v) => (valueRef.current = v)}
+                      />
+                    )}
+                  </div>
+
+                  {tab === "details" && (
+                    <DetailsTab
+                      info={repoInfo}
+                      loading={repoInfoLoading}
+                      onRefresh={loadRepoInfo}
+                      params={params}
+                      patch={patchParams}
+                      dirty={paramsDirty}
+                      saving={savingParams}
+                      onSave={doSaveParams}
+                      inputCls={inputCls}
                     />
                   )}
-                </div>
 
-                {tab === "details" && (
-                  <DetailsTab
-                    info={repoInfo}
-                    loading={repoInfoLoading}
-                    onRefresh={loadRepoInfo}
-                    params={params}
-                    patch={patchParams}
-                    dirty={paramsDirty}
-                    saving={savingParams}
-                    onSave={doSaveParams}
-                    inputCls={inputCls}
-                  />
-                )}
-
-                {tab === "diff" && (
-                  <DiffTab
-                    diff={diff}
-                    loading={diffLoading}
-                    onRefresh={loadDiff}
-                  />
-                )}
+                  {tab === "diff" && (
+                    <DiffTab
+                      diff={diff}
+                      loading={diffLoading}
+                      onRefresh={loadDiff}
+                    />
+                  )}
+                </AnimatedPanel>
               </div>
             </div>
           </div>
@@ -924,29 +952,55 @@ function emptyParams(): SharePackParams {
   };
 }
 
-function TabBtn({
-  active,
-  onClick,
-  icon,
-  label,
+function AnimatedPanel({
+  token,
+  dir,
+  children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
+  token: string;
+  dir: "fwd" | "back";
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.classList.remove("swap-in", "swap-in-back");
+    // Force a reflow so the animation re-runs on the same element without
+    // remounting children (preserves the content editor's in-progress state).
+    void el.offsetWidth;
+    el.classList.add(dir === "back" ? "swap-in-back" : "swap-in");
+  }, [token, dir]);
+  return <div ref={ref}>{children}</div>;
+}
+
+function AdvancedSection({
+  open,
+  onToggle,
+  label,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
   label: string;
+  children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs transition ${
-        active
-          ? "border-brass-500 text-brass-300"
-          : "border-transparent text-ink-600 hover:text-gray-200"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
+    <div className="overflow-hidden rounded-lg border border-edge bg-ink-950/20">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between px-3 py-2 text-[11px] text-ink-600 transition hover:text-brass-300"
+      >
+        {label}
+        <ChevronDown
+          size={13}
+          className={`transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      <Collapse open={open}>{children}</Collapse>
+    </div>
   );
 }
 
@@ -1321,34 +1375,25 @@ function Overlay({
 function ProviderPicker({
   value,
   onChange,
-  disabled,
 }: {
   value: GitProvider;
   onChange: (p: GitProvider) => void;
-  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-edge bg-ink-950/30 p-1">
-      {PROVIDERS.map((p) => {
+    <SegmentedTabs
+      size="sm"
+      className="w-full [&>button]:flex-1 [&>button]:justify-center"
+      value={value}
+      onChange={(v) => onChange(v as GitProvider)}
+      options={PROVIDERS.map((p) => {
         const Icon = p.icon;
-        const active = p.id === value;
-        return (
-          <button
-            key={p.id}
-            onClick={() => onChange(p.id)}
-            disabled={disabled}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-              active
-                ? "bg-brass-500/15 text-brass-200 ring-1 ring-brass-500/40"
-                : "text-ink-500 hover:text-gray-200"
-            }`}
-          >
-            <Icon size={14} />
-            {p.label}
-          </button>
-        );
+        return {
+          id: p.id,
+          label: p.label,
+          icon: <Icon size={14} />,
+        };
       })}
-    </div>
+    />
   );
 }
 
@@ -1423,13 +1468,14 @@ function ConnectView({
           {t(`share.providerHint.${info.scopeHintKey}`)}
         </p>
       </div>
-      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-edge bg-ink-950/30 p-3 text-left transition hover:border-brass-600/40">
-        <input
-          type="checkbox"
-          checked={remember}
-          onChange={(e) => setRemember(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-brass-500"
-        />
+      <button
+        type="button"
+        onClick={() => setRemember(!remember)}
+        className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-edge bg-ink-950/30 p-3 text-left transition hover:border-brass-600/40"
+      >
+        <span className="mt-0.5">
+          <CheckBox state={remember ? "all" : "none"} />
+        </span>
         <span>
           <span className="block text-xs font-medium text-gray-200">
             {t("share.rememberKey")}
@@ -1438,7 +1484,7 @@ function ConnectView({
             {t("share.rememberKeyHint")}
           </span>
         </span>
-      </label>
+      </button>
       <button
         onClick={onConnect}
         disabled={connecting || !token.trim()}
