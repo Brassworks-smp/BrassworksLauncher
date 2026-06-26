@@ -48,6 +48,61 @@ export interface Instance {
   pinned_settings: string[];
   account_override: string | null;
   auto_join: QuickPlay | null;
+  share: PackShare | null;
+  shared_by: string | null;
+}
+
+export interface PackShare {
+  repo_owner: string;
+  repo_name: string;
+  repo_url: string;
+  branch: string;
+  pack_url: string;
+  config_id: string;
+  created_at: string;
+  last_published: string | null;
+  published_version: string | null;
+  published_index_hash: string | null;
+  incomplete: boolean;
+  params: SharePackParams;
+}
+
+export interface SharePackParams {
+  description: string | null;
+  min_memory_mb: number | null;
+  max_memory_mb: number | null;
+  jvm_args: string[];
+  news_url: string | null;
+  playercount_url: string | null;
+}
+
+export interface ShareRepoInfo {
+  size_kb: number;
+  pushed_at: string | null;
+  html_url: string;
+  default_branch: string;
+  private: boolean;
+  stargazers: number;
+  forks: number;
+  file_count: number;
+}
+
+export interface ShareDiffEntry {
+  path: string;
+  status: string;
+}
+
+export interface PublishResult {
+  needs_confirm: boolean;
+  embedded: string[];
+  share: PackShare | null;
+}
+
+export interface PushProgress {
+  stage: string;
+  file: string;
+  done_bytes: number;
+  total_bytes: number;
 }
 
 export type QuickPlay =
@@ -512,6 +567,7 @@ export interface PackwizShare {
   name: string | null;
   description: string | null;
   unsup: boolean;
+  shared_by: string | null;
   icon: string | null;
   banner: string | null;
   signing_key: string | null;
