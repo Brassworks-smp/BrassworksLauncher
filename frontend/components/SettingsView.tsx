@@ -23,6 +23,8 @@ import {
   RotateCcw,
   Compass,
   Languages,
+  Github,
+  ExternalLink,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
@@ -519,6 +521,8 @@ export function SettingsView({
               </button>
             </Card>
 
+            <GithubKeyCard />
+
             <Card
               title={t("settings.downloads.title")}
               icon={<Download size={14} />}
@@ -948,6 +952,113 @@ function AccentPicker({
         storageKey="bw.accent.custom"
       />
     </div>
+  );
+}
+
+const GH_TOKEN_URL =
+  "https://github.com/settings/tokens/new?scopes=repo&description=Brassworks%20Launcher";
+
+function GithubKeyCard() {
+  const t = useT();
+  const [present, setPresent] = useState<boolean | null>(null);
+  const [remembered, setRemembered] = useState(false);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = () => {
+    api.githubTokenPresent().then(setPresent).catch(() => setPresent(false));
+    api.githubRemembered().then(setRemembered).catch(() => setRemembered(false));
+  };
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const save = async () => {
+    if (!token.trim()) return;
+    setBusy(true);
+    try {
+      const login = await api.githubConnect(token.trim(), true);
+      setToken("");
+      refresh();
+      toast(t("settings.github.savedToast", { login }), "success");
+    } catch (e) {
+      toast(String(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await api.githubDisconnect();
+      refresh();
+      toast(t("settings.github.clearedToast"), "success");
+    } catch (e) {
+      toast(String(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title={t("settings.github.title")} icon={<Github size={14} />}>
+      {present && (
+        <div className="flex items-center gap-2 rounded-lg border border-brass-600/30 bg-brass-500/[0.06] px-3 py-2 text-xs">
+          <Check size={13} className="shrink-0 text-brass-300" />
+          <span className="text-gray-200">
+            {remembered
+              ? t("settings.github.savedGlobally")
+              : t("settings.github.sessionOnly")}
+          </span>
+        </div>
+      )}
+      <Field
+        label={present ? t("settings.github.replaceKey") : t("settings.github.key")}
+        hint={t("settings.github.keyHint")}
+      >
+        <input
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          type="password"
+          placeholder="ghp_…"
+          className={`${inputCls} font-mono text-xs`}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </Field>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={save}
+          disabled={busy || !token.trim()}
+          className="flex items-center gap-1.5 rounded-lg bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <Github size={13} />
+          )}
+          {t("settings.github.save")}
+        </button>
+        {present && (
+          <button
+            onClick={disconnect}
+            disabled={busy}
+            className="rounded-lg border border-edge px-3 py-1.5 text-xs text-ink-500 transition hover:text-red-300 disabled:opacity-50"
+          >
+            {t("settings.github.disconnect")}
+          </button>
+        )}
+      </div>
+      <button
+        onClick={() => api.openExternal(GH_TOKEN_URL).catch(() => {})}
+        className="flex items-center gap-1.5 text-left text-xs text-brass-300 hover:text-brass-400"
+      >
+        <ExternalLink size={12} />
+        {t("settings.github.getKey")}
+      </button>
+    </Card>
   );
 }
 
