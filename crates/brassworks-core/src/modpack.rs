@@ -242,6 +242,13 @@ impl<'a> Modpack<'a> {
         self
     }
 
+    pub fn with_pack(mut self, url: String, unsup: bool, public_key: Option<String>) -> Self {
+        self.pack_url = url;
+        self.unsup = unsup;
+        self.public_key = public_key.filter(|k| !k.trim().is_empty());
+        self
+    }
+
         pub fn optional_components(&self, cancel: &dyn Fn() -> bool) -> Result<Vec<OptionalComponent>> {
         if !self.has_packwiz() {
             return Ok(Vec::new());
@@ -1222,13 +1229,16 @@ impl<'a> Modpack<'a> {
         }
     }
 
-    fn export_packwiz(
+    fn build_export_inputs(
         &self,
         meta: &ExportMeta,
         selection: &ExportSelection,
-        icon: Option<Vec<u8>>,
         opts: &ExportOpts,
-    ) -> Result<Vec<u8>> {
+    ) -> (
+        Vec<packwiz::export::ExportMod>,
+        Vec<packwiz::export::ExportFile>,
+        packwiz::export::PackMeta,
+    ) {
         let game_dir = self.game_dir();
         let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
@@ -1304,7 +1314,17 @@ impl<'a> Modpack<'a> {
             loader_version: meta.loader_version.clone(),
             unsup: None,
         };
+        (mods, files, pmeta)
+    }
 
+    fn export_packwiz(
+        &self,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
+    ) -> Result<Vec<u8>> {
+        let (mods, files, pmeta) = self.build_export_inputs(meta, selection, opts);
         if opts.unsup {
             let unsup_export = packwiz::export::UnsupExport {
                 groups: flavor_group_defs(selection),
@@ -1316,6 +1336,49 @@ impl<'a> Modpack<'a> {
             packwiz::export::build_packwiz_zip(&pmeta, &mods, &files, icon.as_deref())
                 .map_err(|e| CoreError::Modpack(format!("packwiz export: {e}")))
         }
+    }
+
+    pub fn export_packwiz_files(
+        &self,
+        meta: &ExportMeta,
+        selection: &ExportSelection,
+        icon: Option<Vec<u8>>,
+        opts: &ExportOpts,
+    ) -> Result<PackBuildOutput> {
+        let (mods, files, pmeta) = self.build_export_inputs(meta, selection, opts);
+        let embedded: Vec<String> = mods
+            .iter()
+            .filter(|m| matches!(m.source, packwiz::export::ModSource::Embed))
+            .map(|m| {
+                if m.name.is_empty() {
+                    m.filename.clone()
+                } else {
+                    m.name.clone()
+                }
+            })
+            .collect();
+        let entries = if opts.unsup {
+            let unsup_export = packwiz::export::UnsupExport {
+                groups: flavor_group_defs(selection),
+                signing: opts.signing.clone(),
+            };
+            packwiz::export::unsup_pack_files(&pmeta, &mods, &files, icon.as_deref(), &unsup_export)
+        } else {
+            packwiz::export::pack_files(&pmeta, &mods, &files, icon.as_deref())
+        }
+        .map_err(|e| CoreError::Modpack(format!("pack files: {e}")))?;
+
+        let index_hash = entries
+            .iter()
+            .find(|(p, _)| p == "index.toml")
+            .map(|(_, b)| packwiz::sha256_hex(b))
+            .unwrap_or_default();
+        Ok(PackBuildOutput {
+            files: entries,
+            embedded,
+            index_hash,
+            version: pmeta.version.clone(),
+        })
     }
 
     fn export_modrinth(
@@ -1520,6 +1583,13 @@ impl From<serde_json::Value> for MrEntry {
 pub struct ExportOpts {
     pub unsup: bool,
     pub signing: Option<packwiz::export::SigningInput>,
+}
+
+pub struct PackBuildOutput {
+    pub files: Vec<(String, Vec<u8>)>,
+    pub embedded: Vec<String>,
+    pub index_hash: String,
+    pub version: String,
 }
 
 fn opt_str(s: &str) -> Option<String> {
