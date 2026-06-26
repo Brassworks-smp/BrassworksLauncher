@@ -549,6 +549,21 @@ pub fn run() {
             commands::run_export_config,
             commands::unsup_public_key,
             commands::regenerate_unsup_key,
+            commands::github_connect,
+            commands::github_token_present,
+            commands::github_remembered,
+            commands::github_disconnect,
+            commands::publish_pack,
+            commands::relink_share,
+            commands::sync_from_shared,
+            commands::share_pending_changes,
+            commands::share_link,
+            commands::write_share_file,
+            commands::disconnect_share,
+            commands::share_params,
+            commands::set_share_params,
+            commands::share_repo_info,
+            commands::share_diff,
             commands::backup_world,
             commands::list_world_backups,
             commands::export_world,
@@ -570,15 +585,13 @@ pub fn run() {
                     .collect();
                 if let Some(file) = opens.into_iter().next() {
                     reveal_main(app);
-                    let ready = app
-                        .try_state::<AppState>()
-                        .map(|s| s.frontend_ready.load(std::sync::atomic::Ordering::Relaxed))
-                        .unwrap_or(false);
-                    if ready {
-                        let _ = app.emit("packwiz://open", file);
-                    } else if let Some(slot) = app.try_state::<AppState>() {
+                    if let Some(slot) = app.try_state::<AppState>() {
                         if let Ok(mut pending) = slot.pending_open.lock() {
-                            *pending = Some(file);
+                            if slot.frontend_ready.load(std::sync::atomic::Ordering::Relaxed) {
+                                let _ = app.emit("packwiz://open", file);
+                            } else {
+                                *pending = Some(file);
+                            }
                         }
                     }
                 }
