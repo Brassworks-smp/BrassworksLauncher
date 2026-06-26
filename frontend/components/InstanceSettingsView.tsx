@@ -27,7 +27,10 @@ import {
   Play,
   Pencil,
   Plus,
+  Github,
+  Settings,
 } from "lucide-react";
+import { ShareModal } from "@/components/ShareModal";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -156,6 +159,7 @@ export function InstanceSettingsView({
   onDeleted,
   onError,
   onCheckUpdates,
+  onRefresh,
 }: {
   instance: Instance;
   settings: LauncherSettings;
@@ -168,6 +172,7 @@ export function InstanceSettingsView({
   onDeleted: (id: string) => void;
   onError: (e: string) => void;
   onCheckUpdates: () => void;
+  onRefresh: () => void;
 }) {
   const t = useT();
   const patch = (p: Partial<Instance>) => onSaveInstance({ ...instance, ...p });
@@ -346,7 +351,10 @@ export function InstanceSettingsView({
               </div>
             </div>
           </Card>
-          <ExportCard instance={instance} />
+          {!instance.featured && (
+            <ShareSettingsCard instance={instance} onRefresh={onRefresh} />
+          )}
+          <ExportCard instance={instance} onRefresh={onRefresh} />
           {canEditVersion && <VersionLoaderCard instance={instance} onSave={patch} />}
 
           <Card title={t("instanceSettings.account.title")} icon={<UserRound size={14} />}>
@@ -1236,12 +1244,70 @@ function DeleteButton({
   );
 }
 
-function ExportCard({ instance }: { instance: Instance }) {
+function ShareSettingsCard({
+  instance,
+  onRefresh,
+}: {
+  instance: Instance;
+  onRefresh: () => void;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const locked = instance.modpack_locked && !instance.share;
+  return (
+    <>
+      <Card title={t("share.cardTitle")} icon={<Share2 size={14} />}>
+        {instance.shared_by && (
+          <p className="flex items-center gap-1.5 text-xs text-brass-300">
+            <Share2 size={12} />
+            {t("share.sharedByChip", { user: instance.shared_by })}
+          </p>
+        )}
+        <p className="text-xs text-ink-600">
+          {locked
+            ? t("share.settingsLocked")
+            : instance.share
+              ? t("share.settingsShared")
+              : t("share.settingsEmpty")}
+        </p>
+        <button
+          onClick={() => setOpen(true)}
+          disabled={locked}
+          className="flex items-center justify-center gap-2 rounded-lg bg-brass-500 px-3 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:bg-ink-700 disabled:text-ink-500"
+        >
+          {instance.share ? <Settings size={14} /> : <Share2 size={14} />}
+          {instance.share ? t("share.cardManage") : t("share.cardShareCta")}
+        </button>
+      </Card>
+      {open && !locked && (
+        <ShareModal
+          instance={instance}
+          onChanged={onRefresh}
+          onClose={() => {
+            setOpen(false);
+            onRefresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ExportCard({
+  instance,
+  onRefresh,
+}: {
+  instance: Instance;
+  onRefresh: () => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [configs, setConfigs] = useState<ExportConfig[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<ExportConfig | null>(null);
+  const sharedConfigId = instance.share?.config_id;
 
   const reload = () =>
     api
@@ -1259,6 +1325,10 @@ function ExportCard({ instance }: { instance: Instance }) {
   };
 
   const openEdit = (cfg: ExportConfig) => {
+    if (cfg.id === sharedConfigId) {
+      setShareOpen(true);
+      return;
+    }
     setEditId(cfg.id);
     setOpen(true);
   };
@@ -1287,6 +1357,14 @@ function ExportCard({ instance }: { instance: Instance }) {
       .catch((e) => toast(String(e), "error"));
   };
 
+  const askRemove = (cfg: ExportConfig) => {
+    if (instance.share?.config_id === cfg.id) {
+      setDeleteConfirm(cfg);
+    } else {
+      remove(cfg);
+    }
+  };
+
   return (
     <>
       <Card title={t("instanceSettings.export.title")} icon={<Share2 size={14} />}>
@@ -1299,19 +1377,33 @@ function ExportCard({ instance }: { instance: Instance }) {
             <div className="text-xs font-medium uppercase tracking-wide text-ink-600">
               {t("instanceSettings.export.savedConfigs")}
             </div>
-            {configs.map((cfg) => (
+            {configs.map((cfg) => {
+              const isShared = cfg.id === sharedConfigId;
+              return (
               <div
                 key={cfg.id}
                 onClick={() => openEdit(cfg)}
                 title={t("instanceSettings.export.editConfig")}
-                className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-edge bg-ink-950/40 px-3 py-2 text-sm transition hover:border-brass-600/40 hover:bg-ink-900/60"
+                className={`group flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition hover:bg-ink-900/60 ${
+                  isShared
+                    ? "border-brass-500/50 bg-brass-500/[0.06] hover:border-brass-500"
+                    : "border-edge bg-ink-950/40 hover:border-brass-600/40"
+                }`}
               >
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ background: FORMAT_COLOR[cfg.format] }}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-gray-200">{cfg.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-gray-200">{cfg.name}</span>
+                    {isShared && (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-brass-500/20 px-1.5 py-0.5 text-[9px] font-medium text-brass-200">
+                        <Github size={9} />
+                        {t("instanceSettings.export.sharedBadge")}
+                      </span>
+                    )}
+                  </div>
                   <div className="truncate text-[11px] text-ink-600">
                     {FORMAT_LABEL[cfg.format]} ·{" "}
                     {t("instanceSettings.export.fileCount", {
@@ -1342,7 +1434,7 @@ function ExportCard({ instance }: { instance: Instance }) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    remove(cfg);
+                    askRemove(cfg);
                   }}
                   title={t("instanceSettings.export.deleteConfig")}
                   className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-600 transition hover:text-red-300"
@@ -1350,7 +1442,8 @@ function ExportCard({ instance }: { instance: Instance }) {
                   <Trash2 size={13} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -1375,6 +1468,52 @@ function ExportCard({ instance }: { instance: Instance }) {
             reload();
           }}
         />
+      )}
+
+      {shareOpen && (
+        <ShareModal
+          instance={instance}
+          onChanged={() => {
+            reload();
+            onRefresh();
+          }}
+          onClose={() => {
+            setShareOpen(false);
+            reload();
+            onRefresh();
+          }}
+        />
+      )}
+
+      {deleteConfirm && (
+        <div className="modal-overlay fixed inset-0 z-[60] grid place-items-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="w-[380px] max-w-full rounded-xl border border-red-600/30 bg-ink-900 p-5 shadow-2xl">
+            <div className="mb-2 flex items-center gap-2 font-mc text-sm tracking-wide text-gray-100">
+              <Share2 size={16} className="text-red-400" />
+              {t("instanceSettings.export.sharedDeleteTitle")}
+            </div>
+            <p className="mb-4 text-xs leading-relaxed text-ink-500">
+              {t("instanceSettings.export.sharedDeleteBody")}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="rounded-md border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:text-gray-200"
+              >
+                {t("instanceSettings.export.modal.cancelKeep")}
+              </button>
+              <button
+                onClick={() => {
+                  remove(deleteConfirm);
+                  setDeleteConfirm(null);
+                }}
+                className="rounded-md bg-red-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-red-400"
+              >
+                {t("instanceSettings.export.deleteConfig")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
