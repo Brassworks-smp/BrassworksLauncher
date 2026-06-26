@@ -13,6 +13,8 @@ pub struct PackwizShare {
     pub description: Option<String>,
     #[serde(default)]
     pub unsup: bool,
+    #[serde(default, alias = "author")]
+    pub shared_by: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
     #[serde(default)]
@@ -50,6 +52,8 @@ pub struct PackInstallMeta {
     pub max_memory_mb: Option<u32>,
     #[serde(default)]
     pub jvm_args: Option<Vec<String>>,
+    #[serde(default)]
+    pub shared_by: Option<String>,
 }
 
 impl PackwizShare {
@@ -75,6 +79,7 @@ impl PackwizShare {
                 "name" => share.name = Some(v),
                 "description" => share.description = Some(v),
                 "unsup" => share.unsup = matches!(v.as_str(), "true" | "1" | "yes"),
+                "shared_by" | "author" => share.shared_by = Some(v),
                 "icon" => share.icon = Some(v),
                 "banner" => share.banner = Some(v),
                 "signing_key" | "unsup_public_key" => share.signing_key = Some(v),
@@ -114,6 +119,7 @@ impl PackwizShare {
             min_memory_mb: self.min_memory_mb,
             max_memory_mb: self.max_memory_mb,
             jvm_args: self.jvm_args.clone(),
+            shared_by: self.shared_by.clone(),
         }
     }
 }
