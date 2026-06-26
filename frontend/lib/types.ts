@@ -52,6 +52,8 @@ export interface Instance {
   shared_by: string | null;
 }
 
+export type GitProvider = "github" | "gitlab";
+
 export interface PackShare {
   repo_owner: string;
   repo_name: string;
@@ -64,6 +66,7 @@ export interface PackShare {
   published_version: string | null;
   published_index_hash: string | null;
   incomplete: boolean;
+  provider: GitProvider;
   params: SharePackParams;
 }
 

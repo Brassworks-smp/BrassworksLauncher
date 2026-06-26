@@ -24,6 +24,8 @@ pub struct LauncherSettings {
     pub curseforge_api_key: Option<String>,
     #[serde(default)]
     pub github_token: Option<String>,
+    #[serde(default)]
+    pub forge_tokens: std::collections::BTreeMap<String, String>,
     pub selected_instance: Option<String>,
 
     pub pre_launch_command: Option<String>,
@@ -102,6 +104,7 @@ impl Default for LauncherSettings {
             dev_mode: false,
             curseforge_api_key: None,
             github_token: None,
+            forge_tokens: std::collections::BTreeMap::new(),
             selected_instance: None,
 
             pre_launch_command: None,

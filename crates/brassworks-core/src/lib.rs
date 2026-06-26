@@ -15,7 +15,7 @@ pub mod auth;
 pub mod error;
 pub mod export;
 pub mod featured;
-pub mod github;
+pub mod forge;
 pub mod image_cache;
 pub mod import;
 pub mod instance;
@@ -259,7 +259,8 @@ use portablemc::msa::{self, Auth};
 #[derive(Debug, Clone)]
 pub struct Launcher {
     paths: Paths,
-    session_github_token: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+    session_forge_tokens:
+        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
 }
 
 impl Launcher {
@@ -268,7 +269,7 @@ impl Launcher {
         paths.ensure_base()?;
         Ok(Self {
             paths,
-            session_github_token: Default::default(),
+            session_forge_tokens: Default::default(),
         })
     }
 
@@ -277,7 +278,7 @@ impl Launcher {
         paths.ensure_base()?;
         Ok(Self {
             paths,
-            session_github_token: Default::default(),
+            session_forge_tokens: Default::default(),
         })
     }
 
@@ -804,7 +805,7 @@ impl Launcher {
         }
         let (base, _) = pack_url.rsplit_once('/')?;
         let cfg_url = format!("{base}/brassworks.share.json");
-        let text = github::fetch_text(&cfg_url).ok()?;
+        let text = forge::fetch_text(&cfg_url).ok()?;
         serde_json::from_str::<SharedConfigFile>(&text).ok()
     }
 
@@ -1790,59 +1791,91 @@ impl Launcher {
         )
     }
 
-    pub fn github_login(&self, token: &str) -> Result<String> {
-        Ok(github::verify_token(token)?.login)
+    pub fn forge_login(&self, provider: forge::Provider, token: &str) -> Result<String> {
+        forge::get(provider).verify_token(token)
     }
 
     fn clean_token(token: Option<String>) -> Option<String> {
         token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
     }
 
-    fn session_github_token(&self) -> Option<String> {
-        self.session_github_token.lock().ok().and_then(|g| g.clone())
+    fn session_forge_token(&self, provider: forge::Provider) -> Option<String> {
+        self.session_forge_tokens
+            .lock()
+            .ok()
+            .and_then(|g| g.get(provider.id()).cloned())
     }
 
-    pub fn github_token(&self) -> Result<Option<String>> {
-        if let Some(t) = self.session_github_token() {
+    fn persisted_forge_token(&self, provider: forge::Provider) -> Result<Option<String>> {
+        let s = self.settings()?;
+        if let Some(t) = s.forge_tokens.get(provider.id()) {
+            return Ok(Self::clean_token(Some(t.clone())));
+        }
+        if provider == forge::Provider::Github {
+            return Ok(Self::clean_token(s.github_token));
+        }
+        Ok(None)
+    }
+
+    pub fn forge_token(&self, provider: forge::Provider) -> Result<Option<String>> {
+        if let Some(t) = self.session_forge_token(provider) {
             return Ok(Some(t));
         }
-        Ok(Self::clean_token(self.settings()?.github_token))
+        self.persisted_forge_token(provider)
     }
 
-    pub fn github_token_remembered(&self) -> Result<bool> {
-        Ok(Self::clean_token(self.settings()?.github_token).is_some())
+    pub fn forge_token_remembered(&self, provider: forge::Provider) -> Result<bool> {
+        Ok(self.persisted_forge_token(provider)?.is_some())
     }
 
-    pub fn set_github_token(&self, token: Option<String>) -> Result<()> {
+    fn set_persisted_forge_token(&self, provider: forge::Provider, token: Option<String>) -> Result<()> {
         let mut s = self.settings()?;
-        s.github_token = Self::clean_token(token);
+        match Self::clean_token(token) {
+            Some(t) => {
+                s.forge_tokens.insert(provider.id().to_string(), t);
+            }
+            None => {
+                s.forge_tokens.remove(provider.id());
+            }
+        }
+        if provider == forge::Provider::Github {
+            s.github_token = None;
+        }
         self.save_settings(&s)
     }
 
-    fn set_session_github_token(&self, token: Option<String>) {
-        if let Ok(mut g) = self.session_github_token.lock() {
-            *g = Self::clean_token(token);
+    fn set_session_forge_token(&self, provider: forge::Provider, token: Option<String>) {
+        if let Ok(mut g) = self.session_forge_tokens.lock() {
+            match Self::clean_token(token) {
+                Some(t) => {
+                    g.insert(provider.id().to_string(), t);
+                }
+                None => {
+                    g.remove(provider.id());
+                }
+            }
         }
     }
 
-    pub fn save_github_token(&self, token: &str, remember: bool) -> Result<()> {
+    pub fn save_forge_token(&self, provider: forge::Provider, token: &str, remember: bool) -> Result<()> {
         if remember {
-            self.set_github_token(Some(token.to_string()))?;
-            self.set_session_github_token(None);
+            self.set_persisted_forge_token(provider, Some(token.to_string()))?;
+            self.set_session_forge_token(provider, None);
         } else {
-            self.set_session_github_token(Some(token.to_string()));
+            self.set_session_forge_token(provider, Some(token.to_string()));
         }
         Ok(())
     }
 
-    pub fn clear_github_token(&self) -> Result<()> {
-        self.set_session_github_token(None);
-        self.set_github_token(None)
+    pub fn clear_forge_token(&self, provider: forge::Provider) -> Result<()> {
+        self.set_session_forge_token(provider, None);
+        self.set_persisted_forge_token(provider, None)
     }
 
-    fn require_github_token(&self) -> Result<String> {
-        self.github_token()?
-            .ok_or_else(|| CoreError::Auth("connect a GitHub account first".to_string()))
+    fn require_forge_token(&self, provider: forge::Provider) -> Result<String> {
+        self.forge_token(provider)?.ok_or_else(|| {
+            CoreError::Auth(format!("connect a {} account first", provider.label()))
+        })
     }
 
     fn ensure_share_config(&self, instance: &instance::Instance) -> Result<export::ExportConfig> {
@@ -1912,17 +1945,20 @@ impl Launcher {
         instance_id: &str,
         config_id: &str,
         confirm_embedded: bool,
-        progress: &mut dyn FnMut(github::PushProgress),
+        provider: forge::Provider,
+        progress: &mut dyn FnMut(forge::PushProgress),
         cancel: &(dyn Fn() -> bool + Sync),
     ) -> Result<instance::PublishResult> {
-        let token = self.require_github_token()?;
-        let user = github::verify_token(&token)?;
         let mut instance = self.instances().get(instance_id)?;
         if instance.modpack_locked {
             return Err(CoreError::Modpack(
                 "this modpack is locked — unlock it to share".to_string(),
             ));
         }
+        let provider = instance.share.as_ref().map(|s| s.provider).unwrap_or(provider);
+        let f = forge::get(provider);
+        let token = self.require_forge_token(provider)?;
+        let user_login = f.verify_token(&token)?;
         let config = if config_id.trim().is_empty() {
             self.ensure_share_config(&instance)?
         } else {
@@ -1955,13 +1991,13 @@ impl Launcher {
                 s.branch.clone(),
             ),
             None => {
-                let name = github::unique_repo_name(&token, &user.login, &instance.name)?;
+                let name = forge::unique_repo_name(f, &token, &user_login, &instance.name)?;
                 let desc = format!("{} — a modpack shared via Brassworks Launcher", instance.name);
-                let repo = github::create_repo(&token, &name, &desc)?;
-                (repo.owner.login, repo.name, repo.html_url, repo.default_branch)
+                let repo = f.create_repo(&token, &name, &desc)?;
+                (repo.owner, repo.name, repo.web_url, repo.default_branch)
             }
         };
-        let pack_url = github::raw_url(&owner, &repo_name, &branch, "pack.toml");
+        let pack_url = f.raw_url(&owner, &repo_name, &branch, "pack.toml");
         let existing_params = instance
             .share
             .as_ref()
@@ -1980,6 +2016,7 @@ impl Launcher {
             published_version: None,
             published_index_hash: None,
             incomplete,
+            provider,
             params: existing_params.clone(),
             published_params: instance::SharePackParams::default(),
         };
@@ -2022,7 +2059,8 @@ impl Launcher {
             format!("update {}", instance.name)
         };
         let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
-        match github::push_files(
+        match forge::push_files(
+            f,
             &token,
             &owner,
             &repo_name,
@@ -2072,13 +2110,19 @@ impl Launcher {
                 "this modpack is locked — unlock it to share".to_string(),
             ));
         }
-        let (owner, repo) = github::parse_repo_url(repo_url)
-            .ok_or_else(|| CoreError::Modpack("not a valid GitHub repository URL".to_string()))?;
-        let token = self.require_github_token()?;
-        let branch =
-            github::repo_default_branch(&token, &owner, &repo).unwrap_or_else(|_| "main".to_string());
-        let cfg_url = github::raw_url(&owner, &repo, &branch, "brassworks.share.json");
-        let text = github::fetch_text(&cfg_url).map_err(|_| {
+        let provider = forge::detect(repo_url).ok_or_else(|| {
+            CoreError::Modpack("unsupported git host (expected GitHub or GitLab)".to_string())
+        })?;
+        let f = forge::get(provider);
+        let token = self.require_forge_token(provider)?;
+        let (owner, repo) = f.parse_repo_url(repo_url).ok_or_else(|| {
+            CoreError::Modpack(format!("not a valid {} repository URL", provider.label()))
+        })?;
+        let branch = f
+            .repo_default_branch(&token, &owner, &repo)
+            .unwrap_or_else(|_| "main".to_string());
+        let cfg_url = f.raw_url(&owner, &repo, &branch, "brassworks.share.json");
+        let text = forge::fetch_text(&cfg_url).map_err(|_| {
             CoreError::Modpack(
                 "this repository wasn't shared from Brassworks (no share config found)".to_string(),
             )
@@ -2092,15 +2136,16 @@ impl Launcher {
         let share = instance::PackShare {
             repo_owner: owner.clone(),
             repo_name: repo.clone(),
-            repo_url: format!("https://github.com/{owner}/{repo}"),
+            repo_url: f.web_url(&owner, &repo),
             branch: branch.clone(),
-            pack_url: github::raw_url(&owner, &repo, &branch, "pack.toml"),
+            pack_url: f.raw_url(&owner, &repo, &branch, "pack.toml"),
             config_id: saved.id,
             created_at: chrono::Utc::now(),
             last_published: None,
             published_version: None,
             published_index_hash: None,
             incomplete: false,
+            provider,
             published_params: params.clone(),
             params,
         };
@@ -2282,8 +2327,9 @@ impl Launcher {
             .share
             .as_ref()
             .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
-        let token = self.require_github_token()?;
-        let stats = github::repo_stats(&token, &share.repo_owner, &share.repo_name)?;
+        let token = self.require_forge_token(share.provider)?;
+        let stats =
+            forge::get(share.provider).repo_stats(&token, &share.repo_owner, &share.repo_name)?;
         let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
         Ok(ShareRepoInfo {
             size_kb: stats.size_kb,
@@ -2293,7 +2339,7 @@ impl Launcher {
             private: stats.private,
             stargazers: stats.stargazers,
             forks: stats.forks,
-            file_count: github::local_head_file_count(&work_dir),
+            file_count: forge::local_head_file_count(&work_dir),
         })
     }
 
@@ -2303,7 +2349,7 @@ impl Launcher {
             .share
             .clone()
             .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
-        let token = self.require_github_token()?;
+        let token = self.require_forge_token(share.provider)?;
         let config = export::load_configs(&self.paths, instance_id)
             .into_iter()
             .find(|c| c.id == share.config_id)
@@ -2325,14 +2371,15 @@ impl Launcher {
             .collect();
 
         let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
-        let repo = github::open_synced(
+        let repo = forge::open_synced(
+            forge::get(share.provider),
             &token,
             &share.repo_owner,
             &share.repo_name,
             &share.branch,
             &work_dir,
         )?;
-        let published: std::collections::HashMap<String, String> = github::head_file_hashes(&repo)?
+        let published: std::collections::HashMap<String, String> = forge::head_file_hashes(&repo)?
             .into_iter()
             .filter(|(p, _)| !is_meta(p))
             .collect();

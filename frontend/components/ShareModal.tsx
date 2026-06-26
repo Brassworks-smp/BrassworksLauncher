@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   X,
-  Github,
   Share2,
   Link2,
   Copy,
@@ -33,7 +32,9 @@ import { useClosable } from "./ui";
 import { useT } from "@/lib/i18n";
 import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import { PackContentEditor, type PackContentValue } from "./PackContentEditor";
+import { PROVIDERS, providerInfo } from "@/lib/providers";
 import type {
+  GitProvider,
   Instance,
   PackShare,
   PushProgress,
@@ -41,9 +42,6 @@ import type {
   ShareRepoInfo,
   ShareDiffEntry,
 } from "@/lib/types";
-
-const TOKEN_URL =
-  "https://github.com/settings/tokens/new?scopes=repo&description=Brassworks%20Launcher";
 
 const PACK_SETTINGS_DIFF_PATH = "__pack_settings__";
 
@@ -65,12 +63,15 @@ export function ShareModal({
   const t = useT();
   const { closing, close } = useClosable(onClose);
 
+  const [share, setShare] = useState<PackShare | null>(instance.share);
+
+  const [provider, setProvider] = useState<GitProvider>(
+    instance.share?.provider ?? "github",
+  );
   const [connected, setConnected] = useState<boolean | null>(null);
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [remember, setRemember] = useState(true);
-
-  const [share, setShare] = useState<PackShare | null>(instance.share);
   const [link, setLink] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -105,11 +106,12 @@ export function ShareModal({
   const [diffLoading, setDiffLoading] = useState(false);
 
   useEffect(() => {
+    setConnected(null);
     api
-      .githubTokenPresent()
+      .forgeTokenPresent(provider)
       .then(setConnected)
       .catch(() => setConnected(false));
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     api
@@ -209,7 +211,7 @@ export function ShareModal({
     if (!token.trim()) return;
     setConnecting(true);
     try {
-      const login = await api.githubConnect(token.trim(), remember);
+      const login = await api.forgeConnect(provider, token.trim(), remember);
       setConnected(true);
       setToken("");
       toast(t("share.connectedToast", { login }), "success");
@@ -254,7 +256,12 @@ export function ShareModal({
     cancelledRef.current = false;
     try {
       const configId = await saveEditorConfig();
-      const res = await api.publishPack(instance.id, configId, confirmEmbedded);
+      const res = await api.publishPack(
+        instance.id,
+        configId,
+        confirmEmbedded,
+        share?.provider ?? provider,
+      );
       if (res.needs_confirm) {
         setEmbeddedConfirm(res.embedded);
         return;
@@ -439,6 +446,9 @@ export function ShareModal({
         ) : !connected ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
             <ConnectView
+              provider={provider}
+              setProvider={setProvider}
+              canPick={!share}
               token={token}
               setToken={setToken}
               connecting={connecting}
@@ -469,8 +479,15 @@ export function ShareModal({
                     <div className="flex items-center gap-2 rounded-lg border border-brass-600/30 bg-brass-500/[0.06] px-3 py-2.5">
                       <Check size={15} className="shrink-0 text-brass-300" />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-gray-100">
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-gray-100">
                           {t("share.liveTitle")}
+                          <span className="flex items-center gap-1 text-[10px] font-normal text-ink-500">
+                            {(() => {
+                              const Icon = providerInfo(share.provider).icon;
+                              return <Icon size={11} />;
+                            })()}
+                            {providerInfo(share.provider).label}
+                          </span>
                         </div>
                         <button
                           onClick={() =>
@@ -578,7 +595,10 @@ export function ShareModal({
                             }
                             className={railBtn}
                           >
-                            <Github size={13} />
+                            {(() => {
+                              const Icon = providerInfo(share.provider).icon;
+                              return <Icon size={13} />;
+                            })()}
                             {t("share.openRepo")}
                           </button>
                           <button
@@ -617,6 +637,13 @@ export function ShareModal({
                     </p>
                   </div>
 
+                  <div>
+                    <div className="mb-1.5 text-[11px] text-ink-600">
+                      {t("share.publishTo")}
+                    </div>
+                    <ProviderPicker value={provider} onChange={setProvider} />
+                  </div>
+
                   {publishing ? (
                     <ProgressBar
                       progress={progress}
@@ -648,7 +675,7 @@ export function ShareModal({
 
                   <button
                     onClick={async () => {
-                      await api.githubDisconnect();
+                      await api.forgeDisconnect(provider);
                       setConnected(false);
                     }}
                     className="mt-auto text-center text-[11px] text-ink-600 transition hover:text-brass-300"
@@ -1291,7 +1318,44 @@ function Overlay({
   );
 }
 
+function ProviderPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: GitProvider;
+  onChange: (p: GitProvider) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg border border-edge bg-ink-950/30 p-1">
+      {PROVIDERS.map((p) => {
+        const Icon = p.icon;
+        const active = p.id === value;
+        return (
+          <button
+            key={p.id}
+            onClick={() => onChange(p.id)}
+            disabled={disabled}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+              active
+                ? "bg-brass-500/15 text-brass-200 ring-1 ring-brass-500/40"
+                : "text-ink-500 hover:text-gray-200"
+            }`}
+          >
+            <Icon size={14} />
+            {p.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ConnectView({
+  provider,
+  setProvider,
+  canPick,
   token,
   setToken,
   connecting,
@@ -1300,6 +1364,9 @@ function ConnectView({
   setRemember,
   inputCls,
 }: {
+  provider: GitProvider;
+  setProvider: (p: GitProvider) => void;
+  canPick: boolean;
   token: string;
   setToken: (v: string) => void;
   connecting: boolean;
@@ -1309,30 +1376,35 @@ function ConnectView({
   inputCls: string;
 }) {
   const t = useT();
+  const info = providerInfo(provider);
+  const Icon = info.icon;
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
         <span className="grid h-12 w-12 place-items-center rounded-full bg-brass-500/15 text-brass-300">
-          <Github size={24} />
+          <Icon size={24} />
         </span>
         <h3 className="text-sm font-medium text-gray-100">
-          {t("share.connectTitle")}
+          {t("share.connectTitle", { provider: info.label })}
         </h3>
         <p className="text-xs leading-relaxed text-ink-500">
           {t("share.connectBody")}
         </p>
       </div>
-      <ol className="flex flex-col gap-1.5 rounded-lg border border-edge bg-ink-950/30 p-3 text-xs text-ink-400">
-        <li>1. {t("share.step1")}</li>
-        <li>2. {t("share.step2")}</li>
-        <li>3. {t("share.step3")}</li>
-      </ol>
+
+      {canPick && (
+        <div>
+          <div className="mb-1.5 text-xs text-ink-600">{t("share.publishTo")}</div>
+          <ProviderPicker value={provider} onChange={setProvider} />
+        </div>
+      )}
+
       <button
-        onClick={() => api.openExternal(TOKEN_URL).catch(() => {})}
+        onClick={() => api.openExternal(info.tokenUrl).catch(() => {})}
         className="flex items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
       >
         <ExternalLink size={14} />
-        {t("share.createToken")}
+        {t("share.createTokenFor", { provider: info.label })}
       </button>
       <div>
         <div className="mb-1.5 flex items-center gap-1.5 text-xs text-ink-600">
@@ -1344,11 +1416,11 @@ function ConnectView({
           value={token}
           onChange={(e) => setToken(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onConnect()}
-          placeholder="ghp_…"
+          placeholder={info.tokenPlaceholder}
           className={inputCls}
         />
         <p className="mt-1.5 text-[10px] leading-snug text-ink-600">
-          {t("share.tokenHint")}
+          {t(`share.providerHint.${info.scopeHintKey}`)}
         </p>
       </div>
       <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-edge bg-ink-950/30 p-3 text-left transition hover:border-brass-600/40">
@@ -1375,7 +1447,7 @@ function ConnectView({
         {connecting ? (
           <Loader2 size={15} className="animate-spin" />
         ) : (
-          <Github size={15} />
+          <Icon size={15} />
         )}
         {t("share.connect")}
       </button>

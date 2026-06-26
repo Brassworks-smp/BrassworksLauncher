@@ -23,7 +23,6 @@ import {
   RotateCcw,
   Compass,
   Languages,
-  Github,
   ExternalLink,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -32,7 +31,14 @@ import { CustomColorChip, swatchBg } from "@/components/ColorPicker";
 import { toast } from "@/lib/toast";
 import { useT, LOCALES } from "@/lib/i18n";
 import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
-import type { JavaReport, JavaInstall, LauncherSettings, UpdateInfo } from "@/lib/types";
+import { PROVIDERS, providerInfo } from "@/lib/providers";
+import type {
+  GitProvider,
+  JavaReport,
+  JavaInstall,
+  LauncherSettings,
+  UpdateInfo,
+} from "@/lib/types";
 import {
   Card,
   Field,
@@ -521,7 +527,9 @@ export function SettingsView({
               </button>
             </Card>
 
-            <GithubKeyCard />
+            {PROVIDERS.map((p) => (
+              <ForgeKeyCard key={p.id} providerId={p.id} />
+            ))}
 
             <Card
               title={t("settings.downloads.title")}
@@ -955,32 +963,31 @@ function AccentPicker({
   );
 }
 
-const GH_TOKEN_URL =
-  "https://github.com/settings/tokens/new?scopes=repo&description=Brassworks%20Launcher";
-
-function GithubKeyCard() {
+function ForgeKeyCard({ providerId }: { providerId: GitProvider }) {
   const t = useT();
+  const info = providerInfo(providerId);
+  const Icon = info.icon;
   const [present, setPresent] = useState<boolean | null>(null);
   const [remembered, setRemembered] = useState(false);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refresh = () => {
-    api.githubTokenPresent().then(setPresent).catch(() => setPresent(false));
-    api.githubRemembered().then(setRemembered).catch(() => setRemembered(false));
+    api.forgeTokenPresent(providerId).then(setPresent).catch(() => setPresent(false));
+    api.forgeRemembered(providerId).then(setRemembered).catch(() => setRemembered(false));
   };
   useEffect(() => {
     refresh();
-  }, []);
+  }, [providerId]);
 
   const save = async () => {
     if (!token.trim()) return;
     setBusy(true);
     try {
-      const login = await api.githubConnect(token.trim(), true);
+      const login = await api.forgeConnect(providerId, token.trim(), true);
       setToken("");
       refresh();
-      toast(t("settings.github.savedToast", { login }), "success");
+      toast(t("settings.forge.savedToast", { provider: info.label, login }), "success");
     } catch (e) {
       toast(String(e), "error");
     } finally {
@@ -991,9 +998,9 @@ function GithubKeyCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      await api.githubDisconnect();
+      await api.forgeDisconnect(providerId);
       refresh();
-      toast(t("settings.github.clearedToast"), "success");
+      toast(t("settings.forge.clearedToast", { provider: info.label }), "success");
     } catch (e) {
       toast(String(e), "error");
     } finally {
@@ -1002,27 +1009,31 @@ function GithubKeyCard() {
   };
 
   return (
-    <Card title={t("settings.github.title")} icon={<Github size={14} />}>
+    <Card title={info.label} icon={<Icon size={14} />}>
       {present && (
         <div className="flex items-center gap-2 rounded-lg border border-brass-600/30 bg-brass-500/[0.06] px-3 py-2 text-xs">
           <Check size={13} className="shrink-0 text-brass-300" />
           <span className="text-gray-200">
             {remembered
-              ? t("settings.github.savedGlobally")
-              : t("settings.github.sessionOnly")}
+              ? t("settings.forge.savedGlobally")
+              : t("settings.forge.sessionOnly")}
           </span>
         </div>
       )}
       <Field
-        label={present ? t("settings.github.replaceKey") : t("settings.github.key")}
-        hint={t("settings.github.keyHint")}
+        label={
+          present
+            ? t("settings.forge.replaceKey", { provider: info.label })
+            : t("settings.forge.key", { provider: info.label })
+        }
+        hint={t(`share.providerHint.${info.scopeHintKey}`)}
       >
         <input
           value={token}
           onChange={(e) => setToken(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && save()}
           type="password"
-          placeholder="ghp_…"
+          placeholder={info.tokenPlaceholder}
           className={`${inputCls} font-mono text-xs`}
           spellCheck={false}
           autoComplete="off"
@@ -1034,12 +1045,8 @@ function GithubKeyCard() {
           disabled={busy || !token.trim()}
           className="flex items-center gap-1.5 rounded-lg bg-brass-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-50"
         >
-          {busy ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : (
-            <Github size={13} />
-          )}
-          {t("settings.github.save")}
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
+          {t("settings.forge.save")}
         </button>
         {present && (
           <button
@@ -1047,16 +1054,16 @@ function GithubKeyCard() {
             disabled={busy}
             className="rounded-lg border border-edge px-3 py-1.5 text-xs text-ink-500 transition hover:text-red-300 disabled:opacity-50"
           >
-            {t("settings.github.disconnect")}
+            {t("settings.forge.disconnect")}
           </button>
         )}
       </div>
       <button
-        onClick={() => api.openExternal(GH_TOKEN_URL).catch(() => {})}
+        onClick={() => api.openExternal(info.tokenUrl).catch(() => {})}
         className="flex items-center gap-1.5 text-left text-xs text-brass-300 hover:text-brass-400"
       >
         <ExternalLink size={12} />
-        {t("settings.github.getKey")}
+        {t("settings.forge.getKey", { provider: info.label })}
       </button>
     </Card>
   );

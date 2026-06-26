@@ -35,6 +35,7 @@ import type {
   ExportMeta,
   ExportConfig,
   ExportFormat,
+  GitProvider,
   PublishResult,
   PackShare,
   PushProgress,
@@ -259,22 +260,24 @@ export const runExportConfig = (
   instanceId: string,
   configId: string,
 ): Promise<string> => invoke("run_export_config", { instanceId, configId });
-export const githubConnect = (
+export const forgeConnect = (
+  provider: GitProvider,
   token: string,
   remember = true,
-): Promise<string> => invoke("github_connect", { token, remember });
-export const githubTokenPresent = (): Promise<boolean> =>
-  invoke("github_token_present", {});
-export const githubRemembered = (): Promise<boolean> =>
-  invoke("github_remembered", {});
-export const githubDisconnect = (): Promise<void> =>
-  invoke("github_disconnect", {});
+): Promise<string> => invoke("forge_connect", { provider, token, remember });
+export const forgeTokenPresent = (provider: GitProvider): Promise<boolean> =>
+  invoke("forge_token_present", { provider });
+export const forgeRemembered = (provider: GitProvider): Promise<boolean> =>
+  invoke("forge_remembered", { provider });
+export const forgeDisconnect = (provider: GitProvider): Promise<void> =>
+  invoke("forge_disconnect", { provider });
 export const publishPack = (
   instanceId: string,
   configId: string,
   confirmEmbedded = false,
+  provider: GitProvider = "github",
 ): Promise<PublishResult> =>
-  invoke("publish_pack", { instanceId, configId, confirmEmbedded });
+  invoke("publish_pack", { instanceId, configId, confirmEmbedded, provider });
 export const sharePendingChanges = (instanceId: string): Promise<boolean> =>
   invoke("share_pending_changes", { instanceId });
 export const shareLink = (instanceId: string): Promise<string> =>

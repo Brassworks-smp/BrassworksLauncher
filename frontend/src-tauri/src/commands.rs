@@ -2062,17 +2062,23 @@ pub(crate) async fn delete_export_config(
     .map_err(err)?
 }
 
+fn parse_provider(s: &str) -> CmdResult<brassworks_core::forge::Provider> {
+    brassworks_core::forge::Provider::parse(s).ok_or_else(|| format!("unknown git provider: {s}"))
+}
+
 #[tauri::command]
-pub(crate) async fn github_connect(
+pub(crate) async fn forge_connect(
     state: State<'_, AppState>,
+    provider: String,
     token: String,
     remember: Option<bool>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
+    let provider = parse_provider(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let login = launcher.github_login(&token).map_err(err)?;
+        let login = launcher.forge_login(provider, &token).map_err(err)?;
         launcher
-            .save_github_token(&token, remember.unwrap_or(true))
+            .save_forge_token(provider, &token, remember.unwrap_or(true))
             .map_err(err)?;
         Ok(login)
     })
@@ -2081,27 +2087,41 @@ pub(crate) async fn github_connect(
 }
 
 #[tauri::command]
-pub(crate) async fn github_token_present(state: State<'_, AppState>) -> CmdResult<bool> {
+pub(crate) async fn forge_token_present(
+    state: State<'_, AppState>,
+    provider: String,
+) -> CmdResult<bool> {
     let launcher = state.launcher.clone();
+    let provider = parse_provider(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(launcher.github_token().map_err(err)?.is_some())
+        Ok(launcher.forge_token(provider).map_err(err)?.is_some())
     })
     .await
     .map_err(err)?
 }
 
 #[tauri::command]
-pub(crate) async fn github_remembered(state: State<'_, AppState>) -> CmdResult<bool> {
+pub(crate) async fn forge_remembered(
+    state: State<'_, AppState>,
+    provider: String,
+) -> CmdResult<bool> {
     let launcher = state.launcher.clone();
-    tauri::async_runtime::spawn_blocking(move || launcher.github_token_remembered().map_err(err))
-        .await
-        .map_err(err)?
+    let provider = parse_provider(&provider)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.forge_token_remembered(provider).map_err(err)
+    })
+    .await
+    .map_err(err)?
 }
 
 #[tauri::command]
-pub(crate) async fn github_disconnect(state: State<'_, AppState>) -> CmdResult<()> {
+pub(crate) async fn forge_disconnect(
+    state: State<'_, AppState>,
+    provider: String,
+) -> CmdResult<()> {
     let launcher = state.launcher.clone();
-    tauri::async_runtime::spawn_blocking(move || launcher.clear_github_token().map_err(err))
+    let provider = parse_provider(&provider)?;
+    tauri::async_runtime::spawn_blocking(move || launcher.clear_forge_token(provider).map_err(err))
         .await
         .map_err(err)?
 }
@@ -2113,12 +2133,14 @@ pub(crate) async fn publish_pack(
     instance_id: String,
     config_id: String,
     confirm_embedded: bool,
+    provider: String,
 ) -> CmdResult<brassworks_core::instance::PublishResult> {
     let launcher = state.launcher.clone();
+    let provider = parse_provider(&provider)?;
     let cancel_flag = state.arm_cancel(&instance_id);
     let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut progress = |p: brassworks_core::github::PushProgress| {
+        let mut progress = |p: brassworks_core::forge::PushProgress| {
             let _ = app.emit("publish://progress", &p);
         };
         let cancel = {
@@ -2126,7 +2148,14 @@ pub(crate) async fn publish_pack(
             move || f.load(Ordering::Relaxed)
         };
         let res = launcher
-            .publish_pack(&instance_id, &config_id, confirm_embedded, &mut progress, &cancel)
+            .publish_pack(
+                &instance_id,
+                &config_id,
+                confirm_embedded,
+                provider,
+                &mut progress,
+                &cancel,
+            )
             .map_err(err);
         if let Ok(mut map) = cancels.lock() {
             map.remove(&instance_id);

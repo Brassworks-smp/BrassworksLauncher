@@ -216,6 +216,8 @@ pub struct PackShare {
     #[serde(default)]
     pub incomplete: bool,
     #[serde(default)]
+    pub provider: crate::forge::Provider,
+    #[serde(default)]
     pub params: SharePackParams,
     #[serde(default)]
     pub published_params: SharePackParams,
