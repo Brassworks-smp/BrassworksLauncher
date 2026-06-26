@@ -339,6 +339,7 @@ enum ModpackOp {
     Sync,
     Repair,
     Reinstall,
+    SyncShared,
 }
 
 fn spawn_modpack_op(app: AppHandle, state: &AppState, id: String, op: ModpackOp) {
@@ -358,6 +359,7 @@ fn spawn_modpack_op(app: AppHandle, state: &AppState, id: String, op: ModpackOp)
             ModpackOp::Sync => launcher.sync_modpack(&id, false, &cancel, &mut sink),
             ModpackOp::Repair => launcher.sync_modpack(&id, true, &cancel, &mut sink),
             ModpackOp::Reinstall => launcher.reinstall_modpack(&id, &cancel, &mut sink),
+            ModpackOp::SyncShared => launcher.sync_from_shared(&id, &cancel, &mut sink),
         };
         if let Ok(mut map) = cancels.lock() {
             map.remove(&id);
@@ -2061,6 +2063,202 @@ pub(crate) async fn delete_export_config(
 }
 
 #[tauri::command]
+pub(crate) async fn github_connect(
+    state: State<'_, AppState>,
+    token: String,
+    remember: Option<bool>,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let login = launcher.github_login(&token).map_err(err)?;
+        launcher
+            .save_github_token(&token, remember.unwrap_or(true))
+            .map_err(err)?;
+        Ok(login)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn github_token_present(state: State<'_, AppState>) -> CmdResult<bool> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(launcher.github_token().map_err(err)?.is_some())
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn github_remembered(state: State<'_, AppState>) -> CmdResult<bool> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.github_token_remembered().map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn github_disconnect(state: State<'_, AppState>) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.clear_github_token().map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn publish_pack(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    config_id: String,
+    confirm_embedded: bool,
+) -> CmdResult<brassworks_core::instance::PublishResult> {
+    let launcher = state.launcher.clone();
+    let cancel_flag = state.arm_cancel(&instance_id);
+    let cancels = state.cancels.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut progress = |p: brassworks_core::github::PushProgress| {
+            let _ = app.emit("publish://progress", &p);
+        };
+        let cancel = {
+            let f = cancel_flag.clone();
+            move || f.load(Ordering::Relaxed)
+        };
+        let res = launcher
+            .publish_pack(&instance_id, &config_id, confirm_embedded, &mut progress, &cancel)
+            .map_err(err);
+        if let Ok(mut map) = cancels.lock() {
+            map.remove(&instance_id);
+        }
+        res
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn relink_share(
+    state: State<'_, AppState>,
+    instance_id: String,
+    repo_url: String,
+) -> CmdResult<brassworks_core::instance::PackShare> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.relink_share(&instance_id, &repo_url).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn sync_from_shared(
+    app: AppHandle,
+    state: State<AppState>,
+    instance_id: String,
+) -> CmdResult<()> {
+    spawn_modpack_op(app, &state, instance_id, ModpackOp::SyncShared);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn share_pending_changes(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<bool> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.share_pending_changes(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn share_link(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.share_link(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn write_share_file(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.write_share_file(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn disconnect_share(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.disconnect_share(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn share_params(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<brassworks_core::instance::SharePackParams> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.share_params(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn set_share_params(
+    state: State<'_, AppState>,
+    instance_id: String,
+    params: brassworks_core::instance::SharePackParams,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.set_share_params(&instance_id, params).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn share_repo_info(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<brassworks_core::ShareRepoInfo> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.share_repo_info(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn share_diff(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<brassworks_core::ShareDiffEntry>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.share_diff(&instance_id).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn run_export_config(
     state: State<'_, AppState>,
     instance_id: String,
@@ -2115,8 +2313,11 @@ pub(crate) async fn export_world(
 
 #[tauri::command]
 pub(crate) fn cli_ready(state: State<AppState>) -> CmdResult<PendingStartup> {
-    state.frontend_ready.store(true, Ordering::Relaxed);
-    let open = state.pending_open.lock().map_err(|_| "lock poisoned")?.take();
+    let open = {
+        let mut slot = state.pending_open.lock().map_err(|_| "lock poisoned")?;
+        state.frontend_ready.store(true, Ordering::Relaxed);
+        slot.take()
+    };
     let command = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
     Ok(PendingStartup { open, command })
 }
