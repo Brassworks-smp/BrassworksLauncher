@@ -21,11 +21,13 @@ import {
   LayoutList,
   Play,
   Share2,
+  Github,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Collapse, placeMenu, useMenuDismiss, Toggle, SegmentedTabs } from "./ui";
 import { ExportModal } from "./ExportModal";
+import { ShareModal } from "./ShareModal";
 
 type MenuPos = {
   top?: number;
@@ -167,6 +169,7 @@ export function InstancesView({
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
   const [exportTarget, setExportTarget] = useState<Instance | null>(null);
+  const [shareTarget, setShareTarget] = useState<Instance | null>(null);
   
   
   
@@ -254,6 +257,9 @@ export function InstancesView({
       onPlay={onPlay ? () => onPlay(i.id) : undefined}
       onDelete={onDelete ? () => onDelete(i.id) : undefined}
       onExport={() => setExportTarget(i)}
+      onShare={
+        !i.modpack_locked && !i.featured ? () => setShareTarget(i) : undefined
+      }
       accent={accent}
       compact={compact}
     />
@@ -386,6 +392,14 @@ export function InstancesView({
           loader={exportTarget.loader.replace("_", "")}
           defaultName={exportTarget.name}
           onClose={() => setExportTarget(null)}
+        />
+      )}
+
+      {shareTarget && (
+        <ShareModal
+          instance={shareTarget}
+          onChanged={() => {}}
+          onClose={() => setShareTarget(null)}
         />
       )}
     </div>
@@ -766,6 +780,7 @@ function InstanceCard({
   onPlay,
   onDelete,
   onExport,
+  onShare,
   accent,
   compact,
 }: {
@@ -786,6 +801,7 @@ function InstanceCard({
   onPlay?: () => void;
   onDelete?: () => void;
   onExport?: () => void;
+  onShare?: () => void;
   accent?: string;
   compact?: boolean;
 }) {
@@ -974,6 +990,11 @@ function InstanceCard({
                 className={instance.pinned ? "fill-current text-brass-300" : "text-ink-600"}
               />
               {instance.pinned ? tr("instances.unpin") : tr("instances.pin")}
+            </button>
+          )}
+          {onShare && (
+            <button onClick={run(onShare)} className={item}>
+              <Github size={12} className="text-ink-600" /> {tr("instances.share")}
             </button>
           )}
           {onExport && (
