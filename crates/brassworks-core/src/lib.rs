@@ -15,6 +15,7 @@ pub mod auth;
 pub mod error;
 pub mod export;
 pub mod featured;
+pub mod github;
 pub mod image_cache;
 pub mod import;
 pub mod instance;
@@ -48,6 +49,143 @@ pub use modpack::{
 pub use packwiz::{FlavorChoice, FlavorGroup, PackwizBranch, SearchHit};
 pub use packwiz_share::{PackInstallMeta, PackwizShare};
 pub use paths::Paths;
+
+fn newest_mtime(dir: &std::path::Path) -> Option<std::time::SystemTime> {
+    let mut newest: Option<std::time::SystemTime> = None;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&p) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_dir() {
+                    stack.push(path);
+                } else if let Ok(modified) = meta.modified() {
+                    if newest.map(|n| modified > n).unwrap_or(true) {
+                        newest = Some(modified);
+                    }
+                }
+            }
+        }
+    }
+    newest
+}
+
+pub const SHARE_INSTALL_BASE: &str = "https://brassworks.opnsoc.org/install";
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ShareRepoInfo {
+    pub size_kb: u64,
+    pub pushed_at: Option<String>,
+    pub html_url: String,
+    pub default_branch: String,
+    pub private: bool,
+    pub stargazers: u64,
+    pub forks: u64,
+    pub file_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ShareDiffEntry {
+    pub path: String,
+    pub status: String,
+}
+
+fn install_link(s: &PackwizShare) -> Result<String> {
+    let mut url = reqwest::Url::parse(SHARE_INSTALL_BASE)
+        .map_err(|e| CoreError::Modpack(e.to_string()))?;
+    {
+        let mut q = url.query_pairs_mut();
+        q.append_pair("pack_url", &s.pack_url);
+        if let Some(n) = &s.name {
+            q.append_pair("name", n);
+        }
+        q.append_pair("unsup", if s.unsup { "true" } else { "false" });
+        if let Some(by) = &s.shared_by {
+            q.append_pair("shared_by", by);
+        }
+        if let Some(k) = &s.signing_key {
+            q.append_pair("signing_key", k);
+        }
+        if let Some(i) = &s.icon {
+            q.append_pair("icon", i);
+        }
+        if let Some(d) = &s.description {
+            q.append_pair("description", d);
+        }
+        if let Some(n) = &s.news_url {
+            q.append_pair("news_url", n);
+        }
+        if let Some(p) = &s.playercount_url {
+            q.append_pair("playercount_url", p);
+        }
+        if let Some(m) = s.min_memory_mb {
+            q.append_pair("min_memory_mb", &m.to_string());
+        }
+        if let Some(m) = s.max_memory_mb {
+            q.append_pair("max_memory_mb", &m.to_string());
+        }
+        if let Some(args) = &s.jvm_args {
+            if !args.is_empty() {
+                q.append_pair("jvm_args", &args.join(" "));
+            }
+        }
+    }
+    Ok(url.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn share_readme(
+    instance: &instance::Instance,
+    repo_url: &str,
+    pack_url: &str,
+    branch: &str,
+    has_icon: bool,
+    shared_by: Option<&str>,
+    install_link: &str,
+) -> String {
+    let name = &instance.name;
+    let icon = if has_icon {
+        "<img src=\"./icon.png\" align=\"left\" width=\"96\" height=\"96\" alt=\"\" />\n\n"
+    } else {
+        ""
+    };
+    let loader = instance.loader.label();
+    let mc = &instance.minecraft_version;
+    let by_line = match shared_by {
+        Some(u) => format!("Put together and shared by **{u}**.\n\n"),
+        None => String::new(),
+    };
+    format!(
+        "{icon}# {name}\n\n\
+        A **{loader} {mc}** Minecraft modpack, shared with the \
+        [Brassworks Launcher](https://github.com/brassworks-smp).\n\n\
+        {by_line}\
+        <br clear=\"left\"/>\n\n\
+        ## Play this pack\n\n\
+        The quickest way is one click: open [this install link]({install_link}) and Brassworks \
+        sets everything up for you, then keeps it up to date on its own.\n\n\
+        Rather do it by hand? Install the \
+        [Brassworks Launcher](https://github.com/brassworks-smp), choose **Add Instance**, pick \
+        **packwiz**, and paste in this manifest URL:\n\n\
+        > {pack_url}\n\n\
+        ## About this pack\n\n\
+        | | |\n\
+        |---|---|\n\
+        | Minecraft | `{mc}` |\n\
+        | Loader | `{loader}` |\n\
+        | Shared by | {shared} |\n\
+        | Pack manifest | [`pack.toml`](./pack.toml) |\n\
+        | Branch | `{branch}` |\n\n\
+        ---\n\n\
+        This repository is kept up to date automatically by the Brassworks Launcher, so anything \
+        you change here by hand may be overwritten the next time the author publishes an update.\n\n\
+        [Browse the repository]({repo_url}) · [Get the Brassworks Launcher](https://github.com/brassworks-smp)\n",
+        shared = shared_by.unwrap_or("the pack author"),
+    )
+}
 pub use ping::ServerStatus;
 pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
 pub use stars::StarKind;
@@ -80,19 +218,26 @@ use portablemc::msa::{self, Auth};
 #[derive(Debug, Clone)]
 pub struct Launcher {
     paths: Paths,
+    session_github_token: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl Launcher {
     pub fn new() -> Result<Self> {
         let paths = Paths::default()?;
         paths.ensure_base()?;
-        Ok(Self { paths })
+        Ok(Self {
+            paths,
+            session_github_token: Default::default(),
+        })
     }
 
     pub fn with_root(root: impl Into<std::path::PathBuf>) -> Result<Self> {
         let paths = Paths::with_root(root);
         paths.ensure_base()?;
-        Ok(Self { paths })
+        Ok(Self {
+            paths,
+            session_github_token: Default::default(),
+        })
     }
 
     pub fn paths(&self) -> &Paths {
@@ -412,6 +557,12 @@ impl Launcher {
         };
         let display = mgr.unique_name(&base);
         let id = mgr.unique_id(&display);
+        let loader_version = match loader_version {
+            LoaderVersion::Stable => versions::latest_stable_version(loader, minecraft_version)
+                .map(LoaderVersion::Exact)
+                .unwrap_or(LoaderVersion::Stable),
+            other => other,
+        };
         let inst = Instance::new_custom(
             &id,
             display,
@@ -579,6 +730,7 @@ impl Launcher {
         }
         inst.banner = clean(meta.banner);
         inst.notes = clean(meta.description);
+        inst.shared_by = clean(meta.shared_by);
         inst.news_url = clean(meta.news_url);
         inst.playercount_url = clean(meta.playercount_url);
         inst.show_news = inst.news_url.is_some();
@@ -591,7 +743,28 @@ impl Launcher {
                 inst.extra_jvm_args = args;
             }
         }
-        mgr.create(inst)
+        let created = mgr.create(inst)?;
+        self.copy_shared_export_config(&created.id, url);
+        Ok(created)
+    }
+
+    fn copy_shared_export_config(&self, instance_id: &str, pack_url: &str) {
+        if !pack_url.starts_with("http") {
+            return;
+        }
+        let Some((base, _)) = pack_url.rsplit_once('/') else {
+            return;
+        };
+        let cfg_url = format!("{base}/brassworks.share.json");
+        let Ok(text) = github::fetch_text(&cfg_url) else {
+            return;
+        };
+        let Ok(mut cfg) = serde_json::from_str::<export::ExportConfig>(&text) else {
+            return;
+        };
+        cfg.id = String::new();
+        cfg.created_at = 0;
+        let _ = self.save_export_config(instance_id, cfg);
     }
 
     pub fn extract_packwiz_pack(&self, path: &str) -> Result<String> {
@@ -1576,6 +1749,568 @@ impl Launcher {
         )
     }
 
+    pub fn github_login(&self, token: &str) -> Result<String> {
+        Ok(github::verify_token(token)?.login)
+    }
+
+    fn clean_token(token: Option<String>) -> Option<String> {
+        token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+    }
+
+    fn session_github_token(&self) -> Option<String> {
+        self.session_github_token.lock().ok().and_then(|g| g.clone())
+    }
+
+    pub fn github_token(&self) -> Result<Option<String>> {
+        if let Some(t) = self.session_github_token() {
+            return Ok(Some(t));
+        }
+        Ok(Self::clean_token(self.settings()?.github_token))
+    }
+
+    pub fn github_token_remembered(&self) -> Result<bool> {
+        Ok(Self::clean_token(self.settings()?.github_token).is_some())
+    }
+
+    pub fn set_github_token(&self, token: Option<String>) -> Result<()> {
+        let mut s = self.settings()?;
+        s.github_token = Self::clean_token(token);
+        self.save_settings(&s)
+    }
+
+    fn set_session_github_token(&self, token: Option<String>) {
+        if let Ok(mut g) = self.session_github_token.lock() {
+            *g = Self::clean_token(token);
+        }
+    }
+
+    pub fn save_github_token(&self, token: &str, remember: bool) -> Result<()> {
+        if remember {
+            self.set_github_token(Some(token.to_string()))?;
+            self.set_session_github_token(None);
+        } else {
+            self.set_session_github_token(Some(token.to_string()));
+        }
+        Ok(())
+    }
+
+    pub fn clear_github_token(&self) -> Result<()> {
+        self.set_session_github_token(None);
+        self.set_github_token(None)
+    }
+
+    fn require_github_token(&self) -> Result<String> {
+        self.github_token()?
+            .ok_or_else(|| CoreError::Auth("connect a GitHub account first".to_string()))
+    }
+
+    fn ensure_share_config(&self, instance: &instance::Instance) -> Result<export::ExportConfig> {
+        let configs = export::load_configs(&self.paths, &instance.id);
+        if let Some(share) = &instance.share {
+            if let Some(c) = configs.iter().find(|c| c.id == share.config_id) {
+                return Ok(c.clone());
+            }
+        }
+        if let Some(c) = configs
+            .iter()
+            .find(|c| matches!(c.format, export::ExportFormat::Packwiz))
+        {
+            return Ok(c.clone());
+        }
+        let selection = self.modpack_for(&instance.id).full_selection()?;
+        let cfg = export::ExportConfig {
+            id: String::new(),
+            name: format!("{} (shared)", instance.name),
+            format: export::ExportFormat::Packwiz,
+            pack_name: instance.name.clone(),
+            author: String::new(),
+            version: "1.0.0".to_string(),
+            selection,
+            created_at: 0,
+            unsup: false,
+            sign: false,
+            sign_format: String::new(),
+        };
+        self.save_export_config(&instance.id, cfg)
+    }
+
+    fn build_publish_files(
+        &self,
+        instance: &instance::Instance,
+        config: &export::ExportConfig,
+    ) -> Result<modpack::PackBuildOutput> {
+        let meta = export::ExportMeta {
+            name: if config.pack_name.is_empty() {
+                instance.name.clone()
+            } else {
+                config.pack_name.clone()
+            },
+            author: config.author.clone(),
+            version: if config.version.is_empty() {
+                "1.0.0".to_string()
+            } else {
+                config.version.clone()
+            },
+            mc_version: instance.minecraft_version.clone(),
+            loader: instance.loader.as_str().to_string(),
+            loader_version: self.export_meta_for(instance).0.loader_version,
+        };
+        let sign_format = if config.sign_format.is_empty() {
+            "signify"
+        } else {
+            &config.sign_format
+        };
+        let opts = self.build_export_opts(&instance.id, config.unsup, config.sign, sign_format);
+        let icon = self.resolve_export_icon(instance);
+        self.modpack_for(&instance.id)
+            .export_packwiz_files(&meta, &config.selection, icon, &opts)
+    }
+
+    pub fn publish_pack(
+        &self,
+        instance_id: &str,
+        config_id: &str,
+        confirm_embedded: bool,
+        progress: &mut dyn FnMut(github::PushProgress),
+        cancel: &(dyn Fn() -> bool + Sync),
+    ) -> Result<instance::PublishResult> {
+        let token = self.require_github_token()?;
+        let user = github::verify_token(&token)?;
+        let mut instance = self.instances().get(instance_id)?;
+        if instance.modpack_locked {
+            return Err(CoreError::Modpack(
+                "this modpack is locked — unlock it to share".to_string(),
+            ));
+        }
+        let config = if config_id.trim().is_empty() {
+            self.ensure_share_config(&instance)?
+        } else {
+            export::load_configs(&self.paths, instance_id)
+                .into_iter()
+                .find(|c| c.id == config_id)
+                .ok_or_else(|| CoreError::Modpack("share config not found".to_string()))?
+        };
+        let mut out = self.build_publish_files(&instance, &config)?;
+
+        if !confirm_embedded && !out.embedded.is_empty() {
+            return Ok(instance::PublishResult {
+                needs_confirm: true,
+                embedded: out.embedded,
+                share: None,
+            });
+        }
+
+        let first_time = instance.share.is_none();
+        let created_at = instance
+            .share
+            .as_ref()
+            .map(|s| s.created_at)
+            .unwrap_or_else(chrono::Utc::now);
+        let (owner, repo_name, repo_url, branch) = match &instance.share {
+            Some(s) => (
+                s.repo_owner.clone(),
+                s.repo_name.clone(),
+                s.repo_url.clone(),
+                s.branch.clone(),
+            ),
+            None => {
+                let name = github::unique_repo_name(&token, &user.login, &instance.name)?;
+                let desc = format!("{} — a modpack shared via Brassworks Launcher", instance.name);
+                let repo = github::create_repo(&token, &name, &desc)?;
+                (repo.owner.login, repo.name, repo.html_url, repo.default_branch)
+            }
+        };
+        let pack_url = github::raw_url(&owner, &repo_name, &branch, "pack.toml");
+        let existing_params = instance
+            .share
+            .as_ref()
+            .map(|s| s.params.clone())
+            .unwrap_or_default();
+
+        let base_share = |incomplete: bool| instance::PackShare {
+            repo_owner: owner.clone(),
+            repo_name: repo_name.clone(),
+            repo_url: repo_url.clone(),
+            branch: branch.clone(),
+            pack_url: pack_url.clone(),
+            config_id: config.id.clone(),
+            created_at,
+            last_published: None,
+            published_version: None,
+            published_index_hash: None,
+            incomplete,
+            params: existing_params.clone(),
+        };
+
+        if first_time {
+            instance.share = Some(base_share(true));
+            self.instances().update(&instance)?;
+        }
+
+        let icon = self.resolve_export_icon(&instance);
+        let descriptor = self.pack_share_descriptor(&instance, &pack_url, Some(&config));
+        let install_url = install_link(&descriptor).unwrap_or_default();
+        let readme = share_readme(
+            &instance,
+            &repo_url,
+            &pack_url,
+            &branch,
+            icon.is_some(),
+            descriptor.shared_by.as_deref(),
+            &install_url,
+        );
+        out.files.push(("README.md".to_string(), readme.into_bytes()));
+        if let Ok(cfg_json) = serde_json::to_vec_pretty(&config) {
+            out.files.push(("brassworks.share.json".to_string(), cfg_json));
+        }
+        if let Ok(packwiz_json) = serde_json::to_vec_pretty(&descriptor) {
+            let safe = export::sanitize_filename(&instance.name);
+            out.files.push((format!("{safe}.packwiz"), packwiz_json));
+        }
+        out.files
+            .push(("SHARE-LINK.txt".to_string(), install_url.into_bytes()));
+
+        let message = if first_time {
+            format!("share {}", instance.name)
+        } else {
+            format!("update {}", instance.name)
+        };
+        let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
+        match github::push_files(
+            &token,
+            &owner,
+            &repo_name,
+            &branch,
+            &out.files,
+            &message,
+            &work_dir,
+            progress,
+            cancel,
+        ) {
+            Ok(_) => {
+                let share = instance::PackShare {
+                    last_published: Some(chrono::Utc::now()),
+                    published_version: Some(out.version),
+                    published_index_hash: Some(out.index_hash),
+                    incomplete: false,
+                    ..base_share(false)
+                };
+                instance.share = Some(share.clone());
+                self.instances().update(&instance)?;
+                Ok(instance::PublishResult {
+                    needs_confirm: false,
+                    embedded: Vec::new(),
+                    share: Some(share),
+                })
+            }
+            Err(e) if e.is_cancelled() => {
+                Ok(instance::PublishResult {
+                    needs_confirm: false,
+                    embedded: Vec::new(),
+                    share: self.instances().get(instance_id)?.share,
+                })
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn relink_share(
+        &self,
+        instance_id: &str,
+        repo_url: &str,
+    ) -> Result<instance::PackShare> {
+        let token = self.require_github_token()?;
+        let mut instance = self.instances().get(instance_id)?;
+        if instance.modpack_locked {
+            return Err(CoreError::Modpack(
+                "this modpack is locked — unlock it to share".to_string(),
+            ));
+        }
+        let (owner, repo) = github::parse_repo_url(repo_url)
+            .ok_or_else(|| CoreError::Modpack("not a valid GitHub repository URL".to_string()))?;
+        let branch =
+            github::repo_default_branch(&token, &owner, &repo).unwrap_or_else(|_| "main".to_string());
+        let cfg_url = github::raw_url(&owner, &repo, &branch, "brassworks.share.json");
+        let text = github::fetch_text(&cfg_url).map_err(|_| {
+            CoreError::Modpack(
+                "this repository wasn't shared from Brassworks (no share config found)".to_string(),
+            )
+        })?;
+        let mut cfg: export::ExportConfig =
+            serde_json::from_str(&text).map_err(|e| CoreError::serde("share config", e))?;
+        cfg.id = String::new();
+        let saved = self.save_export_config(instance_id, cfg)?;
+        let share = instance::PackShare {
+            repo_owner: owner.clone(),
+            repo_name: repo.clone(),
+            repo_url: format!("https://github.com/{owner}/{repo}"),
+            branch: branch.clone(),
+            pack_url: github::raw_url(&owner, &repo, &branch, "pack.toml"),
+            config_id: saved.id,
+            created_at: chrono::Utc::now(),
+            last_published: None,
+            published_version: None,
+            published_index_hash: None,
+            incomplete: false,
+            params: instance::SharePackParams::default(),
+        };
+        instance.share = Some(share.clone());
+        self.instances().update(&instance)?;
+        Ok(share)
+    }
+
+    pub fn sync_from_shared(
+        &self,
+        instance_id: &str,
+        cancel: &dyn Fn() -> bool,
+        on_progress: &mut ProgressSink,
+    ) -> Result<()> {
+        let instance = self.instances().get(instance_id)?;
+        let share = instance
+            .share
+            .clone()
+            .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let config = export::load_configs(&self.paths, instance_id)
+            .into_iter()
+            .find(|c| c.id == share.config_id);
+        let unsup = config.as_ref().map(|c| c.unsup).unwrap_or(false);
+        let public_key = if unsup && config.as_ref().map(|c| c.sign).unwrap_or(false) {
+            let fmt = config
+                .as_ref()
+                .map(|c| c.sign_format.clone())
+                .unwrap_or_default();
+            let fmt = if fmt.is_empty() { "signify" } else { &fmt };
+            Some(self.unsup_public_key(instance_id, fmt))
+        } else {
+            None
+        };
+        self.modpack_for(instance_id)
+            .with_pack(share.pack_url.clone(), unsup, public_key)
+            .sync(true, cancel, &mut Self::modpack_sink(instance_id, on_progress))?;
+        Ok(())
+    }
+
+    pub fn share_pending_changes(&self, instance_id: &str) -> Result<bool> {
+        let instance = self.instances().get(instance_id)?;
+        let Some(share) = &instance.share else {
+            return Ok(false);
+        };
+        let Some(published) = share.last_published else {
+            return Ok(true);
+        };
+        let game = self.paths.instance_game_dir(instance_id);
+        let newest = ["mods", "config", "defaultconfigs", "kubejs", "scripts"]
+            .iter()
+            .filter_map(|d| newest_mtime(&game.join(d)))
+            .max();
+        let published = std::time::SystemTime::from(published);
+        Ok(newest.map(|t| t > published).unwrap_or(false))
+    }
+
+    fn active_mc_username(&self) -> Option<String> {
+        self.accounts()
+            .ok()
+            .and_then(|s| s.active().map(|a| a.username.clone()))
+            .filter(|u| !u.trim().is_empty())
+    }
+
+    fn pack_share_descriptor(
+        &self,
+        instance: &instance::Instance,
+        pack_url: &str,
+        config: Option<&export::ExportConfig>,
+    ) -> PackwizShare {
+        let unsup = config.map(|c| c.unsup).unwrap_or(false);
+        let signing_key = if unsup && config.map(|c| c.sign).unwrap_or(false) {
+            let fmt = config.map(|c| c.sign_format.clone()).unwrap_or_default();
+            let fmt = if fmt.is_empty() { "signify" } else { &fmt };
+            Some(self.unsup_public_key(&instance.id, fmt))
+        } else {
+            None
+        };
+        let has_icon = instance
+            .icon
+            .as_deref()
+            .map(|i| !i.is_empty() && !i.starts_with("builtin:"))
+            .unwrap_or(false);
+        let icon = if has_icon {
+            pack_url
+                .rsplit_once('/')
+                .map(|(base, _)| format!("{base}/icon.png"))
+        } else {
+            None
+        };
+        let p = instance.share.as_ref().map(|s| s.params.clone()).unwrap_or_default();
+        PackwizShare {
+            pack_url: pack_url.to_string(),
+            name: Some(instance.name.clone()),
+            description: p.description.filter(|d| !d.trim().is_empty()),
+            unsup,
+            shared_by: self.active_mc_username(),
+            icon,
+            signing_key,
+            news_url: p.news_url.filter(|u| !u.trim().is_empty()),
+            playercount_url: p.playercount_url.filter(|u| !u.trim().is_empty()),
+            min_memory_mb: p.min_memory_mb,
+            max_memory_mb: p.max_memory_mb,
+            jvm_args: (!p.jvm_args.is_empty()).then_some(p.jvm_args),
+            ..Default::default()
+        }
+    }
+
+    fn build_pack_share(&self, instance: &instance::Instance) -> Result<PackwizShare> {
+        let share = instance
+            .share
+            .as_ref()
+            .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let config = export::load_configs(&self.paths, &instance.id)
+            .into_iter()
+            .find(|c| c.id == share.config_id);
+        Ok(self.pack_share_descriptor(instance, &share.pack_url, config.as_ref()))
+    }
+
+    pub fn share_link(&self, instance_id: &str) -> Result<String> {
+        let instance = self.instances().get(instance_id)?;
+        let s = self.build_pack_share(&instance)?;
+        install_link(&s)
+    }
+
+    pub fn write_share_file(&self, instance_id: &str) -> Result<String> {
+        let instance = self.instances().get(instance_id)?;
+        let s = self.build_pack_share(&instance)?;
+        let json =
+            serde_json::to_vec_pretty(&s).map_err(|e| CoreError::serde("packwiz share", e))?;
+        let safe = export::sanitize_filename(&instance.name);
+        let dir = dirs::download_dir().unwrap_or_else(|| self.paths.root().to_path_buf());
+        let mut dest = dir.join(format!("{safe}.packwiz"));
+        let mut n = 1;
+        while dest.exists() {
+            dest = dir.join(format!("{safe} ({n}).packwiz"));
+            n += 1;
+        }
+        std::fs::write(&dest, json).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().into_owned())
+    }
+
+    pub fn disconnect_share(&self, instance_id: &str) -> Result<()> {
+        let mut instance = self.instances().get(instance_id)?;
+        if let Some(share) = instance.share.take() {
+            let _ = export::delete_config(&self.paths, instance_id, &share.config_id);
+        }
+        let _ = std::fs::remove_dir_all(self.paths.instance_dir(instance_id).join("share-repo"));
+        self.instances().update(&instance)
+    }
+
+    pub fn share_params(&self, instance_id: &str) -> Result<instance::SharePackParams> {
+        Ok(self
+            .instances()
+            .get(instance_id)?
+            .share
+            .map(|s| s.params)
+            .unwrap_or_default())
+    }
+
+    pub fn set_share_params(
+        &self,
+        instance_id: &str,
+        params: instance::SharePackParams,
+    ) -> Result<()> {
+        let mut instance = self.instances().get(instance_id)?;
+        if let Some(share) = instance.share.as_mut() {
+            share.params = params;
+            self.instances().update(&instance)?;
+        }
+        Ok(())
+    }
+
+    pub fn share_repo_info(&self, instance_id: &str) -> Result<ShareRepoInfo> {
+        let token = self.require_github_token()?;
+        let instance = self.instances().get(instance_id)?;
+        let share = instance
+            .share
+            .as_ref()
+            .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let stats = github::repo_stats(&token, &share.repo_owner, &share.repo_name)?;
+        let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
+        Ok(ShareRepoInfo {
+            size_kb: stats.size_kb,
+            pushed_at: stats.pushed_at,
+            html_url: stats.html_url,
+            default_branch: stats.default_branch,
+            private: stats.private,
+            stargazers: stats.stargazers,
+            forks: stats.forks,
+            file_count: github::local_head_file_count(&work_dir),
+        })
+    }
+
+    pub fn share_diff(&self, instance_id: &str) -> Result<Vec<ShareDiffEntry>> {
+        let token = self.require_github_token()?;
+        let instance = self.instances().get(instance_id)?;
+        let share = instance
+            .share
+            .clone()
+            .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
+        let config = export::load_configs(&self.paths, instance_id)
+            .into_iter()
+            .find(|c| c.id == share.config_id)
+            .ok_or_else(|| CoreError::Modpack("share config not found".to_string()))?;
+
+        let is_meta = |p: &str| {
+            p == "README.md"
+                || p == "brassworks.share.json"
+                || p == "SHARE-LINK.txt"
+                || p.ends_with(".packwiz")
+        };
+
+        let out = self.build_publish_files(&instance, &config)?;
+        let mut current: std::collections::HashMap<String, String> = out
+            .files
+            .iter()
+            .filter(|(p, _)| !is_meta(p))
+            .map(|(p, b)| (p.clone(), packwiz::sha256_hex(b)))
+            .collect();
+
+        let work_dir = self.paths.instance_dir(instance_id).join("share-repo");
+        let repo = github::open_synced(
+            &token,
+            &share.repo_owner,
+            &share.repo_name,
+            &share.branch,
+            &work_dir,
+        )?;
+        let published: std::collections::HashMap<String, String> = github::head_file_hashes(&repo)?
+            .into_iter()
+            .filter(|(p, _)| !is_meta(p))
+            .collect();
+
+        let mut entries = Vec::new();
+        for (path, hash) in &current {
+            match published.get(path) {
+                None => entries.push(ShareDiffEntry {
+                    path: path.clone(),
+                    status: "added".to_string(),
+                }),
+                Some(ph) if ph != hash => entries.push(ShareDiffEntry {
+                    path: path.clone(),
+                    status: "modified".to_string(),
+                }),
+                _ => {}
+            }
+        }
+        for path in published.keys() {
+            if !current.contains_key(path) {
+                entries.push(ShareDiffEntry {
+                    path: path.clone(),
+                    status: "removed".to_string(),
+                });
+            }
+        }
+        current.clear();
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(entries)
+    }
+
 
     pub fn list_worlds(&self, instance_id: &str) -> Vec<WorldInfo> {
         let stars = stars::load(&self.paths, instance_id);
@@ -1920,14 +2655,21 @@ fn extract_packwiz_zip(bytes: &[u8], dest: &std::path::Path) -> Result<String> {
 }
 
 fn loader_from_pack(pack: &packwiz::Pack) -> (LoaderKind, LoaderVersion) {
+    let ver = |v: &String| {
+        if v.trim().is_empty() {
+            LoaderVersion::Stable
+        } else {
+            LoaderVersion::Exact(v.clone())
+        }
+    };
     if let Some(v) = &pack.versions.neoforge {
-        (LoaderKind::NeoForge, LoaderVersion::Exact(v.clone()))
+        (LoaderKind::NeoForge, ver(v))
     } else if let Some(v) = &pack.versions.forge {
-        (LoaderKind::Forge, LoaderVersion::Exact(v.clone()))
+        (LoaderKind::Forge, ver(v))
     } else if let Some(v) = &pack.versions.fabric {
-        (LoaderKind::Fabric, LoaderVersion::Exact(v.clone()))
+        (LoaderKind::Fabric, ver(v))
     } else if let Some(v) = &pack.versions.quilt {
-        (LoaderKind::Quilt, LoaderVersion::Exact(v.clone()))
+        (LoaderKind::Quilt, ver(v))
     } else {
         (LoaderKind::Vanilla, LoaderVersion::Stable)
     }
@@ -2022,6 +2764,71 @@ fn unique_folder_id(settings: &LauncherSettings, name: &str) -> String {
         n += 1;
     }
     id
+}
+
+#[cfg(test)]
+mod share_link_tests {
+    use super::{install_link, share_readme, PackwizShare};
+
+    #[test]
+    fn install_link_carries_query() {
+        let share = PackwizShare {
+            pack_url: "https://raw.githubusercontent.com/swzo/my-pack/main/pack.toml".to_string(),
+            name: Some("My SMP".to_string()),
+            unsup: true,
+            signing_key: Some("signify ABC123".to_string()),
+            description: Some("A cozy pack".to_string()),
+            min_memory_mb: Some(2048),
+            max_memory_mb: Some(6144),
+            jvm_args: Some(vec!["-XX:+UseG1GC".to_string(), "-Dfoo=bar".to_string()]),
+            news_url: Some("https://example.com/news.json".to_string()),
+            ..Default::default()
+        };
+        let link = install_link(&share).unwrap();
+        assert!(link.starts_with("https://brassworks.opnsoc.org/install?"));
+        assert!(link.contains("pack_url=https%3A%2F%2Fraw.githubusercontent.com"));
+        assert!(link.contains("name=My+SMP"));
+        assert!(link.contains("unsup=true"));
+        assert!(link.contains("signing_key=signify+ABC123"));
+
+        let url = reqwest::Url::parse(&link).unwrap();
+        let parsed = PackwizShare::from_query_pairs(url.query_pairs()).unwrap();
+        assert_eq!(parsed.pack_url, share.pack_url);
+        assert!(parsed.unsup);
+        assert_eq!(parsed.signing_key.as_deref(), Some("signify ABC123"));
+        assert_eq!(parsed.description.as_deref(), Some("A cozy pack"));
+        assert_eq!(parsed.min_memory_mb, Some(2048));
+        assert_eq!(parsed.max_memory_mb, Some(6144));
+        assert_eq!(parsed.jvm_args.as_deref().map(|a| a.len()), Some(2));
+        assert_eq!(parsed.news_url.as_deref(), Some("https://example.com/news.json"));
+    }
+
+    #[test]
+    fn readme_mentions_pack_url() {
+        use crate::instance::{Instance, LoaderKind, LoaderVersion, PackSource};
+        let inst = Instance::new_custom(
+            "id",
+            "My SMP",
+            "1.21.1",
+            LoaderKind::Fabric,
+            LoaderVersion::Stable,
+            PackSource::None,
+        );
+        let r = share_readme(
+            &inst,
+            "https://github.com/swzo/my-pack",
+            "https://x/pack.toml",
+            "main",
+            true,
+            Some("Steve"),
+            "https://brassworks.opnsoc.org/install?pack_url=x",
+        );
+        assert!(r.contains("My SMP"));
+        assert!(r.contains("https://x/pack.toml"));
+        assert!(r.contains("icon.png"));
+        assert!(r.contains("Steve"));
+        assert!(r.contains("install?pack_url=x"));
+    }
 }
 
 #[cfg(test)]
