@@ -191,6 +191,59 @@ pub struct Instance {
     pub account_override: Option<String>,
     #[serde(default)]
     pub auto_join: Option<crate::launch::QuickPlay>,
+    #[serde(default)]
+    pub share: Option<PackShare>,
+    #[serde(default)]
+    pub shared_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackShare {
+    pub repo_owner: String,
+    pub repo_name: String,
+    pub repo_url: String,
+    #[serde(default = "default_main")]
+    pub branch: String,
+    pub pack_url: String,
+    pub config_id: String,
+    pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub last_published: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub published_version: Option<String>,
+    #[serde(default)]
+    pub published_index_hash: Option<String>,
+    #[serde(default)]
+    pub incomplete: bool,
+    #[serde(default)]
+    pub params: SharePackParams,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SharePackParams {
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub min_memory_mb: Option<u32>,
+    #[serde(default)]
+    pub max_memory_mb: Option<u32>,
+    #[serde(default)]
+    pub jvm_args: Vec<String>,
+    #[serde(default)]
+    pub news_url: Option<String>,
+    #[serde(default)]
+    pub playercount_url: Option<String>,
+}
+
+fn default_main() -> String {
+    "main".to_string()
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublishResult {
+    pub needs_confirm: bool,
+    pub embedded: Vec<String>,
+    pub share: Option<PackShare>,
 }
 
 impl Instance {
@@ -235,6 +288,8 @@ impl Instance {
                                     pinned_settings: vec!["open_settings".to_string()],
             account_override: None,
             auto_join: None,
+            share: None,
+            shared_by: None,
         }
     }
 
@@ -289,6 +344,8 @@ impl Instance {
             pinned_settings,
             account_override: None,
             auto_join: None,
+            share: None,
+            shared_by: None,
         }
     }
 
