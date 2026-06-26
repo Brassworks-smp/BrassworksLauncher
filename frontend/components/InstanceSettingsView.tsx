@@ -25,6 +25,8 @@ import {
   Pin,
   UserRound,
   Play,
+  Pencil,
+  Plus,
 } from "lucide-react";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
 import { useT } from "@/lib/i18n";
@@ -39,7 +41,11 @@ import {
   BrandingImage,
 } from "@/lib/instanceIcons";
 import { VersionList } from "@/components/VersionList";
-import { ExportModal } from "@/components/ExportModal";
+import {
+  ExportModal,
+  FORMAT_COLOR,
+  FORMAT_LABEL,
+} from "@/components/ExportModal";
 import { VersionPicker, type LoaderStatus } from "@/components/VersionPicker";
 import { useSupportedLoaders } from "@/lib/useSupportedLoaders";
 import { FlavorPicker } from "@/components/FlavorPicker";
@@ -1233,6 +1239,7 @@ function DeleteButton({
 function ExportCard({ instance }: { instance: Instance }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [configs, setConfigs] = useState<ExportConfig[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -1245,6 +1252,16 @@ function ExportCard({ instance }: { instance: Instance }) {
   useEffect(() => {
     reload();
   }, [instance.id]);
+
+  const openNew = () => {
+    setEditId(null);
+    setOpen(true);
+  };
+
+  const openEdit = (cfg: ExportConfig) => {
+    setEditId(cfg.id);
+    setOpen(true);
+  };
 
   const rerun = (cfg: ExportConfig) => {
     setBusy(cfg.id);
@@ -1285,35 +1302,50 @@ function ExportCard({ instance }: { instance: Instance }) {
             {configs.map((cfg) => (
               <div
                 key={cfg.id}
-                className="group flex items-center gap-2 rounded-lg border border-edge bg-ink-950/40 px-3 py-2 text-sm"
+                onClick={() => openEdit(cfg)}
+                title={t("instanceSettings.export.editConfig")}
+                className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-edge bg-ink-950/40 px-3 py-2 text-sm transition hover:border-brass-600/40 hover:bg-ink-900/60"
               >
-                <Package size={14} className="shrink-0 text-brass-400" />
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: FORMAT_COLOR[cfg.format] }}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-gray-200">{cfg.name}</div>
                   <div className="truncate text-[11px] text-ink-600">
-                    {cfg.format} ·{" "}
+                    {FORMAT_LABEL[cfg.format]} ·{" "}
                     {t("instanceSettings.export.fileCount", {
                       count:
                         cfg.selection.mods.length + cfg.selection.files.length,
                     })}
                   </div>
                 </div>
+                <span className="hidden items-center gap-1 pr-1 text-[11px] text-brass-300 group-hover:flex">
+                  <Pencil size={11} />
+                  {t("instanceSettings.export.editConfig")}
+                </span>
                 <button
-                  onClick={() => rerun(cfg)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rerun(cfg);
+                  }}
                   disabled={busy === cfg.id}
-                  className="flex shrink-0 items-center gap-1 rounded-md border border-brass-600/40 px-2 py-1 text-xs text-brass-300 transition hover:bg-brass-600/10 disabled:opacity-50"
+                  title={t("instanceSettings.export.reexport")}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:opacity-50"
                 >
                   {busy === cfg.id ? (
-                    <Loader2 size={12} className="animate-spin" />
+                    <Loader2 size={13} className="animate-spin" />
                   ) : (
-                    <RefreshCw size={12} />
+                    <RefreshCw size={13} />
                   )}
-                  {t("instanceSettings.export.reexport")}
                 </button>
                 <button
-                  onClick={() => remove(cfg)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(cfg);
+                  }}
                   title={t("instanceSettings.export.deleteConfig")}
-                  className="shrink-0 text-ink-600 opacity-0 transition hover:text-red-300 group-hover:opacity-100"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-600 transition hover:text-red-300"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -1323,10 +1355,10 @@ function ExportCard({ instance }: { instance: Instance }) {
         )}
 
         <button
-          onClick={() => setOpen(true)}
+          onClick={openNew}
           className="flex items-center justify-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
         >
-          <Download size={15} />
+          <Plus size={15} />
           {t("instanceSettings.export.newExport")}
         </button>
       </Card>
@@ -1337,6 +1369,7 @@ function ExportCard({ instance }: { instance: Instance }) {
           mcVersion={instance.minecraft_version}
           loader={instance.loader.replace("_", "")}
           defaultName={instance.name}
+          initialConfigId={editId}
           onClose={() => {
             setOpen(false);
             reload();
