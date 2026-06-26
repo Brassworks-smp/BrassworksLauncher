@@ -384,7 +384,7 @@ export function AddInstanceModal({
   );
   const [packBranch, setPackBranch] = useState("");
   const [findingBranches, setFindingBranches] = useState(false);
-  const [packUnsup, setPackUnsup] = useState(false);
+  const [packUnsup, setPackUnsup] = useState(true);
   const [packPublicKey, setPackPublicKey] = useState("");
 
   const looksLikeRepo = (s: string) =>
