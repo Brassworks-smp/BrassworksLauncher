@@ -164,6 +164,9 @@ fn forge_version(spec: &LoaderVersion, mc_version: &str) -> ForgeVersion {
     match spec {
         LoaderVersion::Stable => ForgeVersion::Stable(mc_version.to_string()),
         LoaderVersion::Unstable => ForgeVersion::Unstable(mc_version.to_string()),
+        LoaderVersion::Exact(name) if name.trim().is_empty() => {
+            ForgeVersion::Stable(mc_version.to_string())
+        }
         LoaderVersion::Exact(name) => ForgeVersion::Name(name.clone()),
     }
 }
@@ -172,6 +175,7 @@ fn fabric_loader_version(spec: &LoaderVersion) -> fabric::LoaderVersion {
     match spec {
         LoaderVersion::Stable => fabric::LoaderVersion::Stable,
         LoaderVersion::Unstable => fabric::LoaderVersion::Unstable,
+        LoaderVersion::Exact(name) if name.trim().is_empty() => fabric::LoaderVersion::Stable,
         LoaderVersion::Exact(name) => fabric::LoaderVersion::Name(name.clone()),
     }
 }

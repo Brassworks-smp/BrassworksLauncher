@@ -75,6 +75,17 @@ pub fn loader_versions(loader: LoaderKind, mc: &str) -> Result<Vec<LoaderVersion
     }
 }
 
+pub fn latest_stable_version(loader: LoaderKind, mc: &str) -> Option<String> {
+    if matches!(loader, LoaderKind::Vanilla) {
+        return None;
+    }
+    let list = loader_versions(loader, mc).ok()?;
+    list.iter()
+        .find(|v| v.stable)
+        .or_else(|| list.first())
+        .map(|v| v.version.clone())
+}
+
 pub fn supported_loaders(mc: &str) -> Vec<String> {
     let mut out = vec!["vanilla".to_string()];
     for (name, kind) in [
