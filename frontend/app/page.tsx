@@ -1186,6 +1186,7 @@ export default function Home() {
               onStop={onStop}
               onCancel={onCancel}
               onSaveInstance={onSaveInstance}
+              onShareChanged={() => void refreshInstances()}
               onOpenSettings={() => {
                 if (selectedId) {
                   setGearId(selectedId);
@@ -1266,6 +1267,7 @@ export default function Home() {
               progress={gearProgress}
               onBack={() => setView("instances")}
               onSaveInstance={onSaveInstance}
+              onRefresh={() => void refreshInstances()}
               onDeleted={(id) => {
                 refreshInstances().then((list) => {
                   if (selectedId === id) {
