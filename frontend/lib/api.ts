@@ -35,6 +35,12 @@ import type {
   ExportMeta,
   ExportConfig,
   ExportFormat,
+  PublishResult,
+  PackShare,
+  PushProgress,
+  SharePackParams,
+  ShareRepoInfo,
+  ShareDiffEntry,
   NewsItem,
   PlayerCount,
   ProjectDetail,
@@ -253,6 +259,50 @@ export const runExportConfig = (
   instanceId: string,
   configId: string,
 ): Promise<string> => invoke("run_export_config", { instanceId, configId });
+export const githubConnect = (
+  token: string,
+  remember = true,
+): Promise<string> => invoke("github_connect", { token, remember });
+export const githubTokenPresent = (): Promise<boolean> =>
+  invoke("github_token_present", {});
+export const githubRemembered = (): Promise<boolean> =>
+  invoke("github_remembered", {});
+export const githubDisconnect = (): Promise<void> =>
+  invoke("github_disconnect", {});
+export const publishPack = (
+  instanceId: string,
+  configId: string,
+  confirmEmbedded = false,
+): Promise<PublishResult> =>
+  invoke("publish_pack", { instanceId, configId, confirmEmbedded });
+export const sharePendingChanges = (instanceId: string): Promise<boolean> =>
+  invoke("share_pending_changes", { instanceId });
+export const shareLink = (instanceId: string): Promise<string> =>
+  invoke("share_link", { instanceId });
+export const writeShareFile = (instanceId: string): Promise<string> =>
+  invoke("write_share_file", { instanceId });
+export const disconnectShare = (instanceId: string): Promise<void> =>
+  invoke("disconnect_share", { instanceId });
+export const relinkShare = (
+  instanceId: string,
+  repoUrl: string,
+): Promise<PackShare> => invoke("relink_share", { instanceId, repoUrl });
+export const syncFromShared = (instanceId: string): Promise<void> =>
+  invoke("sync_from_shared", { instanceId });
+export const onPublishProgress = (
+  cb: (p: PushProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<PushProgress>("publish://progress", (e) => cb(e.payload));
+export const shareParams = (instanceId: string): Promise<SharePackParams> =>
+  invoke("share_params", { instanceId });
+export const setShareParams = (
+  instanceId: string,
+  params: SharePackParams,
+): Promise<void> => invoke("set_share_params", { instanceId, params });
+export const shareRepoInfo = (instanceId: string): Promise<ShareRepoInfo> =>
+  invoke("share_repo_info", { instanceId });
+export const shareDiff = (instanceId: string): Promise<ShareDiffEntry[]> =>
+  invoke("share_diff", { instanceId });
 export const contentDetail = (
   instanceId: string,
   projectId: string,
@@ -450,6 +500,7 @@ export const createPackwizInstance = (
     minMemoryMb?: number | null;
     maxMemoryMb?: number | null;
     jvmArgs?: string[] | null;
+    sharedBy?: string | null;
   } = {},
 ): Promise<Instance> =>
   invoke("create_packwiz_instance", {
@@ -468,6 +519,7 @@ export const createPackwizInstance = (
       minMemoryMb: meta.minMemoryMb ?? null,
       maxMemoryMb: meta.maxMemoryMb ?? null,
       jvmArgs: meta.jvmArgs ?? null,
+      sharedBy: meta.sharedBy ?? null,
     },
   });
 
