@@ -91,13 +91,13 @@ export const FORMAT_LABEL: Record<ExportFormat, string> = {
 const inputCls =
   "w-full rounded-md bg-ink-950/70 px-3 py-2 text-sm outline-none ring-1 ring-edge transition focus:ring-brass-500/60";
 
-function categoryIcon(category: string) {
+export function categoryIcon(category: string) {
   if (category === "resourcepacks") return <ImageIcon size={16} />;
   if (category === "shaderpacks") return <Sparkles size={16} />;
   return <BoxIcon size={16} />;
 }
 
-function leafPaths(node: ExportNode, out: string[]) {
+export function leafPaths(node: ExportNode, out: string[]) {
   if (node.is_dir) {
     for (const c of node.children) leafPaths(c, out);
   } else {
@@ -105,14 +105,14 @@ function leafPaths(node: ExportNode, out: string[]) {
   }
 }
 
-function defaultLeaves(nodes: ExportNode[], out: string[]) {
+export function defaultLeaves(nodes: ExportNode[], out: string[]) {
   for (const n of nodes) {
     if (n.is_dir) defaultLeaves(n.children, out);
     else if (n.default_selected) out.push(n.rel_path);
   }
 }
 
-function dirState(
+export function dirState(
   node: ExportNode,
   selected: Set<string>,
 ): "all" | "some" | "none" {
@@ -125,13 +125,13 @@ function dirState(
   return "some";
 }
 
-function formatBytes(n: number): string {
+export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function slugify(name: string, fallback: string): string {
+export function slugify(name: string, fallback: string): string {
   const base = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
@@ -139,16 +139,16 @@ function slugify(name: string, fallback: string): string {
   return base || fallback;
 }
 
-function uniqueId(base: string, taken: Set<string>): string {
+export function uniqueId(base: string, taken: Set<string>): string {
   if (!taken.has(base)) return base;
   let n = 2;
   while (taken.has(`${base}_${n}`)) n += 1;
   return `${base}_${n}`;
 }
 
-type ChoiceRef = { groupId: string; groupName: string; choice: FlavorChoiceSpec };
+export type ChoiceRef = { groupId: string; groupName: string; choice: FlavorChoiceSpec };
 
-function allChoices(groups: FlavorGroupSpec[]): ChoiceRef[] {
+export function allChoices(groups: FlavorGroupSpec[]): ChoiceRef[] {
   const out: ChoiceRef[] = [];
   for (const g of groups)
     for (const c of g.choices)
@@ -1603,7 +1603,7 @@ function Labeled({
   );
 }
 
-function SearchBox({
+export function SearchBox({
   value,
   onChange,
   placeholder,
@@ -1628,7 +1628,7 @@ function SearchBox({
   );
 }
 
-function SmallBtn({
+export function SmallBtn({
   onClick,
   children,
 }: {
@@ -1645,7 +1645,7 @@ function SmallBtn({
   );
 }
 
-function CollapsibleSection({
+export function CollapsibleSection({
   open,
   onToggle,
   title,
@@ -1687,7 +1687,7 @@ function CollapsibleSection({
   );
 }
 
-function CheckBox({ state }: { state: "all" | "some" | "none" }) {
+export function CheckBox({ state }: { state: "all" | "some" | "none" }) {
   const on = state !== "none";
   return (
     <span
@@ -1705,7 +1705,7 @@ function CheckBox({ state }: { state: "all" | "some" | "none" }) {
   );
 }
 
-const ModRow = memo(function ModRow({
+export const ModRow = memo(function ModRow({
   mod,
   icon,
   checked,
@@ -1926,7 +1926,7 @@ type TreeRowProps = {
   onToggleDir: (n: ExportNode) => void;
 };
 
-const TreeRow = memo(
+export const TreeRow = memo(
   function TreeRow({
     node,
     depth,
@@ -2018,7 +2018,7 @@ const TreeRow = memo(
     )
       return false;
     if (a.node.is_dir) {
-      return dirState(a.node, a.selected) === dirState(b.node, b.selected);
+      return a.selected === b.selected;
     }
     return a.selected.has(a.node.rel_path) === b.selected.has(b.node.rel_path);
   },
@@ -2049,7 +2049,7 @@ function toPreviewHtml(text: string): string {
 const PREVIEW_CLS =
   "px-2.5 py-1.5 text-xs leading-snug text-gray-300 [&_h1]:text-sm [&_h1]:font-bold [&_h2]:text-[13px] [&_h2]:font-semibold [&_h3]:font-medium [&_b]:font-semibold [&_strong]:font-semibold [&_i]:italic [&_em]:italic [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-4";
 
-function RichDescription({
+export function RichDescription({
   value,
   onChange,
   placeholder,
@@ -2157,7 +2157,7 @@ function RichDescription({
   );
 }
 
-function ExpandableDescription({
+export function ExpandableDescription({
   value,
   onChange,
   placeholder,
@@ -2250,7 +2250,7 @@ function ExpandableDescription({
   );
 }
 
-function FlavorGroupsEditor({
+export function FlavorGroupsEditor({
   groups,
   onAddGroup,
   onUpdateGroup,
