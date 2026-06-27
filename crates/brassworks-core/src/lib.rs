@@ -241,6 +241,25 @@ fn share_readme(
     )
 }
 
+/// The version a local build should carry to match what is currently published.
+/// Using the published version (rather than the on-disk export config version,
+/// which the share editor keeps resetting) keeps `pack.toml` — and therefore the
+/// `unsup.sig` signed over it — byte-identical to the published copy, so an
+/// unchanged pack does not show up as a perpetual diff.
+fn shared_build_version(share: &instance::PackShare, config: &export::ExportConfig) -> String {
+    share
+        .published_version
+        .clone()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| {
+            if config.version.trim().is_empty() {
+                "1.0.0".to_string()
+            } else {
+                config.version.clone()
+            }
+        })
+}
+
 /// Bump a pack version by one patch level so the auto-updater treats a publish
 /// as a new release. Falls back to a sensible default for non-semver inputs.
 fn bump_pack_version(prev: &str) -> String {
@@ -2369,7 +2388,9 @@ impl Launcher {
             .into_iter()
             .find(|c| c.id == share.config_id);
         if let (Some(pub_sig), Some(config)) = (&share.published_signature, &config) {
-            let current = self.publish_signature(&instance, config, &share.params)?;
+            let mut config = config.clone();
+            config.version = shared_build_version(share, &config);
+            let current = self.publish_signature(&instance, &config, &share.params)?;
             return Ok(&current != pub_sig);
         }
         if share.params != share.published_params {
@@ -2559,10 +2580,11 @@ impl Launcher {
             .clone()
             .ok_or_else(|| CoreError::Modpack("this instance is not shared".to_string()))?;
         let token = self.require_forge_token(share.provider)?;
-        let config = export::load_configs(&self.paths, instance_id)
+        let mut config = export::load_configs(&self.paths, instance_id)
             .into_iter()
             .find(|c| c.id == share.config_id)
             .ok_or_else(|| CoreError::Modpack("share config not found".to_string()))?;
+        config.version = shared_build_version(&share, &config);
 
         let out = self.build_publish_files(&instance, &config)?;
         let mut current: std::collections::HashMap<String, String> = out
