@@ -296,6 +296,11 @@ export const shareLink = (instanceId: string): Promise<string> =>
   invoke("share_link", { instanceId });
 export const writeShareFile = (instanceId: string): Promise<string> =>
   invoke("write_share_file", { instanceId });
+export const writeExportFile = (
+  name: string,
+  ext: string,
+  contents: string,
+): Promise<string> => invoke("write_export_file", { name, ext, contents });
 export const disconnectShare = (instanceId: string): Promise<void> =>
   invoke("disconnect_share", { instanceId });
 export const relinkShare = (

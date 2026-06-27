@@ -90,6 +90,8 @@ pub struct ProjectDetail {
     pub icon_url: Option<String>,
     pub url: Option<String>,
     pub downloads: u64,
+    #[serde(default)]
+    pub author: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -665,6 +667,7 @@ impl<'a> Modpack<'a> {
                 icon_url: p.icon_url,
                 url: p.url,
                 downloads: p.downloads,
+                author: p.author,
             });
         }
         let installer = self.installer();
@@ -673,6 +676,7 @@ impl<'a> Modpack<'a> {
             .project(project_id)
             .ok_or_else(|| CoreError::Modpack("Project not found".to_string()))?;
         let slug = if p.slug.is_empty() { p.id.clone() } else { p.slug.clone() };
+        let author = modrinth.project_author(project_id).unwrap_or_default();
         Ok(ProjectDetail {
             id: p.id,
             title: p.title,
@@ -681,6 +685,7 @@ impl<'a> Modpack<'a> {
             icon_url: p.icon_url,
             url: Some(format!("https://modrinth.com/project/{slug}")),
             downloads: p.downloads,
+            author,
         })
     }
 

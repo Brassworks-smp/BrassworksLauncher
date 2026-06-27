@@ -588,6 +588,7 @@ pub fn run() {
             commands::share_pending_changes,
             commands::share_link,
             commands::write_share_file,
+            commands::write_export_file,
             commands::disconnect_share,
             commands::share_params,
             commands::set_share_params,

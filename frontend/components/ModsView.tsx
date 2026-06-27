@@ -18,6 +18,7 @@ import {
   ArrowUpCircle,
   Check,
   X,
+  FileDown,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -33,6 +34,7 @@ import type {
   SearchHit,
 } from "@/lib/types";
 import { AddContentModal, type ProjectType, type Source } from "./AddContentModal";
+import { ExportContentModal } from "./ExportContentModal";
 
 type CategoryId = "all" | "mods" | "resourcepacks" | "shaderpacks";
 
@@ -116,12 +118,14 @@ function ContentSkeleton() {
 
 export function ModsView({
   instanceId,
+  packName,
   mc,
   loader,
   locked,
   onToggleLock,
 }: {
   instanceId: string;
+  packName?: string;
   mc: string;
   loader: LoaderKind;
   locked: boolean;
@@ -145,6 +149,7 @@ export function ModsView({
     "all",
   );
   const [adding, setAdding] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState<SearchHit | null>(null);
   const [confirmUnlock, setConfirmUnlock] = useState(false);
   const [confirmUpdateAll, setConfirmUpdateAll] = useState(false);
@@ -466,6 +471,14 @@ export function ModsView({
             <Plus size={16} /> {t("mods.addContent")}
           </button>
           <button
+            onClick={() => setExporting(true)}
+            disabled={!mods || mods.length === 0}
+            title={t("exportContent.title")}
+            className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileDown size={15} /> {t("exportContent.export")}
+          </button>
+          <button
             onClick={() => openFolder("mods")}
             title={t("mods.openFolderTitle")}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
@@ -646,6 +659,15 @@ export function ModsView({
                 }
               : undefined
           }
+        />
+      )}
+
+      {exporting && mods && (
+        <ExportContentModal
+          packName={packName?.trim() || t("mods.title")}
+          instanceId={instanceId}
+          mods={mods}
+          onClose={() => setExporting(false)}
         />
       )}
 

@@ -1217,6 +1217,7 @@ export default function Home() {
           {view === "mods" && selectedId && (
             <ModsView
               instanceId={selectedId}
+              packName={instance?.name ?? ""}
               mc={instance?.minecraft_version ?? ""}
               loader={instance?.loader ?? "vanilla"}
               locked={locked}

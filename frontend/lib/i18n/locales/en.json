@@ -657,6 +657,20 @@
       "deletedToast": "Instance deleted"
     }
   },
+  "exportContent": {
+    "title": "Export content list",
+    "export": "Export",
+    "format": "Format",
+    "include": "Columns to include",
+    "colVersion": "Version",
+    "colFilename": "Filename",
+    "colAuthor": "Author",
+    "colUrl": "Project URL",
+    "embed": "Embed icons & descriptions",
+    "embedHint": "Lays the export out as cards with each project's icon and description (HTML & Markdown only).",
+    "countHint": "{count} installed item(s) will be exported to your Downloads folder.",
+    "savedToast": "Content list exported to your Downloads folder"
+  },
   "mods": {
     "title": "Content",
     "installed": "{count} installed",

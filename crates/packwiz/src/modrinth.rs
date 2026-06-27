@@ -21,6 +21,19 @@ pub struct ModrinthProject {
     pub downloads: u64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct TeamMember {
+    #[serde(default)]
+    role: String,
+    user: TeamUser,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct TeamUser {
+    #[serde(default)]
+    username: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
     pub project_id: String,
@@ -328,6 +341,27 @@ impl Modrinth {
         let project: ModrinthProject = resp.json().ok()?;
         self.write_cache(id, &project);
         Some(project)
+    }
+
+    /// Best-effort author (team owner) username for a project.
+    pub fn project_author(&self, id: &str) -> Option<String> {
+        let key = format!("author-{id}");
+        if let Some(a) = self.read_cache::<String>(&key) {
+            return Some(a);
+        }
+        let url = format!("https://api.modrinth.com/v2/project/{id}/members");
+        let resp = self.client.get(&url).send().ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let members: Vec<TeamMember> = resp.json().ok()?;
+        let owner = members
+            .iter()
+            .find(|m| m.role.eq_ignore_ascii_case("owner"))
+            .or_else(|| members.first())
+            .map(|m| m.user.username.clone())?;
+        self.write_cache(&key, &owner);
+        Some(owner)
     }
 
     pub fn version_changelog(&self, version_id: &str) -> Option<String> {

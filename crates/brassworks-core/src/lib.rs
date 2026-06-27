@@ -2483,6 +2483,22 @@ impl Launcher {
         Ok(dest.to_string_lossy().into_owned())
     }
 
+    /// Write an exported file to the user's Downloads folder, de-duplicating the
+    /// name if it already exists. Returns the full path written.
+    pub fn write_download_file(&self, stem: &str, ext: &str, contents: &[u8]) -> Result<String> {
+        let safe = export::sanitize_filename(stem);
+        let safe = if safe.is_empty() { "export".to_string() } else { safe };
+        let dir = dirs::download_dir().unwrap_or_else(|| self.paths.root().to_path_buf());
+        let mut dest = dir.join(format!("{safe}.{ext}"));
+        let mut n = 1;
+        while dest.exists() {
+            dest = dir.join(format!("{safe} ({n}).{ext}"));
+            n += 1;
+        }
+        std::fs::write(&dest, contents).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().into_owned())
+    }
+
     pub fn disconnect_share(&self, instance_id: &str) -> Result<()> {
         let mut instance = self.instances().get(instance_id)?;
         if let Some(share) = instance.share.take() {

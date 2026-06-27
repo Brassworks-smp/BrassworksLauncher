@@ -9,6 +9,7 @@
 * **Saved exports** - keep an export setup as a reusable config and re-export the same pack with a single click whenever it changes.
 * **Import packwiz packs from a file** - import a packwiz `.zip` from your computer, with the same optional and flavor pickers you get when installing from a URL.
 * **Right-click an instance** - a context menu gives you quick access to play, settings, the game folder, sharing, and more without opening the gear panel.
+* **Export your content list** - a one-click window turns an instance's installed mods, resource packs, and shaders into a shareable list in HTML, Markdown, plain text, CSV, or JSON. Pick which columns to include (version, filename, author, project URL), and for HTML and Markdown optionally embed each project's icon and description for a richer card-style layout.
 
 ### **Improvements:**
 * **Live server player counts** - the player-count URL now also accepts a Minecraft server address (like `play.example.com`, with an optional `:port`) and pings the server directly for its live player count, alongside the existing JSON endpoint support.

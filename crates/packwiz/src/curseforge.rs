@@ -91,6 +91,8 @@ pub struct CurseforgeProject {
     pub slug: String,
     pub url: Option<String>,
     pub downloads: u64,
+    #[serde(default)]
+    pub author: String,
 }
 
 pub struct Curseforge {
@@ -387,6 +389,12 @@ impl Curseforge {
             .map(|d| d.data)
             .unwrap_or_default();
         let m = mod_resp.data;
+        let author = m
+            .authors
+            .into_iter()
+            .next()
+            .map(|a| a.name)
+            .unwrap_or_default();
         let project = CurseforgeProject {
             id: m.id.to_string(),
             title: m.name,
@@ -399,6 +407,7 @@ impl Curseforge {
                 .filter(|u| !u.is_empty()),
             slug: m.slug,
             downloads: m.download_count as u64,
+            author,
         };
         self.write_cache(&cache_key, &project);
         Some(project)

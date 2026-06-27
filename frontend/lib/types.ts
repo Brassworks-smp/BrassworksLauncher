@@ -518,6 +518,7 @@ export interface ProjectDetail {
   icon_url: string | null;
   url: string | null;
   downloads: number;
+  author: string;
 }
 
 export interface ContentVersion {

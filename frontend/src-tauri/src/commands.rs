@@ -2285,6 +2285,23 @@ pub(crate) async fn write_share_file(
 }
 
 #[tauri::command]
+pub(crate) async fn write_export_file(
+    state: State<'_, AppState>,
+    name: String,
+    ext: String,
+    contents: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .write_download_file(&name, &ext, contents.as_bytes())
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn disconnect_share(
     state: State<'_, AppState>,
     instance_id: String,
