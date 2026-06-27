@@ -260,6 +260,24 @@ fn shared_build_version(share: &instance::PackShare, config: &export::ExportConf
         })
 }
 
+/// Pull the `version = "..."` value out of a `pack.toml` body.
+fn parse_pack_version(pack_toml: &str) -> Option<String> {
+    for line in pack_toml.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("version") else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let v = rest.trim().trim_matches('"').trim();
+        if !v.is_empty() {
+            return Some(v.to_string());
+        }
+    }
+    None
+}
+
 /// Bump a pack version by one patch level so the auto-updater treats a publish
 /// as a new release. Falls back to a sensible default for non-semver inputs.
 fn bump_pack_version(prev: &str) -> String {
@@ -2296,6 +2314,35 @@ impl Launcher {
         }
     }
 
+    /// Read the currently-published version + signature straight from the repo's
+    /// `pack.toml`, building the local files to match. Used when relinking or
+    /// after pulling so the local "last published" state matches what is live
+    /// (otherwise the next publish would regress the version and re-sign).
+    fn published_state_from_repo(
+        &self,
+        instance: &instance::Instance,
+        config: &export::ExportConfig,
+        pack_url: &str,
+        params: &instance::SharePackParams,
+    ) -> (Option<String>, Option<String>, Option<String>) {
+        let Some(version) = forge::fetch_text(pack_url)
+            .ok()
+            .and_then(|t| parse_pack_version(&t))
+        else {
+            return (None, None, None);
+        };
+        let mut cfg = config.clone();
+        cfg.version = version.clone();
+        match self.build_publish_files(instance, &cfg) {
+            Ok(out) => (
+                Some(version),
+                Some(files_signature(&out.files, params)),
+                Some(out.index_hash),
+            ),
+            Err(_) => (Some(version), None, None),
+        }
+    }
+
     pub fn relink_share(
         &self,
         instance_id: &str,
@@ -2330,18 +2377,24 @@ impl Launcher {
         config.id = String::new();
         let saved = self.save_export_config(instance_id, config)?;
         apply_shared_params(&mut instance, &params);
+        let pack_url = f.raw_url(&owner, &repo, &branch, "pack.toml");
+        // Pull the live version + signature so we continue the version sequence
+        // and don't immediately report the imported pack as out of sync.
+        let (published_version, published_signature, published_index_hash) =
+            self.published_state_from_repo(&instance, &saved, &pack_url, &params);
+        let last_published = published_version.as_ref().map(|_| chrono::Utc::now());
         let share = instance::PackShare {
             repo_owner: owner.clone(),
             repo_name: repo.clone(),
             repo_url: f.web_url(&owner, &repo),
             branch: branch.clone(),
-            pack_url: f.raw_url(&owner, &repo, &branch, "pack.toml"),
+            pack_url,
             config_id: saved.id,
             created_at: chrono::Utc::now(),
-            last_published: None,
-            published_version: None,
-            published_index_hash: None,
-            published_signature: None,
+            last_published,
+            published_version,
+            published_index_hash,
+            published_signature,
             incomplete: false,
             provider,
             published_params: params.clone(),
@@ -2380,6 +2433,25 @@ impl Launcher {
         self.modpack_for(instance_id)
             .with_pack(share.pack_url.clone(), unsup, public_key)
             .sync(true, cancel, &mut Self::modpack_sink(instance_id, on_progress))?;
+        // We just pulled the live pack, so our local copy now matches what is
+        // published — record that state so the next publish continues the
+        // version sequence instead of regressing and re-signing.
+        if let Some(config) = &config {
+            let mut instance = self.instances().get(instance_id)?;
+            if let Some(mut share) = instance.share.clone() {
+                let (version, signature, index_hash) =
+                    self.published_state_from_repo(&instance, config, &share.pack_url, &share.params);
+                if version.is_some() {
+                    share.published_version = version;
+                    share.published_signature = signature;
+                    share.published_index_hash = index_hash;
+                    share.last_published = Some(chrono::Utc::now());
+                    share.published_params = share.params.clone();
+                    instance.share = Some(share);
+                    self.instances().update(&instance)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -3131,7 +3203,22 @@ fn unique_folder_id(settings: &LauncherSettings, name: &str) -> String {
 
 #[cfg(test)]
 mod share_link_tests {
-    use super::{install_link, share_readme, PackwizShare};
+    use super::{bump_pack_version, install_link, parse_pack_version, share_readme, PackwizShare};
+
+    #[test]
+    fn parse_pack_version_reads_top_level_version() {
+        let toml = "name = \"My Pack\"\nauthor = \"Swzo\"\nversion = \"1.0.5\"\npack-format = \"packwiz:1.1.0\"\n\n[versions]\nminecraft = \"1.21.1\"\nneoforge = \"21.1.0\"\n";
+        assert_eq!(parse_pack_version(toml).as_deref(), Some("1.0.5"));
+        assert_eq!(parse_pack_version("version=\"2.3.4\"").as_deref(), Some("2.3.4"));
+        assert_eq!(parse_pack_version("name = \"x\"\npack-format = \"y\""), None);
+    }
+
+    #[test]
+    fn bump_pack_version_increments_patch() {
+        assert_eq!(bump_pack_version("1.0.5"), "1.0.6");
+        assert_eq!(bump_pack_version("2.9.0"), "2.9.1");
+        assert_eq!(bump_pack_version("garbage"), "1.0.1");
+    }
 
     #[test]
     fn install_link_carries_query() {
