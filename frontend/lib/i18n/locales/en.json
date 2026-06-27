@@ -1286,6 +1286,8 @@
       "github": "Create a classic token with the “repo” scope. Stored only on this computer.",
       "gitlab": "Create a token with the “api” and “write_repository” scopes. Stored only on this computer."
     },
+    "keySecurityNote": "Your {provider} key is stored only on this computer and is never sent anywhere but {provider} itself — it's safe. Give it only the minimum permissions it needs to publish your packs, and set its expiry to more than 30 days so you don't have to redo this often.",
+    "keyExpired": "Your {provider} access key has expired or is no longer valid. Create a new one and connect again to keep publishing.",
     "connect": "Connect",
     "connectedToast": "Connected as {login}",
     "changeAccount": "Use a different token",

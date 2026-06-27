@@ -24,6 +24,7 @@ import {
   Compass,
   Languages,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
@@ -1065,6 +1066,10 @@ function ForgeKeyCard({ providerId }: { providerId: GitProvider }) {
         <ExternalLink size={12} />
         {t("settings.forge.getKey", { provider: info.label })}
       </button>
+      <div className="flex items-start gap-2 rounded-lg border border-edge bg-ink-950/30 px-3 py-2 text-[10px] leading-snug text-ink-600">
+        <ShieldCheck size={13} className="mt-0.5 shrink-0 text-brass-300/80" />
+        <span>{t("share.keySecurityNote", { provider: info.label })}</span>
+      </div>
     </Card>
   );
 }

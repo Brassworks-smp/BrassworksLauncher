@@ -27,6 +27,7 @@ import {
   FilePen,
   Save,
   ChevronDown,
+  ShieldCheck,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useClosable, SegmentedTabs, Collapse } from "./ui";
@@ -47,6 +48,13 @@ import type {
 } from "@/lib/types";
 
 const PACK_SETTINGS_DIFF_PATH = "__pack_settings__";
+
+// Recognise an expired/invalid access key so we can send the user back to the
+// connect screen instead of showing a raw error.
+const isForgeAuthError = (msg: string): boolean =>
+  /\b401\b|bad credentials|unauthorized|invalid[\s_-]*token|token[\s_-]*(?:is\s+)?(?:expired|revoked)|requires authentication/i.test(
+    msg,
+  );
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -336,7 +344,21 @@ export function ShareModal({
       if (res.share) api.shareLink(instance.id).then(setLink).catch(() => {});
       toast(t("share.publishedToast"), "success");
     } catch (e) {
-      toast(String(e), "error");
+      const msg = String(e);
+      if (isForgeAuthError(msg)) {
+        // Key expired or was revoked mid-use — drop back to the connect screen
+        // so the user can create a fresh one and submit it.
+        setConnected(false);
+        setToken("");
+        toast(
+          t("share.keyExpired", {
+            provider: providerInfo(share?.provider ?? provider).label,
+          }),
+          "error",
+        );
+      } else {
+        toast(msg, "error");
+      }
     } finally {
       setPublishing(false);
       setProgress(null);
@@ -1518,6 +1540,10 @@ function ConnectView({
         <p className="mt-1.5 text-[10px] leading-snug text-ink-600">
           {t(`share.providerHint.${info.scopeHintKey}`)}
         </p>
+      </div>
+      <div className="flex items-start gap-2 rounded-lg border border-edge bg-ink-950/30 px-3 py-2 text-[10px] leading-snug text-ink-600">
+        <ShieldCheck size={13} className="mt-0.5 shrink-0 text-brass-300/80" />
+        <span>{t("share.keySecurityNote", { provider: info.label })}</span>
       </div>
       <button
         type="button"
