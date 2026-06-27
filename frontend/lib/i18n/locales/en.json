@@ -932,7 +932,11 @@
     "selectAll": "Select all",
     "importSelected": "Import {count} selected",
     "importSelectedNone": "Import selected",
-    "uploadInstead": "Upload a .mrpack / CurseForge .zip instead"
+    "uploadInstead": "Upload a .mrpack / CurseForge .zip instead",
+    "detectingPack": "Detecting modpack…",
+    "dropToImport": "Drop to import",
+    "dropHint": ".mrpack, CurseForge .zip, or packwiz .zip",
+    "dropUnsupported": "Unsupported file — drop a .mrpack, CurseForge .zip, or packwiz .zip"
   },
   "accountOverride": {
     "title": "Change account?",
@@ -1360,6 +1364,8 @@
     "private": "Private",
     "paramsTitle": "Modpack settings",
     "paramsHint": "These are saved into the shared .packwiz file and applied for everyone who installs this pack.",
+    "paramAuthor": "Author",
+    "paramAuthorPlaceholder": "Pack author (written to pack.toml)",
     "paramDescription": "Description",
     "paramDescriptionPlaceholder": "A short description shown to people installing your pack…",
     "paramMinRam": "Min RAM (MB)",

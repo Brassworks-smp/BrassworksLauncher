@@ -22,6 +22,7 @@ import {
   Play,
   Share2,
   Github,
+  DownloadCloud,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -142,6 +143,7 @@ export function InstancesView({
   onOpenSettings,
   onStar,
   onAdd,
+  onImportFile,
   onSaveFolders,
   onSaveInstance,
   onPlay,
@@ -160,6 +162,7 @@ export function InstancesView({
   onOpenSettings: (id: string) => void;
   onStar: (instance: Instance) => void;
   onAdd: () => void;
+  onImportFile?: (file: File) => void;
   onSaveFolders: (folders: InstanceFolder[]) => void;
   onSaveInstance: (instance: Instance) => void;
   onPlay?: (id: string) => void;
@@ -168,6 +171,9 @@ export function InstancesView({
   const tr = useT();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
+  const [fileDrop, setFileDrop] = useState(false);
+  const isFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer.types).includes("Files");
   const [exportTarget, setExportTarget] = useState<Instance | null>(null);
   const [shareTarget, setShareTarget] = useState<Instance | null>(null);
   
@@ -266,7 +272,37 @@ export function InstancesView({
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div
+      className="relative flex flex-1 flex-col overflow-hidden"
+      onDragOver={(e) => {
+        if (!onImportFile || !isFileDrag(e)) return;
+        e.preventDefault();
+        if (!fileDrop) setFileDrop(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.target === e.currentTarget) setFileDrop(false);
+      }}
+      onDrop={(e) => {
+        if (!onImportFile || !isFileDrag(e)) return;
+        e.preventDefault();
+        setFileDrop(false);
+        const pack = Array.from(e.dataTransfer.files).find((f) =>
+          /\.(zip|mrpack)$/i.test(f.name),
+        );
+        if (pack) onImportFile(pack);
+      }}
+    >
+      {fileDrop && (
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-2xl border-2 border-dashed border-brass-500/70 bg-ink-950/75 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-brass-300">
+            <DownloadCloud size={34} />
+            <span className="font-mc text-base tracking-wide">
+              {tr("addInstance.dropToImport")}
+            </span>
+            <span className="text-xs text-ink-500">{tr("addInstance.dropHint")}</span>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between pb-3">
         <h1 className="font-mc text-2xl tracking-wide text-gray-100">{tr("instances.title")}</h1>
         <div className="flex items-center gap-2">

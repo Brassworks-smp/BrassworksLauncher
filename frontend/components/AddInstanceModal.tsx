@@ -18,6 +18,7 @@ import {
   Share2,
 } from "lucide-react";
 import * as api from "@/lib/api";
+import { toastProgress, dismissToast } from "@/lib/toast";
 import type {
   BlockedMod,
   FlavorGroup,
@@ -135,6 +136,7 @@ export function AddInstanceModal({
   initialTab,
   importOnly,
   initialPackwiz,
+  initialImportFile,
   onClose,
   onCreated,
   onInstallModpack,
@@ -151,6 +153,8 @@ export function AddInstanceModal({
 
   importOnly?: boolean;
   initialPackwiz?: PackwizShare | null;
+  /** A modpack file dropped onto the instances page — auto-import on open. */
+  initialImportFile?: File | null;
   onClose: () => void;
   onCreated: (instance: Instance) => void;
   onInstallModpack: (
@@ -180,6 +184,7 @@ export function AddInstanceModal({
   );
   const [browserFiltersOpen, setBrowserFiltersOpen] = useState(true);
   const [modpackDetailOpen, setModpackDetailOpen] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const { closing, close } = useClosable(onClose);
 
@@ -380,6 +385,70 @@ export function AddInstanceModal({
     }
   };
 
+  const importDroppedFile = async (file: File) => {
+    if (pending) return;
+    const key = `detect:${file.name}`;
+    toastProgress(key, t("addInstance.detectingPack"), null);
+    try {
+      const buf = await file.arrayBuffer();
+      const path = await api.writeTempPack(
+        file.name,
+        Array.from(new Uint8Array(buf)),
+      );
+      const kind = await api.detectPackFile(path);
+      dismissToast(key);
+      // Switch to the matching tab so the panel adopts the pack-type accent.
+      setTab(
+        kind.kind === "packwiz"
+          ? "packwiz"
+          : kind.source === "modrinth"
+            ? "modrinth"
+            : "curseforge",
+      );
+      const base = file.name.replace(/\.[^.]+$/, "");
+      if (kind.kind === "packwiz") {
+        const url = await api.extractPackwizPack(path);
+        await beginInstall({
+          kind: "packwiz",
+          url,
+          name: "",
+          unsup: kind.unsup,
+          publicKey: null,
+        });
+      } else {
+        await beginInstall({
+          kind: "file",
+          source: kind.source ?? "curseforge",
+          path,
+          name: base,
+        });
+      }
+    } catch (e) {
+      dismissToast(key);
+      onError(String(e));
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDropActive(false);
+    if (pending) return;
+    const files = Array.from(e.dataTransfer.files);
+    const pack = files.find((f) => /\.(zip|mrpack)$/i.test(f.name));
+    if (pack) void importDroppedFile(pack);
+    else if (files.length) onError(t("addInstance.dropUnsupported"));
+  };
+
+  // A file dropped onto the instances page opens this modal already carrying it.
+  const ranInitialImport = useRef(false);
+  useEffect(() => {
+    if (initialImportFile && !ranInitialImport.current) {
+      ranInitialImport.current = true;
+      void importDroppedFile(initialImportFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialImportFile]);
+
   const [packUrl, setPackUrl] = useState("");
   const [packBranches, setPackBranches] = useState<api.PackwizBranch[] | null>(
     null,
@@ -564,7 +633,29 @@ export function AddInstanceModal({
           ...(importOnly ? {} : (ACCENTS[tab] as React.CSSProperties | undefined)),
         }}
         className="rise relative flex max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        onDragOver={(e) => {
+          if (pending) return;
+          e.preventDefault();
+          if (!dropActive) setDropActive(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.target === e.currentTarget) setDropActive(false);
+        }}
+        onDrop={onDrop}
       >
+        {dropActive && (
+          <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl border-2 border-dashed border-brass-500/70 bg-ink-950/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2 text-brass-300">
+              <DownloadCloud size={32} />
+              <span className="font-mc text-sm tracking-wide">
+                {t("addInstance.dropToImport")}
+              </span>
+              <span className="text-[11px] text-ink-500">
+                {t("addInstance.dropHint")}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
             {importOnly ? (

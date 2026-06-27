@@ -594,7 +594,7 @@ export function ExportModal({
       setSelectedFiles(new Set());
     }
     setOptional({});
-    setUnsupEnabled(false);
+    setUnsupEnabled(true);
     setSign(false);
     setSignFormat("signify");
     setFlavorGroups([]);

@@ -42,12 +42,17 @@ export function PackContentEditor({
   instanceId,
   initial,
   onChange,
+  onDirty,
 }: {
   instanceId: string;
   initial?: PackContentValue | null;
   onChange: (v: PackContentValue) => void;
+  onDirty?: () => void;
 }) {
   const t = useT();
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  const markDirty = useCallback(() => onDirtyRef.current?.(), []);
   const [tree, setTree] = useState<ExportTree | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [icons, setIcons] = useState<Record<string, string>>({});
@@ -69,7 +74,7 @@ export function PackContentEditor({
   const [flavorAssign, setFlavorAssign] = useState<Record<string, string[]>>({
     ...(initial?.flavor_assignments ?? {}),
   });
-  const [unsupEnabled, setUnsupEnabled] = useState(initial?.unsup ?? false);
+  const [unsupEnabled, setUnsupEnabled] = useState(initial?.unsup ?? true);
   const [sign, setSign] = useState(initial?.sign ?? false);
   const [signFormat, setSignFormat] = useState(initial?.sign_format || "signify");
 
@@ -234,22 +239,25 @@ export function PackContentEditor({
   ]);
 
   const toggleMod = useCallback((path: string) => {
+    markDirty();
     setSelectedMods((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
-  }, []);
+  }, [markDirty]);
   const toggleFile = useCallback((path: string) => {
+    markDirty();
     setSelectedFiles((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
-  }, []);
+  }, [markDirty]);
   const toggleDir = useCallback((node: ExportNode) => {
+    markDirty();
     setSelectedFiles((prev) => {
       const next = new Set(prev);
       const leaves: string[] = [];
@@ -261,28 +269,32 @@ export function PackContentEditor({
       }
       return next;
     });
-  }, []);
+  }, [markDirty]);
   const toggleOptional = useCallback((path: string) => {
+    markDirty();
     setOptional((prev) => {
       const next = { ...prev };
       if (next[path]) delete next[path];
       else next[path] = { default: true, description: "" };
       return next;
     });
-  }, []);
+  }, [markDirty]);
   const setOptionalDefault = useCallback((path: string, def: boolean) => {
+    markDirty();
     setOptional((prev) => ({
       ...prev,
       [path]: { description: prev[path]?.description ?? "", default: def },
     }));
-  }, []);
+  }, [markDirty]);
   const setOptionalDesc = useCallback((path: string, description: string) => {
+    markDirty();
     setOptional((prev) => ({
       ...prev,
       [path]: { default: prev[path]?.default ?? true, description },
     }));
-  }, []);
+  }, [markDirty]);
   const toggleAssign = useCallback((path: string, choiceId: string) => {
+    markDirty();
     setOptional((prev) => {
       if (!prev[path]) return prev;
       const next = { ...prev };
@@ -298,9 +310,10 @@ export function PackContentEditor({
       else delete next[path];
       return next;
     });
-  }, []);
+  }, [markDirty]);
   const setModMode = useCallback(
     (path: string, mode: "always" | "optional" | "flavor") => {
+      markDirty();
       setOptional((prev) => {
         const next = { ...prev };
         if (mode === "optional") {
@@ -319,10 +332,11 @@ export function PackContentEditor({
         });
       }
     },
-    [],
+    [markDirty],
   );
 
   const addGroup = () => {
+    markDirty();
     setFlavorGroups((prev) => {
       const taken = new Set(prev.map((g) => g.id));
       const gid = uniqueId(`group_${prev.length + 1}`, taken);
@@ -346,9 +360,12 @@ export function PackContentEditor({
     });
     setGroupsOpen(true);
   };
-  const updateGroup = (id: string, patch: Partial<FlavorGroupSpec>) =>
+  const updateGroup = (id: string, patch: Partial<FlavorGroupSpec>) => {
+    markDirty();
     setFlavorGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
-  const removeGroup = (id: string) =>
+  };
+  const removeGroup = (id: string) => {
+    markDirty();
     setFlavorGroups((prev) => {
       const grp = prev.find((g) => g.id === id);
       if (grp) {
@@ -364,7 +381,9 @@ export function PackContentEditor({
       }
       return prev.filter((g) => g.id !== id);
     });
-  const addChoice = (groupId: string) =>
+  };
+  const addChoice = (groupId: string) => {
+    markDirty();
     setFlavorGroups((prev) => {
       const taken = new Set(allChoices(prev).map((c) => c.choice.id));
       const cid = uniqueId("choice", taken);
@@ -380,11 +399,13 @@ export function PackContentEditor({
           : g,
       );
     });
+  };
   const updateChoice = (
     groupId: string,
     choiceId: string,
     patch: Partial<FlavorChoiceSpec>,
-  ) =>
+  ) => {
+    markDirty();
     setFlavorGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
@@ -397,7 +418,9 @@ export function PackContentEditor({
           : g,
       ),
     );
-  const setChoiceDefault = (groupId: string, choiceId: string) =>
+  };
+  const setChoiceDefault = (groupId: string, choiceId: string) => {
+    markDirty();
     setFlavorGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
@@ -408,7 +431,9 @@ export function PackContentEditor({
           : g,
       ),
     );
+  };
   const removeChoice = (groupId: string, choiceId: string) => {
+    markDirty();
     setFlavorGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
@@ -464,7 +489,13 @@ export function PackContentEditor({
             {t("share.editorUnsupDesc")}
           </span>
         </span>
-        <BrassSwitch checked={unsupEnabled} onChange={setUnsupEnabled} />
+        <BrassSwitch
+          checked={unsupEnabled}
+          onChange={(v) => {
+            markDirty();
+            setUnsupEnabled(v);
+          }}
+        />
       </label>
 
       {unsupEnabled && (
@@ -474,7 +505,13 @@ export function PackContentEditor({
             <span className="min-w-0 flex-1 text-sm font-medium text-gray-200">
               {t("instanceSettings.export.modal.signTitle")}
             </span>
-            <BrassSwitch checked={sign} onChange={setSign} />
+            <BrassSwitch
+              checked={sign}
+              onChange={(v) => {
+                markDirty();
+                setSign(v);
+              }}
+            />
           </label>
           {sign && (
             <div className="mt-3 flex flex-col gap-2.5 border-t border-edge pt-3">
@@ -482,7 +519,10 @@ export function PackContentEditor({
                 {(["signify", "ed25519"] as const).map((sf) => (
                   <button
                     key={sf}
-                    onClick={() => setSignFormat(sf)}
+                    onClick={() => {
+                      markDirty();
+                      setSignFormat(sf);
+                    }}
                     className={`flex-1 rounded-md border px-2 py-1.5 text-xs transition ${
                       signFormat === sf
                         ? "border-brass-500 bg-brass-500/15 text-brass-200"
@@ -576,10 +616,20 @@ export function PackContentEditor({
             onChange={setModQuery}
             placeholder={t("instanceSettings.export.modal.searchMods")}
           />
-          <SmallBtn onClick={() => setSelectedMods(new Set(tree.mods.map((m) => m.path)))}>
+          <SmallBtn
+            onClick={() => {
+              markDirty();
+              setSelectedMods(new Set(tree.mods.map((m) => m.path)));
+            }}
+          >
             {t("instanceSettings.export.modal.selectAll")}
           </SmallBtn>
-          <SmallBtn onClick={() => setSelectedMods(new Set())}>
+          <SmallBtn
+            onClick={() => {
+              markDirty();
+              setSelectedMods(new Set());
+            }}
+          >
             {t("instanceSettings.export.modal.selectNone")}
           </SmallBtn>
         </div>
@@ -619,10 +669,20 @@ export function PackContentEditor({
             onChange={setQuery}
             placeholder={t("instanceSettings.export.modal.search")}
           />
-          <SmallBtn onClick={() => setSelectedFiles(new Set(allFileLeaves))}>
+          <SmallBtn
+            onClick={() => {
+              markDirty();
+              setSelectedFiles(new Set(allFileLeaves));
+            }}
+          >
             {t("instanceSettings.export.modal.selectAll")}
           </SmallBtn>
-          <SmallBtn onClick={() => setSelectedFiles(new Set())}>
+          <SmallBtn
+            onClick={() => {
+              markDirty();
+              setSelectedFiles(new Set());
+            }}
+          >
             {t("instanceSettings.export.modal.selectNone")}
           </SmallBtn>
         </div>

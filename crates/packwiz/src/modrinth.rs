@@ -570,16 +570,42 @@ impl Modrinth {
     }
 
     pub fn resolve_version(&self, version_id: &str) -> Result<Option<ResolvedVersion>> {
-        let resp = self
-            .client
-            .get(format!("https://api.modrinth.com/v2/version/{version_id}"))
-            .send()
-            .map_err(PackwizError::http)?;
-        if !resp.status().is_success() {
-            return Err(PackwizError::Http(format!("version -> {}", resp.status())));
+        let key = format!("ver-{version_id}");
+        if let Some(rv) = self.read_cache::<ResolvedVersion>(&key) {
+            return Ok(Some(rv));
         }
-        let v: ApiVersion = resp.json().map_err(PackwizError::http)?;
-        Ok(v.resolve())
+        const ATTEMPTS: usize = 4;
+        let mut last = PackwizError::Other("version resolve failed".into());
+        for attempt in 0..ATTEMPTS {
+            match self
+                .client
+                .get(format!("https://api.modrinth.com/v2/version/{version_id}"))
+                .send()
+            {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        let v: ApiVersion = resp.json().map_err(PackwizError::http)?;
+                        let resolved = v.resolve();
+                        if let Some(rv) = &resolved {
+                            self.write_cache(&key, rv);
+                        }
+                        return Ok(resolved);
+                    } else if status.as_u16() == 429 || status.is_server_error() {
+                        last = PackwizError::Http(format!("version -> {status}"));
+                    } else {
+                        return Err(PackwizError::Http(format!("version -> {status}")));
+                    }
+                }
+                Err(e) => last = PackwizError::http(e),
+            }
+            if attempt + 1 < ATTEMPTS {
+                std::thread::sleep(std::time::Duration::from_millis(
+                    500 * (attempt as u64 + 1),
+                ));
+            }
+        }
+        Err(last)
     }
 
     pub fn download(&self, url: &str) -> Result<Vec<u8>> {

@@ -76,6 +76,7 @@ export function ShareModal({
   const [remember, setRemember] = useState(true);
   const [link, setLink] = useState("");
   const [pending, setPending] = useState(false);
+  const dirtyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [configLoaded, setConfigLoaded] = useState(false);
   const [initialValue, setInitialValue] = useState<PackContentValue | null>(null);
@@ -269,6 +270,28 @@ export function ShareModal({
   };
   saveCfgRef.current = saveEditorConfig;
 
+  // A real user edit happened in the Content tab. Show the banner optimistically,
+  // then (debounced) persist the config and let the backend decide — so reverting
+  // an edit drops the banner again.
+  const onContentEdit = useCallback(() => {
+    if (!share || share.incomplete) return;
+    setPending(true);
+    if (dirtyTimer.current) clearTimeout(dirtyTimer.current);
+    dirtyTimer.current = setTimeout(() => {
+      saveCfgRef
+        .current()
+        .catch(() => "")
+        .then(() => api.sharePendingChanges(instance.id))
+        .then(setPending)
+        .catch(() => {});
+      setDiff(null);
+    }, 500);
+  }, [share, instance.id]);
+
+  useEffect(() => () => {
+    if (dirtyTimer.current) clearTimeout(dirtyTimer.current);
+  }, []);
+
   const doPublish = async (confirmEmbedded: boolean) => {
     setEmbeddedConfirm(null);
     setPublishing(true);
@@ -293,6 +316,7 @@ export function ShareModal({
         return;
       }
       setPending(false);
+      if (dirtyTimer.current) clearTimeout(dirtyTimer.current);
       setRepoInfo(null);
       setDiff(null);
       if (tab === "details") loadRepoInfo();
@@ -754,6 +778,7 @@ export function ShareModal({
                         instanceId={instance.id}
                         initial={initialValue}
                         onChange={(v) => (valueRef.current = v)}
+                        onDirty={onContentEdit}
                       />
                     )}
                   </div>
@@ -943,6 +968,7 @@ function ProgressBar({
 
 function emptyParams(): SharePackParams {
   return {
+    author: null,
     description: null,
     min_memory_mb: null,
     max_memory_mb: null,
@@ -1122,6 +1148,16 @@ function DetailsTab({
           {t("share.paramsHint")}
         </p>
         <div className="flex flex-col gap-3">
+          <div>
+            <label className={label}>{t("share.paramAuthor")}</label>
+            <input
+              value={p.author ?? ""}
+              onChange={(e) => patch({ author: e.target.value || null })}
+              placeholder={t("share.paramAuthorPlaceholder")}
+              className={inputCls}
+            />
+          </div>
+
           <div>
             <label className={label}>{t("share.paramDescription")}</label>
             <textarea

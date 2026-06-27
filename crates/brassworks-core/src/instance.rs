@@ -214,6 +214,8 @@ pub struct PackShare {
     #[serde(default)]
     pub published_index_hash: Option<String>,
     #[serde(default)]
+    pub published_signature: Option<String>,
+    #[serde(default)]
     pub incomplete: bool,
     #[serde(default)]
     pub provider: crate::forge::Provider,
@@ -225,6 +227,8 @@ pub struct PackShare {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SharePackParams {
+    #[serde(default)]
+    pub author: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
@@ -241,6 +245,18 @@ pub struct SharePackParams {
 
 fn default_main() -> String {
     "main".to_string()
+}
+
+/// Classification of a dropped/picked modpack file (see `detect_pack_file`).
+#[derive(Debug, Clone, Serialize)]
+pub struct PackFileKind {
+    /// `"packwiz"`, `"mrpack"`, or `"curseforge"`.
+    pub kind: String,
+    /// Install source for `mrpack`/`curseforge` (`"modrinth"`/`"curseforge"`);
+    /// `None` for packwiz (which installs from an extracted local pack URL).
+    pub source: Option<String>,
+    /// Whether a packwiz pack carries unsup (flavors/signing).
+    pub unsup: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

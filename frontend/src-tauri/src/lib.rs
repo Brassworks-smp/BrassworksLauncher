@@ -494,6 +494,8 @@ pub fn run() {
             commands::create_custom_instance,
             commands::create_packwiz_instance,
             commands::extract_packwiz_pack,
+            commands::detect_pack_file,
+            commands::write_temp_pack,
             commands::inspect_packwiz_flavors,
             commands::set_packwiz_flavors,
             commands::list_packwiz_branches,

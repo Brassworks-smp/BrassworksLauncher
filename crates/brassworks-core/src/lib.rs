@@ -812,6 +812,93 @@ impl Launcher {
         serde_json::from_str::<SharedConfigFile>(&text).ok()
     }
 
+    pub fn detect_pack_file(&self, path: &str) -> Result<instance::PackFileKind> {
+        let p = std::path::Path::new(path);
+        let ext = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext == "mrpack" {
+            return Ok(instance::PackFileKind {
+                kind: "mrpack".to_string(),
+                source: Some("modrinth".to_string()),
+                unsup: false,
+            });
+        }
+        let bytes = std::fs::read(p).map_err(|e| CoreError::io(p, e))?;
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&bytes))
+            .map_err(|e| CoreError::Modpack(format!("not a valid zip: {e}")))?;
+        let (mut pack_toml, mut unsup_toml, mut manifest, mut mr_index) =
+            (false, false, false, false);
+        for i in 0..archive.len() {
+            let Ok(entry) = archive.by_index(i) else {
+                continue;
+            };
+            let Some(name) = entry.enclosed_name() else {
+                continue;
+            };
+            let name = name.to_string_lossy().replace('\\', "/");
+            match name.rsplit('/').next().unwrap_or(&name) {
+                "pack.toml" => pack_toml = true,
+                "unsup.toml" => unsup_toml = true,
+                "manifest.json" => manifest = true,
+                "modrinth.index.json" => mr_index = true,
+                _ => {}
+            }
+        }
+        if pack_toml {
+            // unsup.toml is the marker that flavors/unsup are configured.
+            return Ok(instance::PackFileKind {
+                kind: "packwiz".to_string(),
+                source: None,
+                unsup: unsup_toml,
+            });
+        }
+        if mr_index {
+            return Ok(instance::PackFileKind {
+                kind: "mrpack".to_string(),
+                source: Some("modrinth".to_string()),
+                unsup: false,
+            });
+        }
+        if manifest {
+            return Ok(instance::PackFileKind {
+                kind: "curseforge".to_string(),
+                source: Some("curseforge".to_string()),
+                unsup: false,
+            });
+        }
+        Err(CoreError::Modpack(
+            "unrecognized pack file (expected a packwiz, CurseForge, or Modrinth pack)".to_string(),
+        ))
+    }
+
+    pub fn write_temp_pack(&self, filename: &str, bytes: &[u8]) -> Result<String> {
+        let base = std::path::Path::new(filename)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("pack.zip")
+            .replace(['/', '\\'], "_");
+        let base = if base.trim().is_empty() {
+            "pack.zip".to_string()
+        } else {
+            base
+        };
+        let unique = format!(
+            "drop-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let dir = self.paths.root().join("imported").join(unique);
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let dest = dir.join(&base);
+        std::fs::write(&dest, bytes).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().into_owned())
+    }
+
     pub fn extract_packwiz_pack(&self, path: &str) -> Result<String> {
         let bytes =
             std::fs::read(path).map_err(|e| CoreError::io(std::path::Path::new(path), e))?;
@@ -1936,13 +2023,20 @@ impl Launcher {
         instance: &instance::Instance,
         config: &export::ExportConfig,
     ) -> Result<modpack::PackBuildOutput> {
+        let author = instance
+            .share
+            .as_ref()
+            .and_then(|s| s.params.author.clone())
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .unwrap_or_else(|| config.author.clone());
         let meta = export::ExportMeta {
             name: if config.pack_name.is_empty() {
                 instance.name.clone()
             } else {
                 config.pack_name.clone()
             },
-            author: config.author.clone(),
+            author,
             version: if config.version.is_empty() {
                 "1.0.0".to_string()
             } else {
@@ -2026,6 +2120,7 @@ impl Launcher {
             .as_ref()
             .map(|s| s.params.clone())
             .unwrap_or_default();
+        let publish_sig = files_signature(&out.files, &existing_params);
 
         let base_share = |incomplete: bool| instance::PackShare {
             repo_owner: owner.clone(),
@@ -2038,6 +2133,7 @@ impl Launcher {
             last_published: None,
             published_version: None,
             published_index_hash: None,
+            published_signature: None,
             incomplete,
             provider,
             params: existing_params.clone(),
@@ -2099,6 +2195,7 @@ impl Launcher {
                     last_published: Some(chrono::Utc::now()),
                     published_version: Some(out.version),
                     published_index_hash: Some(out.index_hash),
+                    published_signature: Some(publish_sig),
                     incomplete: false,
                     published_params: existing_params.clone(),
                     ..base_share(false)
@@ -2167,6 +2264,7 @@ impl Launcher {
             last_published: None,
             published_version: None,
             published_index_hash: None,
+            published_signature: None,
             incomplete: false,
             provider,
             published_params: params.clone(),
@@ -2216,6 +2314,13 @@ impl Launcher {
         let Some(published) = share.last_published else {
             return Ok(true);
         };
+        let config = export::load_configs(&self.paths, instance_id)
+            .into_iter()
+            .find(|c| c.id == share.config_id);
+        if let (Some(pub_sig), Some(config)) = (&share.published_signature, &config) {
+            let current = self.publish_signature(&instance, config, &share.params)?;
+            return Ok(&current != pub_sig);
+        }
         if share.params != share.published_params {
             return Ok(true);
         }
@@ -2226,6 +2331,15 @@ impl Launcher {
             .max();
         let published = std::time::SystemTime::from(published);
         Ok(newest.map(|t| t > published).unwrap_or(false))
+    }
+    fn publish_signature(
+        &self,
+        instance: &instance::Instance,
+        config: &export::ExportConfig,
+        params: &instance::SharePackParams,
+    ) -> Result<String> {
+        let out = self.build_publish_files(instance, config)?;
+        Ok(files_signature(&out.files, params))
     }
 
     fn active_mc_username(&self) -> Option<String> {
@@ -2262,12 +2376,17 @@ impl Launcher {
             None
         };
         let p = instance.share.as_ref().map(|s| s.params.clone()).unwrap_or_default();
+        let author = p
+            .author
+            .clone()
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty());
         PackwizShare {
             pack_url: pack_url.to_string(),
             name: Some(instance.name.clone()),
             description: p.description.filter(|d| !d.trim().is_empty()),
             unsup,
-            shared_by: self.active_mc_username(),
+            shared_by: author.or_else(|| self.active_mc_username()),
             icon,
             signing_key,
             news_url: p.news_url.filter(|u| !u.trim().is_empty()),
@@ -2378,18 +2497,11 @@ impl Launcher {
             .find(|c| c.id == share.config_id)
             .ok_or_else(|| CoreError::Modpack("share config not found".to_string()))?;
 
-        let is_meta = |p: &str| {
-            p == "README.md"
-                || p == "brassworks.share.json"
-                || p == "SHARE-LINK.txt"
-                || p.ends_with(".packwiz")
-        };
-
         let out = self.build_publish_files(&instance, &config)?;
         let mut current: std::collections::HashMap<String, String> = out
             .files
             .iter()
-            .filter(|(p, _)| !is_meta(p))
+            .filter(|(p, _)| !is_share_meta(p))
             .map(|(p, b)| (p.clone(), packwiz::sha256_hex(b)))
             .collect();
 
@@ -2404,7 +2516,7 @@ impl Launcher {
         )?;
         let published: std::collections::HashMap<String, String> = forge::head_file_hashes(&repo)?
             .into_iter()
-            .filter(|(p, _)| !is_meta(p))
+            .filter(|(p, _)| !is_share_meta(p))
             .collect();
 
         let mut entries = Vec::new();
@@ -2740,6 +2852,32 @@ fn read_zip_icon(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     file.read_to_end(&mut out).ok()?;
     Some(out)
+}
+
+fn is_share_meta(p: &str) -> bool {
+    p == "README.md"
+        || p == "brassworks.share.json"
+        || p == "SHARE-LINK.txt"
+        || p.ends_with(".packwiz")
+}
+
+fn files_signature(files: &[(String, Vec<u8>)], params: &instance::SharePackParams) -> String {
+    let mut parts: Vec<(String, String)> = files
+        .iter()
+        .filter(|(p, _)| !is_share_meta(p))
+        .map(|(p, b)| (p.clone(), packwiz::sha256_hex(b)))
+        .collect();
+    parts.sort();
+    let mut buf = String::new();
+    for (p, h) in parts {
+        buf.push_str(&p);
+        buf.push('\0');
+        buf.push_str(&h);
+        buf.push('\n');
+    }
+    buf.push_str("\0params\0");
+    buf.push_str(&serde_json::to_string(params).unwrap_or_default());
+    packwiz::sha256_hex(buf.as_bytes())
 }
 
 fn extract_packwiz_zip(bytes: &[u8], dest: &std::path::Path) -> Result<String> {

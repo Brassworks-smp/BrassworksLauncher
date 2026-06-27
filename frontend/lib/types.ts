@@ -71,12 +71,19 @@ export interface PackShare {
 }
 
 export interface SharePackParams {
+  author: string | null;
   description: string | null;
   min_memory_mb: number | null;
   max_memory_mb: number | null;
   jvm_args: string[];
   news_url: string | null;
   playercount_url: string | null;
+}
+
+export interface PackFileKind {
+  kind: "packwiz" | "mrpack" | "curseforge";
+  source: "modrinth" | "curseforge" | null;
+  unsup: boolean;
 }
 
 export interface ShareRepoInfo {

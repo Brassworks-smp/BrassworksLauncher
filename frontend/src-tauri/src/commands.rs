@@ -1036,6 +1036,31 @@ pub(crate) async fn extract_packwiz_pack(
 }
 
 #[tauri::command]
+pub(crate) async fn detect_pack_file(
+    state: State<'_, AppState>,
+    path: String,
+) -> CmdResult<brassworks_core::instance::PackFileKind> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.detect_pack_file(&path).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn write_temp_pack(
+    state: State<'_, AppState>,
+    filename: String,
+    bytes: Vec<u8>,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.write_temp_pack(&filename, &bytes).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn inspect_packwiz_flavors(
     state: State<'_, AppState>,
     url: String,

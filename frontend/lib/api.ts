@@ -22,6 +22,7 @@ import type {
   JavaInstall,
   FeaturedPack,
   PackwizShare,
+  PackFileKind,
   JavaReport,
   LaunchProgress,
   LauncherSettings,
@@ -539,6 +540,14 @@ export const createPackwizInstance = (
 
 export const extractPackwizPack = (path: string): Promise<string> =>
   invoke("extract_packwiz_pack", { path });
+
+export const detectPackFile = (path: string): Promise<PackFileKind> =>
+  invoke("detect_pack_file", { path });
+
+export const writeTempPack = (
+  filename: string,
+  bytes: number[],
+): Promise<string> => invoke("write_temp_pack", { filename, bytes });
 
 export const resolvePackwizShare = (input: string): Promise<PackwizShare> =>
   invoke("resolve_packwiz_share", { input });

@@ -149,6 +149,7 @@ export default function Home() {
   const [tabIntro, setTabIntro] = useState<View | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [pendingPackwizShare, setPendingPackwizShare] =
     useState<PackwizShare | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -1141,6 +1142,10 @@ export default function Home() {
               }}
               onStar={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
               onAdd={() => setAddOpen(true)}
+              onImportFile={(file) => {
+                setImportFile(file);
+                setAddOpen(true);
+              }}
               onPlay={(id) => void launchNow(id)}
               onDelete={(id) => {
                 api
@@ -1327,15 +1332,18 @@ export default function Home() {
           detailInstanceId={selectedId}
           importOnly={importFromOnboarding}
           initialPackwiz={pendingPackwizShare}
+          initialImportFile={importFile}
           onClose={() => {
             setAddOpen(false);
             setImportFromOnboarding(false);
             setPendingPackwizShare(null);
+            setImportFile(null);
           }}
           onCreated={(inst) => {
             setAddOpen(false);
             setImportFromOnboarding(false);
             setPendingPackwizShare(null);
+            setImportFile(null);
             api.getSettings().then(setSettings).catch(() => {});
             refreshInstances().then(() => {
               void selectInstance(inst.id);
