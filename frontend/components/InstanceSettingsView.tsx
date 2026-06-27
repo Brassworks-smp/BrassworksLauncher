@@ -1066,17 +1066,31 @@ function ModpackCard({
         </div>
       )}
 
-      <Toggle
-        label={t("instanceSettings.modpack.lock")}
-        description={t("instanceSettings.modpack.lockDesc")}
-        checked={instance.modpack_locked}
-        onChange={(v) =>
-          api
-            .setModpackLocked(id, v)
-            .then(() => api.getInstance(id).then(onSaveInstance))
-            .catch((e) => onError(String(e)))
-        }
-      />
+      {instance.share ? (
+        <div className="flex items-start gap-2 rounded-lg border border-brass-600/30 bg-brass-500/[0.06] px-3 py-2.5 text-xs">
+          <Share2 size={14} className="mt-0.5 shrink-0 text-brass-300" />
+          <div>
+            <div className="text-gray-200">
+              {t("instanceSettings.modpack.sharedHost")}
+            </div>
+            <div className="mt-0.5 text-ink-600">
+              {t("instanceSettings.modpack.sharedHostDesc")}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Toggle
+          label={t("instanceSettings.modpack.lock")}
+          description={t("instanceSettings.modpack.lockDesc")}
+          checked={instance.modpack_locked}
+          onChange={(v) =>
+            api
+              .setModpackLocked(id, v)
+              .then(() => api.getInstance(id).then(onSaveInstance))
+              .catch((e) => onError(String(e)))
+          }
+        />
+      )}
 
       {!isPackwiz && projectId ? (
         <div

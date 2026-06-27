@@ -243,7 +243,10 @@ export function PlayView({
   
   const hasUpdate =
     !!modStatus?.update_available && !notInstalled && !running && !busy;
-  const updateAvailable = hasUpdate && locked;
+  // For a pack we host, "update available" really means our local copy diverged
+  // from what we published — that's a publish/pull decision, not a sync-install.
+  const updateAvailable = hasUpdate && locked && !shared;
+  const shareDiverged = shared && !running && !busy && (hasUpdate || sharePending);
 
   const feedsEnabled = !instance.featured || featuredEnabled;
   const showPlayers =
@@ -331,7 +334,18 @@ export function PlayView({
 
 
           <div className="shrink-0 pt-4">
-            {hasUpdate && (
+            {shareDiverged ? (
+              <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 rise">
+                <ArrowUpCircle size={16} />
+                <span className="flex-1">{t("play.shareDiverged")}</span>
+                <button
+                  onClick={() => setShareOpen(true)}
+                  className="shrink-0 rounded-md border border-amber-400/40 px-2.5 py-1 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20"
+                >
+                  {t("play.shareManage")}
+                </button>
+              </div>
+            ) : hasUpdate ? (
               <div
                 className={`mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm rise ${
                   locked
@@ -350,7 +364,7 @@ export function PlayView({
                     : t("play.updateLockHint")}
                 </span>
               </div>
-            )}
+            ) : null}
 
             {}
             {busy && (

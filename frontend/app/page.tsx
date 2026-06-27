@@ -1221,6 +1221,7 @@ export default function Home() {
               mc={instance?.minecraft_version ?? ""}
               loader={instance?.loader ?? "vanilla"}
               locked={locked}
+              shared={!!instance?.share}
               onToggleLock={() => {
                 if (!instance) return;
                 api

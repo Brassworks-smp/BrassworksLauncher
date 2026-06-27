@@ -19,6 +19,7 @@ import {
   Check,
   X,
   FileDown,
+  Share2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -122,6 +123,7 @@ export function ModsView({
   mc,
   loader,
   locked,
+  shared,
   onToggleLock,
 }: {
   instanceId: string;
@@ -129,6 +131,7 @@ export function ModsView({
   mc: string;
   loader: LoaderKind;
   locked: boolean;
+  shared?: boolean;
   onToggleLock: () => void;
 }) {
   const t = useT();
@@ -433,24 +436,34 @@ export function ModsView({
           </h1>
           <p className="text-sm text-ink-600">
             {mods ? t("mods.installed", { count: mods.length }) : t("common.loading")}
-            {!locked && (
+            {!locked && !shared && (
               <span className="ml-2 text-amber-400/80">{t("mods.unlocked")}</span>
             )}
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => (locked ? setConfirmUnlock(true) : onToggleLock())}
-            title={locked ? t("mods.unlockTitle") : t("mods.lockedTitle")}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
-              locked
-                ? "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
-                : "border-amber-500/40 bg-amber-500/10 text-amber-300"
-            }`}
-          >
-            {locked ? <Lock size={15} /> : <Unlock size={15} />}
-            {locked ? t("mods.locked") : t("mods.unlockedBtn")}
-          </button>
+          {shared ? (
+            <span
+              title={t("mods.sharedPackHint")}
+              className="flex items-center gap-2 rounded-lg border border-brass-600/40 bg-brass-500/10 px-3 py-2 text-sm text-brass-200"
+            >
+              <Share2 size={15} />
+              {t("mods.sharedPack")}
+            </span>
+          ) : (
+            <button
+              onClick={() => (locked ? setConfirmUnlock(true) : onToggleLock())}
+              title={locked ? t("mods.unlockTitle") : t("mods.lockedTitle")}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                locked
+                  ? "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-300"
+              }`}
+            >
+              {locked ? <Lock size={15} /> : <Unlock size={15} />}
+              {locked ? t("mods.locked") : t("mods.unlockedBtn")}
+            </button>
+          )}
           <button
             onClick={openUpdatePicker}
             disabled={updatingAll || userContentCount === 0}
