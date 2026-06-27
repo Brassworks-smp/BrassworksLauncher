@@ -10,3 +10,4 @@
 .DS_Store
 .idea
 .env
+packaging/keys/private/**

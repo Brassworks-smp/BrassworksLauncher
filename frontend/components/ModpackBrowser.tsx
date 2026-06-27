@@ -295,7 +295,9 @@ export function ModpackBrowser({
         />
         <div
           ref={listScrollRef}
-          className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pl-px pr-1"
+          className={`flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pr-1 ${
+            filtersOpen ? "pl-4" : "pl-px"
+          }`}
           onScroll={onListScroll}
         >
           {hits.map((h) => (
