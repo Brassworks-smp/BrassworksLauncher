@@ -590,6 +590,12 @@ export default function Home() {
         installingIdRef.current = created.id;
         setInstallingInstanceId(created.id);
         setAddOpen(false);
+        // Closing the modal here bypasses its onClose, so clear the one-shot
+        // import inputs too — otherwise the next "Add Instance" re-runs the
+        // dragged/opened pack install.
+        setImportFile(null);
+        setPendingPackwizShare(null);
+        setImportFromOnboarding(false);
         setMaintainingIds((s) => withId(s, created.id));
         refreshInstances().then(() => {
           void selectInstance(created.id);
