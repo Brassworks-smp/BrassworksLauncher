@@ -2161,8 +2161,21 @@ impl Launcher {
         };
         let opts = self.build_export_opts(&instance.id, config.unsup, config.sign, sign_format);
         let icon = self.resolve_export_icon(instance);
-        self.modpack_for(&instance.id)
-            .export_packwiz_files(&meta, &config.selection, icon, &opts)
+        let mut out = self
+            .modpack_for(&instance.id)
+            .export_packwiz_files(&meta, &config.selection, icon, &opts)?;
+        if let Some(news) = instance
+            .share
+            .as_ref()
+            .and_then(|s| s.params.news.as_ref())
+            .filter(|n| !n.is_empty())
+        {
+            let doc = serde_json::json!({ "title": news.title, "body": news.body });
+            if let Ok(bytes) = serde_json::to_vec_pretty(&doc) {
+                out.files.push(("news.json".to_string(), bytes));
+            }
+        }
+        Ok(out)
     }
 
     pub fn publish_pack(
@@ -2240,13 +2253,7 @@ impl Launcher {
             .as_ref()
             .map(|s| s.params.clone())
             .unwrap_or_default();
-        // Manual news: write a news.json at the repo root and point the news URL
-        // at its raw file, so simply re-publishing updates the news for everyone.
-        if let Some(news) = existing_params.news.clone().filter(|n| !n.is_empty()) {
-            let doc = serde_json::json!({ "title": news.title, "body": news.body });
-            if let Ok(bytes) = serde_json::to_vec_pretty(&doc) {
-                out.files.push(("news.json".to_string(), bytes));
-            }
+        if existing_params.news.as_ref().is_some_and(|n| !n.is_empty()) {
             existing_params.news_url = Some(f.raw_url(&owner, &repo_name, &branch, "news.json"));
         }
         let publish_sig = files_signature(&out.files, &existing_params);
