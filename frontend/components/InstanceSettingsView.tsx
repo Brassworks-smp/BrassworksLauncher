@@ -976,7 +976,7 @@ function ModpackCard({
             </button>
           )}
 
-          {pack.unsup && (
+          {pack.unsup && !instance.share && (
             <button
               disabled={flavorGroups === "loading" || maintaining}
               onClick={() => {
@@ -1005,6 +1005,13 @@ function ModpackCard({
               )}
               {t("instanceSettings.modpack.changeFlavors")}
             </button>
+          )}
+
+          {pack.unsup && instance.share && (
+            <p className="flex max-w-md items-start gap-1.5 self-start text-[11px] leading-snug text-ink-600">
+              <Lock size={12} className="mt-0.5 shrink-0" />
+              {t("instanceSettings.modpack.flavorsSharedLocked")}
+            </p>
           )}
         </div>
       )}

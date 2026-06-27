@@ -16,6 +16,7 @@
 * **Pack icons stick around** - exported packs now embed their icon, importing a pack reads it back in, and installing a Modrinth or CurseForge modpack saves its icon locally so it shows up offline.
 * **Blocked mods stay installable** - CurseForge mods that can't be redistributed are bundled directly into packwiz and Modrinth exports, and hashes are written correctly for every format so packs verify cleanly.
 * **Steadier loader versions** - choosing the "stable" loader now pins the exact version at creation, so your instance won't quietly drift onto a newer build later on.
+* **Hosted packs always ship complete** - while you host a shared pack, flavors and optional mods are locked on your local copy so the published version can never lose a mod; you still design those choices for your players in the Share window, and linking an existing repo re-enables anything local toggling had switched off.
 
 ### **Fixes:**
 * **Sign-in is far more reliable** - launching no longer fails with cryptic "authentication failed: Corrupted" errors when your Microsoft session expires. Account refreshes are now serialized so a background check can't clash with a launch, the saved-session file is written atomically (and self-heals if it ever gets damaged), and an expired session sends you straight to a one-click re-login instead of an error.

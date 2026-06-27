@@ -615,7 +615,7 @@ export function ModsView({
             key={m.path}
             instanceId={instanceId}
             mod={m}
-            unlocked={!locked}
+            unlocked={!locked && !shared}
             onToggle={() => toggle(m)}
             onRemove={() => remove(m)}
             onChanged={load}

@@ -2416,6 +2416,7 @@ impl Launcher {
         config.id = String::new();
         let saved = self.save_export_config(instance_id, config)?;
         apply_shared_params(&mut instance, &params);
+        let _ = self.modpack_for(instance_id).enable_all_disabled();
         let pack_url = f.raw_url(&owner, &repo, &branch, "pack.toml");
         // Pull the live version + signature so we continue the version sequence
         // and don't immediately report the imported pack as out of sync.

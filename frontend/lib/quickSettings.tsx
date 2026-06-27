@@ -470,7 +470,7 @@ export const PINNABLE_SETTINGS: PinnableSetting[] = [
   {
     id: "flavors",
     tkey: "quickSettings.flavors",
-    applies: (i) => i.pack.kind === "packwiz" && i.pack.unsup,
+    applies: (i) => i.pack.kind === "packwiz" && i.pack.unsup && !i.share,
     Control: FlavorsControl,
   },
   { id: "show_news", tkey: "instanceSettings.feeds.showNews", selfLabeled: true, applies: (i) => i.featured, Control: NewsToggle },

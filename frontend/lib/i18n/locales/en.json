@@ -624,6 +624,7 @@
       "noBranches": "No other branches with a pack.toml were found.",
       "changeFlavors": "Change flavors",
       "noFlavors": "This pack has no unsup flavor groups to change.",
+      "flavorsSharedLocked": "Flavors and optional mods are locked while you're hosting this pack, so the published copy always includes every mod. Define them for players in the Share window instead.",
       "readingFlavors": "Reading flavors…",
       "applyFlavors": "Apply changes",
       "working": "Working",

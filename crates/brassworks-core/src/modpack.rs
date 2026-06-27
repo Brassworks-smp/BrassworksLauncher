@@ -609,6 +609,28 @@ impl<'a> Modpack<'a> {
         Ok(())
     }
 
+    pub fn enable_all_disabled(&self) -> usize {
+        let game_dir = self.game_dir();
+        let mut count = 0;
+        for sub in ["mods", "resourcepacks", "shaderpacks"] {
+            let dir = game_dir.join(sub);
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("disabled") {
+                    continue;
+                }
+                let target = path.with_extension("");
+                if !target.exists() && std::fs::rename(&path, &target).is_ok() {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
     pub fn remove_content(&self, path: &str) -> Result<()> {
         if self.is_managed(path) {
             return Err(CoreError::Modpack(
