@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -123,11 +123,11 @@ pub struct ExportSelection {
     #[serde(default)]
     pub known_mods: Vec<String>,
     #[serde(default)]
-    pub optional: HashMap<String, OptionalSpec>,
+    pub optional: BTreeMap<String, OptionalSpec>,
     #[serde(default)]
     pub flavor_groups: Vec<FlavorGroupSpec>,
     #[serde(default)]
-    pub flavor_assignments: HashMap<String, Vec<String>>,
+    pub flavor_assignments: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn flavor_selection_roundtrips() {
-        let mut assignments = HashMap::new();
+        let mut assignments = BTreeMap::new();
         assignments.insert(
             "mods/sodium.jar".to_string(),
             vec!["sodium".to_string(), "iris".to_string()],
@@ -515,7 +515,7 @@ mod tests {
             mods: vec!["mods/sodium.jar".to_string()],
             files: Vec::new(),
             known_mods: Vec::new(),
-            optional: HashMap::new(),
+            optional: BTreeMap::new(),
             flavor_groups: vec![FlavorGroupSpec {
                 id: "rendering".to_string(),
                 name: "Rendering".to_string(),
@@ -554,9 +554,9 @@ mod tests {
                 mods: vec!["mods/a.jar".to_string()],
                 files: vec!["config".to_string()],
                 known_mods: Vec::new(),
-                optional: HashMap::new(),
+                optional: BTreeMap::new(),
                 flavor_groups: Vec::new(),
-                flavor_assignments: HashMap::new(),
+                flavor_assignments: BTreeMap::new(),
             },
             created_at: 123,
             unsup: false,

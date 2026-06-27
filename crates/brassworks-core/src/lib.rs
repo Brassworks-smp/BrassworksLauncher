@@ -1901,7 +1901,14 @@ impl Launcher {
             config.id = format!("export-{}", export::now_secs());
         }
         if config.created_at == 0 {
-            config.created_at = export::now_secs();
+            // Preserve the original timestamp when re-saving an existing config so
+            // the share editor's repeated saves don't keep rewriting created_at.
+            let existing = export::load_configs(&self.paths, instance_id)
+                .into_iter()
+                .find(|c| c.id == config.id)
+                .map(|c| c.created_at)
+                .filter(|t| *t != 0);
+            config.created_at = existing.unwrap_or_else(export::now_secs);
         }
         export::upsert_config(&self.paths, instance_id, config)
     }

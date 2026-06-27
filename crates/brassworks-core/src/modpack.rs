@@ -1150,9 +1150,9 @@ impl<'a> Modpack<'a> {
             mods,
             files,
             known_mods: Vec::new(),
-            optional: std::collections::HashMap::new(),
+            optional: std::collections::BTreeMap::new(),
             flavor_groups: Vec::new(),
-            flavor_assignments: std::collections::HashMap::new(),
+            flavor_assignments: std::collections::BTreeMap::new(),
         })
     }
 
@@ -1715,7 +1715,7 @@ mod modpack_tests {
             mods: Vec::new(),
             files: Vec::new(),
             known_mods: Vec::new(),
-            optional: std::collections::HashMap::new(),
+            optional: std::collections::BTreeMap::new(),
             flavor_groups: vec![export::FlavorGroupSpec {
                 id: "rendering".to_string(),
                 name: "Rendering".to_string(),
@@ -1736,7 +1736,7 @@ mod modpack_tests {
                     },
                 ],
             }],
-            flavor_assignments: std::collections::HashMap::new(),
+            flavor_assignments: std::collections::BTreeMap::new(),
         };
         let defs = flavor_group_defs(&selection);
         assert_eq!(defs.len(), 1);
