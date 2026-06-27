@@ -191,23 +191,33 @@ fn share_readme(
     install_link: &str,
 ) -> String {
     let name = &instance.name;
-    let icon = if has_icon {
-        "<img src=\"./icon.png\" align=\"left\" width=\"96\" height=\"96\" alt=\"\" />\n\n"
-    } else {
-        ""
-    };
     let loader = instance.loader.label();
     let mc = &instance.minecraft_version;
+    let icon = if has_icon {
+        format!(
+            "<p align=\"center\">\n  \
+            <img src=\"./icon.png\" width=\"96\" height=\"96\" alt=\"{name} icon\" />\n\
+            </p>\n\n"
+        )
+    } else {
+        String::new()
+    };
     let by_line = match shared_by {
-        Some(u) => format!("Put together and shared by **{u}**.\n\n"),
+        Some(u) => format!(
+            "<p align=\"center\">\n  \
+            Put together and shared by <strong>{u}</strong>.\n\
+            </p>\n\n"
+        ),
         None => String::new(),
     };
     format!(
-        "{icon}# {name}\n\n\
-        A **{loader} {mc}** Minecraft modpack, shared with the \
-        [Brassworks Launcher](https://github.com/brassworks-smp).\n\n\
+        "{icon}\
+        <h1 align=\"center\">{name}</h1>\n\n\
+        <p align=\"center\">\n  \
+        A <strong>{loader} {mc}</strong> Minecraft modpack, shared with the\n  \
+        <a href=\"https://github.com/brassworks-smp\">Brassworks Launcher</a>.\n\
+        </p>\n\n\
         {by_line}\
-        <br clear=\"left\"/>\n\n\
         ## Play this pack\n\n\
         The quickest way is one click: open [this install link]({install_link}) and Brassworks \
         sets everything up for you, then keeps it up to date on its own.\n\n\
