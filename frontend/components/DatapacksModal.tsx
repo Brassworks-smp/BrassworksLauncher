@@ -1,14 +1,11 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
-  useRef,
   useState,
   type CSSProperties,
 } from "react";
 import {
   X,
-  Search,
   Loader2,
   Boxes,
   ChevronLeft,
@@ -18,12 +15,11 @@ import {
   FolderOpen,
   ExternalLink,
   Users,
-  SlidersHorizontal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { useInfiniteSearch, ResultRow, SourceBadge } from "./Browse";
-import { FilterSidebar, useFilters } from "./FilterSidebar";
+import { ResultRow, SourceBadge, BrowseResults, DetailShell } from "./Browse";
+import { useFilters } from "./FilterSidebar";
 import { VersionList } from "./VersionList";
 import { SegmentedTabs, BrassSwitch, useClosable } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -110,7 +106,6 @@ export function DatapacksModal({
   const [source, setSource] = useState<Source>("modrinth");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SearchHit | null>(null);
-  const [dir, setDir] = useState<"fwd" | "back">("fwd");
 
   const [installed, setInstalled] = useState<DatapackInfo[] | null>(null);
   const refresh = useCallback(() => {
@@ -127,65 +122,30 @@ export function DatapacksModal({
       .map((d) => [dpKey(d.source, d.project_id), d] as const),
   );
 
-  const {
-    filters,
-    setFilters,
-    options: filterOptions,
-    open: filtersOpen,
-    setOpen: setFiltersOpen,
-    loadingOptions,
-    activeCount,
-    key: filtersK,
-  } = useFilters(
+  const filtering = useFilters(
     () => api.contentFilterOptions(instanceId, "datapack", source),
     `${instanceId}:datapack:${source}`,
   );
+  const filtersOpen = filtering.open;
 
   const fetchPage = useCallback(
     (q: string, offset: number) =>
-      api.searchContent(instanceId, q, "datapack", source, offset, filters),
-    [instanceId, source, filters],
+      api.searchContent(instanceId, q, "datapack", source, offset, filtering.filters),
+    [instanceId, source, filtering.filters],
   );
-  const { hits, loading, loadingMore, hasMore, error, handleScroll } =
-    useInfiniteSearch(fetchPage, query, `${source}:${filtersK}`, {
-      enabled: tab === "browse",
-    });
-
-  
-  
-  const listScrollRef = useRef<HTMLDivElement>(null);
-  const scrollByKey = useRef<Record<string, number>>({});
-  const scrollKey = `${source}:${query}`;
-  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    handleScroll(e);
-    scrollByKey.current[scrollKey] = e.currentTarget.scrollTop;
-  };
-  useLayoutEffect(() => {
-    if (tab !== "browse" || selected || loading) return;
-    const el = listScrollRef.current;
-    if (el) el.scrollTop = scrollByKey.current[scrollKey] ?? 0;
-  }, [tab, selected, loading, scrollKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (selected) {
-        setDir("back");
-        setSelected(null);
-      } else close();
+      if (selected) setSelected(null);
+      else close();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [close, selected]);
 
-  const open = (hit: SearchHit) => {
-    setDir("fwd");
-    setSelected(hit);
-  };
-  const back = () => {
-    setDir("back");
-    setSelected(null);
-  };
+  const open = (hit: SearchHit) => setSelected(hit);
+  const back = () => setSelected(null);
 
   const accentSource =
     tab === "browse" ? (selected ? selected.source : source) : null;
@@ -264,25 +224,8 @@ export function DatapacksModal({
           </div>
         </div>
 
-        <div
-          key={selected ? `detail:${selected.source}:${selected.project_id}` : tab}
-          className={`flex min-h-0 flex-1 flex-col ${
-            dir === "fwd" ? "swap-in" : "swap-in-back"
-          }`}
-        >
-          {selected ? (
-            <DatapackDetail
-              instanceId={instanceId}
-              world={world.folder}
-              hit={selected}
-              installedVersionId={selectedInstalled?.version_id ?? null}
-              onInstalled={() => {
-                refresh();
-                toast(t("datapacks.updatedIn", { world: world.name }), "success");
-                back();
-              }}
-            />
-          ) : tab === "installed" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {tab === "installed" && !selected && (
             <InstalledList
               instanceId={instanceId}
               world={world.folder}
@@ -294,103 +237,62 @@ export function DatapacksModal({
                 if (hit) open(hit);
               }}
             />
-          ) : (
-            <>
-              <div className="flex items-center gap-2 px-5 py-3">
-                <SegmentedTabs
-                  size="sm"
-                  value={source}
-                  onChange={(v) => setSource(v as Source)}
-                  options={[
-                    { id: "modrinth", label: t("mods.modrinth") },
-                    { id: "curseforge", label: t("mods.curseforge") },
-                  ]}
-                />
-                <div className="relative flex-1">
-                  <Search
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-600"
-                  />
-                  <input
-                    autoFocus
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={t("datapacks.searchPlaceholder", { source: api.sourceLabel(source) })}
-                    className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
-                  />
-                </div>
-                <button
-                  onClick={() => setFiltersOpen((o) => !o)}
-                  title={t("mods.filter.button")}
-                  className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm transition ${
-                    filtersOpen || activeCount > 0
-                      ? "border-brass-500/60 bg-brass-500/10 text-brass-200"
-                      : "border-edge text-ink-600 hover:text-gray-200"
-                  }`}
-                >
-                  <SlidersHorizontal size={15} />
-                  {activeCount > 0 && (
-                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brass-500 px-1 text-[10px] font-semibold text-ink-950">
-                      {activeCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-              <div className="flex min-h-0 flex-1">
-              <FilterSidebar
-                open={filtersOpen}
-                source={source}
-                options={filterOptions}
-                loading={loadingOptions}
-                filters={filters}
-                onChange={setFilters}
-                accentStyle={accent}
+          )}
+          <BrowseResults
+            hidden={tab !== "browse" || !!selected}
+            enabled={tab === "browse"}
+            source={source}
+            query={query}
+            onQueryChange={setQuery}
+            autoFocusSearch
+            placeholder={t("datapacks.searchPlaceholder", {
+              source: api.sourceLabel(source),
+            })}
+            headerLeft={
+              <SegmentedTabs
+                size="sm"
+                value={source}
+                onChange={(v) => setSource(v as Source)}
+                options={[
+                  { id: "modrinth", label: t("mods.modrinth") },
+                  { id: "curseforge", label: t("mods.curseforge") },
+                ]}
               />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              {error && (
-                <div className="mx-5 mb-2 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                  {error}
-                </div>
-              )}
-              <div
-                ref={listScrollRef}
-                className="flex-1 overflow-y-auto px-5 pb-5 pt-3"
-                onScroll={onListScroll}
-              >
-                {loading ? (
-                  <div className="grid h-full place-items-center text-ink-600">
-                    <Loader2 className="animate-spin" />
-                  </div>
-                ) : hits.length === 0 ? (
-                  <div className="grid h-full place-items-center text-center text-sm text-ink-600">
-                    {query
-                      ? t("datapacks.noResults")
-                      : t("addContent.startTyping", { source: api.sourceLabel(source) })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {hits.map((hit) => (
-                      <ResultRow
-                        key={`${hit.source}:${hit.project_id}`}
-                        hit={hit}
-                        showSource
-                        installed={installedByKey.has(
-                          dpKey(hit.source, hit.project_id),
-                        )}
-                        onOpen={() => open(hit)}
-                      />
-                    ))}
-                    {loadingMore && (
-                      <div className="grid place-items-center py-3 text-ink-600">
-                        <Loader2 size={18} className="animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              </div>
-              </div>
-            </>
+            }
+            filtering={filtering}
+            fetchPage={fetchPage}
+            resetKey={source}
+            scrollKeyBase={source}
+            accent={accent}
+            onOpen={open}
+            emptyText={t("datapacks.noResults")}
+            startTypingText={t("addContent.startTyping", {
+              source: api.sourceLabel(source),
+            })}
+            renderRow={(hit, openHit) => (
+              <ResultRow
+                key={`${hit.source}:${hit.project_id}`}
+                hit={hit}
+                showSource
+                installed={installedByKey.has(dpKey(hit.source, hit.project_id))}
+                onOpen={openHit}
+              />
+            )}
+          />
+          {selected && (
+            <div className="flex min-h-0 flex-1 flex-col swap-in">
+              <DatapackDetail
+                instanceId={instanceId}
+                world={world.folder}
+                hit={selected}
+                installedVersionId={selectedInstalled?.version_id ?? null}
+                onInstalled={() => {
+                  refresh();
+                  toast(t("datapacks.updatedIn", { world: world.name }), "success");
+                  back();
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -527,7 +429,7 @@ function DatapackDetail({
   const t = useT();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -549,87 +451,67 @@ function DatapackDetail({
     !!installedVersionId && !!latest && latest.version_id !== installedVersionId;
 
   const install = (versionId: string) => {
-    setBusy(true);
+    setBusy(versionId);
     api
       .installDatapack(instanceId, world, hit.source, hit.project_id, versionId)
       .then(() => onInstalled())
       .catch((e) => toast(String(e), "error"))
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-start gap-4 border-b border-edge px-5 py-4">
-        <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-ink-900 text-ink-600">
-          {hit.icon_url ? (
-            <img src={hit.icon_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <Boxes size={22} />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate font-mc text-lg text-gray-100">{hit.title}</h3>
-            {detail?.url && (
-              <button
-                onClick={() => api.openExternal(detail.url!).catch(() => {})}
-                title={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
-                className="text-ink-600 hover:text-brass-300"
-              >
-                <ExternalLink size={14} />
-              </button>
-            )}
-          </div>
-          <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-600">
-            {detail?.description ?? hit.description}
-          </p>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-600">
-            <Users size={11} />
-            {t("addContent.downloads", {
-              count: fmtDownloads(detail?.downloads ?? hit.downloads ?? 0),
-            })}
-            {latest && (
-              <span className="ml-1 font-mono">
-                {t("addContent.latestVersion", { version: latest.version_number })}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-[11px]">
-            {installedVersionId && (
-              <span className="rounded bg-patina-500/15 px-1.5 py-0.5 text-patina-400">
-                {t("datapacks.installedBadge")}
-              </span>
-            )}
-            {updateAvailable && (
-              <span className="rounded bg-brass-500/15 px-1.5 py-0.5 text-brass-300">
-                {t("datapacks.updateAvailable")}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        {versions === null ? (
-          <div className="grid place-items-center py-10 text-ink-600">
-            <Loader2 className="animate-spin" />
-          </div>
-        ) : versions.length === 0 ? (
-          <div className="py-10 text-center text-sm text-ink-600">
-            {t("datapacks.noVersions")}
-          </div>
-        ) : (
-          <VersionList
-            instanceId={instanceId}
-            projectId={hit.project_id}
-            source={hit.source}
-            versions={versions}
-            actionLabel={installedVersionId ? t("datapacks.switch") : t("common.add")}
-            busy={busy}
-            currentVersionId={installedVersionId}
-            onPick={install}
-          />
+  const subtitle = (
+    <>
+      <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-600">
+        {detail?.description ?? hit.description}
+      </p>
+      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-600">
+        <Users size={11} />
+        {t("addContent.downloads", {
+          count: fmtDownloads(detail?.downloads ?? hit.downloads ?? 0),
+        })}
+        {latest && (
+          <span className="ml-1 font-mono">
+            {t("addContent.latestVersion", { version: latest.version_number })}
+          </span>
         )}
       </div>
-    </div>
+      <div className="mt-1 flex items-center gap-2 text-[11px]">
+        {installedVersionId && (
+          <span className="rounded bg-patina-500/15 px-1.5 py-0.5 text-patina-400">
+            {t("datapacks.installedBadge")}
+          </span>
+        )}
+        {updateAvailable && (
+          <span className="rounded bg-brass-500/15 px-1.5 py-0.5 text-brass-300">
+            {t("datapacks.updateAvailable")}
+          </span>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <DetailShell
+      hit={hit}
+      onExternal={
+        detail?.url ? () => api.openExternal(detail.url!).catch(() => {}) : undefined
+      }
+      externalTitle={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
+      subtitle={subtitle}
+      showVersions={false}
+      versionsNode={null}
+      bodyNode={
+        <VersionList
+          instanceId={instanceId}
+          projectId={hit.project_id}
+          source={hit.source}
+          versions={versions}
+          actionLabel={installedVersionId ? t("datapacks.switch") : t("common.add")}
+          busy={busy}
+          installedVersion={installedVersionId}
+          onPick={install}
+        />
+      }
+    />
   );
 }

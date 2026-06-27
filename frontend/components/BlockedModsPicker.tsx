@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChevronLeft,
   AlertTriangle,
   ExternalLink,
   FolderOpen,
@@ -14,6 +13,7 @@ import {
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { BackButton } from "./ui";
 import type { BlockedMod, ManualMod } from "@/lib/types";
 
 const baseName = (p: string) => p.replace(/\\/g, "/").split("/").pop() || p;
@@ -123,15 +123,8 @@ export function BlockedModsPicker({
 
   return (
     <div className="swap-in flex min-h-0 flex-1 flex-col gap-3">
-      <button
-        onClick={onBack}
-        disabled={busy}
-        className="flex shrink-0 items-center gap-1 self-start text-xs text-ink-600 transition hover:text-brass-300 disabled:opacity-50"
-      >
-        <ChevronLeft size={14} /> {t("common.back")}
-      </button>
-
       <div className="flex shrink-0 items-center gap-2">
+        <BackButton onClick={onBack} disabled={busy} title={t("common.back")} />
         <span className="grid h-9 w-9 place-items-center rounded-md bg-ink-800 text-amber-400">
           <AlertTriangle size={17} />
         </span>

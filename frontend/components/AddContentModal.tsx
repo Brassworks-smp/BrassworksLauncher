@@ -1,37 +1,31 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
-  useRef,
   useState,
   type CSSProperties,
 } from "react";
 import {
   X,
-  Search,
   Download,
   Check,
   Loader2,
   Box,
   Image as ImageIcon,
   Sparkles,
-  ExternalLink,
-  Users,
   ChevronLeft,
-  ChevronDown,
   ListChecks,
   Unlock,
-  SlidersHorizontal,
+  Users,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { ResultRow, useInfiniteSearch, SEARCH_PAGE } from "./Browse";
-import { FilterSidebar, useFilters } from "./FilterSidebar";
-import { Markdown, Changelog } from "./Markdown";
-import { SegmentedTabs, Collapse, useClosable } from "./ui";
+import { ResultRow, BrowseResults, DetailShell } from "./Browse";
+import { useFilters } from "./FilterSidebar";
+import { VersionList } from "./VersionList";
+import { Markdown } from "./Markdown";
+import { SegmentedTabs, useClosable } from "./ui";
 import { useT } from "@/lib/i18n";
 import type {
-  ContentSource,
   ContentVersion,
   InstalledMod,
   LoaderKind,
@@ -140,16 +134,9 @@ export function AddContentModal({
   );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SearchHit | null>(initial ?? null);
-  const [dir, setDir] = useState<"fwd" | "back">("fwd");
   const { closing, close } = useClosable(onClose);
-  const openDetail = (hit: SearchHit) => {
-    setDir("fwd");
-    setSelected(hit);
-  };
-  const goBack = () => {
-    setDir("back");
-    setSelected(null);
-  };
+  const openDetail = (hit: SearchHit) => setSelected(hit);
+  const goBack = () => setSelected(null);
   const lockedSet = new Set(lockedIds ?? []);
   const detailOnly = !!initial;
   const isLight =
@@ -164,44 +151,17 @@ export function AddContentModal({
         ? MODRINTH_ACCENT_LIGHT
         : MODRINTH_ACCENT_DARK;
 
-  const {
-    filters,
-    setFilters,
-    options: filterOptions,
-    open: filtersOpen,
-    setOpen: setFiltersOpen,
-    loadingOptions,
-    activeCount,
-    key: filtersK,
-  } = useFilters(
+  const filtering = useFilters(
     () => api.contentFilterOptions(instanceId, type, source),
     `${instanceId}:${type}:${source}`,
   );
+  const filtersOpen = filtering.open;
 
   const fetchPage = useCallback(
     (q: string, offset: number) =>
-      api.searchContent(instanceId, q, type, source, offset, filters),
-    [instanceId, type, source, filters],
+      api.searchContent(instanceId, q, type, source, offset, filtering.filters),
+    [instanceId, type, source, filtering.filters],
   );
-  const { hits, loading, loadingMore, hasMore, error, handleScroll } =
-    useInfiniteSearch(fetchPage, query, `${type}:${source}:${filtersK}`, {
-      enabled: !detailOnly,
-    });
-
-  
-  
-  const listScrollRef = useRef<HTMLDivElement>(null);
-  const scrollByKey = useRef<Record<string, number>>({});
-  const scrollKey = `${type}:${source}:${query}`;
-  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    handleScroll(e);
-    scrollByKey.current[scrollKey] = e.currentTarget.scrollTop;
-  };
-  useLayoutEffect(() => {
-    if (selected || loading) return;
-    const el = listScrollRef.current;
-    if (el) el.scrollTop = scrollByKey.current[scrollKey] ?? 0;
-  }, [selected, loading, scrollKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
@@ -221,7 +181,7 @@ export function AddContentModal({
       <div
         className="rise flex h-[80vh] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width,color,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={{
-          width: filtersOpen ? "min(1080px, 96vw)" : "820px",
+          width: !detailOnly && filtersOpen ? "min(1080px, 96vw)" : "820px",
           ...accent,
         }}
       >
@@ -266,162 +226,93 @@ export function AddContentModal({
           </button>
         </div>
 
-        <div
-          key={selected ? "detail" : "list"}
-          className={`flex min-h-0 flex-1 flex-col ${
-            dir === "fwd" ? "swap-in" : "swap-in-back"
-          }`}
-        >
-        {selected ? (
-          <DetailView
-            instanceId={instanceId}
-            hit={selected}
-            type={type}
-            installedVersion={installed[keyOf(selected)]}
-            isInstalled={keyOf(selected) in installed}
-            locked={lockedSet.has(keyOf(selected))}
-            onInstalled={onInstalled}
-            onUnlock={onUnlock}
-          />
-        ) : (
-          <>
-            {}
-            <div className="flex items-center gap-2 px-5 py-3">
-              <SegmentedTabs
-                value={type}
-                onChange={(v) => setType(v as ProjectType)}
-                options={TABS.map(({ id, tkey, icon: Icon }) => ({
-                  id,
-                  label: t(tkey),
-                  icon: <Icon size={14} />,
-                }))}
-              />
-              <div className="relative flex-1">
-                <Search
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-600"
-                />
-                <input
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t("addContent.searchPlaceholder", {
-                    source: api.sourceLabel(source),
-                    type: t(
-                      TABS.find((tb) => tb.id === type)?.tkey ?? "mods.title",
-                    ).toLowerCase(),
-                  })}
-                  className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
-                />
-              </div>
-              <button
-                onClick={() => setFiltersOpen((o) => !o)}
-                title={t("mods.filter.button")}
-                className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm transition ${
-                  filtersOpen || activeCount > 0
-                    ? "border-brass-500/60 bg-brass-500/10 text-brass-200"
-                    : "border-edge text-ink-600 hover:text-gray-200"
-                }`}
-              >
-                <SlidersHorizontal size={15} />
-                {activeCount > 0 && (
-                  <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brass-500 px-1 text-[10px] font-semibold text-ink-950">
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1">
-            <FilterSidebar
-              open={filtersOpen}
+        <div className="flex min-h-0 flex-1 flex-col">
+          {!detailOnly && (
+            <BrowseResults
+              hidden={!!selected}
               source={source}
-              options={filterOptions}
-              loading={loadingOptions}
-              filters={filters}
-              onChange={setFilters}
-              accentStyle={accent}
-            />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {error && (
-              <div className="mx-5 mb-2 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                {error}
-              </div>
-            )}
-
-            <div
-              ref={listScrollRef}
-              className="flex-1 overflow-y-auto px-5 pb-5 pt-3"
-              onScroll={onListScroll}
-            >
-              {loading ? (
-                <div className="grid h-full place-items-center text-ink-600">
-                  <Loader2 className="animate-spin" />
-                </div>
-              ) : hits.length === 0 ? (
-                <div className="grid h-full place-items-center text-center text-sm text-ink-600">
-                  {query
-                    ? t("addContent.noResults")
-                    : t("addContent.startTyping", { source: api.sourceLabel(source) })}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {hits.map((hit) => (
-                    <ResultRow
-                      key={`${hit.source}:${hit.project_id}`}
-                      hit={hit}
-                      installed={keyOf(hit) in installed}
-                      onOpen={() => openDetail(hit)}
-                      onQuickInstall={async () => {
-                        try {
-                          const res = await api.installContent(
-                            instanceId,
-                            hit.project_id,
-                            type,
-                            hit.source,
-                          );
-                          const n = res.dependencies.length;
-                          toast(
-                            n
-                              ? t("addContent.installedDeps", { name: res.item.name, n })
-                              : t("addContent.installedToast", { name: res.item.name }),
-                            "success",
-                          );
-                          onInstalled(res.item);
-                        } catch (e) {
-                          toast(String(e), "error");
-                          throw e;
-                        }
-                      }}
-                    />
-                  ))}
-                  {loadingMore && (
-                    <div className="grid place-items-center py-3 text-ink-600">
-                      <Loader2 size={18} className="animate-spin" />
-                    </div>
-                  )}
-                  {!hasMore && hits.length >= SEARCH_PAGE && (
-                    <div className="py-3 text-center text-[11px] text-ink-600">
-                      {t("addContent.endOfResults")}
-                    </div>
-                  )}
-                </div>
+              query={query}
+              onQueryChange={setQuery}
+              autoFocusSearch
+              placeholder={t("addContent.searchPlaceholder", {
+                source: api.sourceLabel(source),
+                type: t(
+                  TABS.find((tb) => tb.id === type)?.tkey ?? "mods.title",
+                ).toLowerCase(),
+              })}
+              headerLeft={
+                <SegmentedTabs
+                  value={type}
+                  onChange={(v) => setType(v as ProjectType)}
+                  options={TABS.map(({ id, tkey, icon: Icon }) => ({
+                    id,
+                    label: t(tkey),
+                    icon: <Icon size={14} />,
+                  }))}
+                />
+              }
+              filtering={filtering}
+              fetchPage={fetchPage}
+              resetKey={`${type}:${source}`}
+              scrollKeyBase={`${type}:${source}`}
+              accent={accent}
+              onOpen={openDetail}
+              emptyText={t("addContent.noResults")}
+              startTypingText={t("addContent.startTyping", {
+                source: api.sourceLabel(source),
+              })}
+              renderRow={(hit, open) => (
+                <ResultRow
+                  key={`${hit.source}:${hit.project_id}`}
+                  hit={hit}
+                  installed={keyOf(hit) in installed}
+                  onOpen={open}
+                  onQuickInstall={async () => {
+                    try {
+                      const res = await api.installContent(
+                        instanceId,
+                        hit.project_id,
+                        type,
+                        hit.source,
+                      );
+                      const n = res.dependencies.length;
+                      toast(
+                        n
+                          ? t("addContent.installedDeps", { name: res.item.name, n })
+                          : t("addContent.installedToast", { name: res.item.name }),
+                        "success",
+                      );
+                      onInstalled(res.item);
+                    } catch (e) {
+                      toast(String(e), "error");
+                      throw e;
+                    }
+                  }}
+                />
               )}
-            </div>
-            </div>
-            </div>
-
-            <div className="border-t border-edge px-5 py-2 text-center text-[11px] text-ink-600">
-              {t("addContent.compatNote", {
+              footer={t("addContent.compatNote", {
                 mc,
                 loader:
                   type === "mod" && loader !== "vanilla"
                     ? ` · ${t(LOADER_TKEY[loader])}`
                     : "",
               })}
+            />
+          )}
+          {selected && (
+            <div className="flex min-h-0 flex-1 flex-col swap-in">
+              <DetailView
+                instanceId={instanceId}
+                hit={selected}
+                type={type}
+                installedVersion={installed[keyOf(selected)]}
+                isInstalled={keyOf(selected) in installed}
+                locked={lockedSet.has(keyOf(selected))}
+                onInstalled={onInstalled}
+                onUnlock={onUnlock}
+              />
             </div>
-          </>
-        )}
+          )}
         </div>
       </div>
     </div>
@@ -499,246 +390,118 @@ function DetailView({
       .finally(() => setBusy(null));
   };
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-start gap-4 border-b border-edge px-5 py-4">
-        <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-ink-900 text-ink-600">
-          {hit.icon_url ? (
-            <img src={hit.icon_url} alt={hit.title} className="h-full w-full object-cover" />
-          ) : (
-            <Box size={24} />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate font-mc text-lg text-gray-100">{hit.title}</h3>
-            <button
-              onClick={() =>
-                api
-                  .openExternal(
-                    detail?.url ??
-                      api.sourceUrl(hit.source, hit.slug || hit.project_id),
-                  )
-                  .catch(() => {})
-              }
-              title={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
-              className="text-ink-600 hover:text-brass-300"
-            >
-              <ExternalLink size={14} />
-            </button>
-          </div>
-          <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-600">
-            {detail?.description ?? hit.description}
-          </p>
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-600">
-            <Users size={11} />{" "}
-            {t("addContent.downloads", {
-              count: fmtDownloads(hit.downloads || detail?.downloads || 0),
-            })}
-            {latest && (
-              <span className="ml-2 font-mono">
-                {t("addContent.latestVersion", { version: latest.version_number })}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2">
-          {locked ? (
-            onUnlock ? (
-              <button
-                onClick={onUnlock}
-                title={t("addContent.unlockTitle")}
-                className="flex w-32 flex-col items-center gap-1 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-              >
-                <Unlock size={14} />
-                {t("addContent.managedUnlock")}
-              </button>
-            ) : (
-              <div className="w-32 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600">
-                {t("addContent.managedLocked")}
-              </div>
-            )
-          ) : (
-            <button
-              disabled={!!busy}
-              onClick={() => install()}
-              className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-60"
-            >
-              {busy === "latest" ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : updateAvailable ? (
-                <>
-                  <Download size={15} /> {t("addContent.update")}
-                </>
-              ) : isInstalled ? (
-                <>
-                  <Check size={15} /> {t("addContent.reinstall")}
-                </>
-              ) : (
-                <>
-                  <Download size={15} /> {t("common.add")}
-                </>
-              )}
-            </button>
-          )}
-          <button
-            onClick={() => setShowVersions((v) => !v)}
-            aria-pressed={showVersions}
-            title={showVersions ? t("addContent.backToDescription") : t("addContent.showAllVersions")}
-            className={`flex items-center justify-center gap-1.5 rounded-md border px-4 py-2 text-xs transition ${
-              showVersions
-                ? "border-brass-500/50 bg-brass-500/15 text-brass-200"
-                : "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
-            }`}
-          >
-            {showVersions ? <ChevronLeft size={14} /> : <ListChecks size={14} />}
-            {showVersions ? t("addContent.description") : t("addContent.versions")}
-          </button>
-        </div>
+  const subtitle = (
+    <>
+      <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-600">
+        {detail?.description ?? hit.description}
+      </p>
+      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-600">
+        <Users size={11} />{" "}
+        {t("addContent.downloads", {
+          count: fmtDownloads(hit.downloads || detail?.downloads || 0),
+        })}
+        {latest && (
+          <span className="ml-2 font-mono">
+            {t("addContent.latestVersion", { version: latest.version_number })}
+          </span>
+        )}
       </div>
-
-      {error && (
-        <div className="mx-5 mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div key={showVersions ? "versions" : "body"} className="swap-in">
-          {showVersions ? (
-            <VersionList
-              instanceId={instanceId}
-              projectId={hit.project_id}
-              source={hit.source}
-              versions={versions}
-              installedVersion={installedVersion}
-              busy={busy}
-              locked={locked}
-              onPick={(v) => install(v)}
-            />
-          ) : detail ? (
-            <Markdown>{detail.body || detail.description}</Markdown>
-          ) : (
-            <div className="grid place-items-center py-10 text-ink-600">
-              <Loader2 className="animate-spin" />
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    </>
   );
-}
 
-function VersionList({
-  instanceId,
-  projectId,
-  source,
-  versions,
-  installedVersion,
-  busy,
-  locked,
-  onPick,
-}: {
-  instanceId: string;
-  projectId: string;
-  source: string;
-  versions: ContentVersion[] | null;
-  installedVersion: string | null | undefined;
-  busy: string | null;
-  locked: boolean;
-  onPick: (versionId: string) => void;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState<string | null>(null);
-  if (!versions)
-    return (
-      <div className="grid place-items-center py-10 text-ink-600">
-        <Loader2 className="animate-spin" />
-      </div>
-    );
-  if (versions.length === 0)
-    return (
-      <div className="py-10 text-center text-sm text-ink-600">
-        {t("mods.noVersions")}
-      </div>
-    );
-  return (
-    <div className="flex flex-col gap-1.5">
-      {versions.map((v, i) => {
-        const isInstalled = installedVersion === v.version_id;
-        const expanded = open === v.version_id;
-        return (
-          <div
-            key={v.version_id}
-            className="overflow-hidden rounded-md border border-edge bg-ink-850/40"
+  const actions = (
+    <>
+      {locked ? (
+        onUnlock ? (
+          <button
+            onClick={onUnlock}
+            title={t("addContent.unlockTitle")}
+            className="flex w-32 flex-col items-center gap-1 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
-            <div className="flex items-center gap-2 px-3 py-2">
-              <button
-                onClick={() =>
-                  setOpen(expanded ? null : v.version_id)
-                }
-                title={t("addContent.showChangelog")}
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded transition ${
-                  expanded
-                    ? "bg-brass-500/15 text-brass-300"
-                    : "text-ink-600 hover:text-brass-300"
-                }`}
-              >
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform ${expanded ? "rotate-180" : ""}`}
-                />
-              </button>
-              <button
-                onClick={() => setOpen(expanded ? null : v.version_id)}
-                className="min-w-0 flex-1 text-left"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate font-mono text-[13px] text-gray-100">
-                    {v.version_number}
-                  </span>
-                  {i === 0 && (
-                    <span className="rounded bg-brass-500/15 px-1.5 text-[9px] text-brass-300">
-                      {t("addContent.latest")}
-                    </span>
-                  )}
-                  {isInstalled && (
-                    <span className="rounded bg-patina-500/15 px-1.5 text-[9px] text-patina-400">
-                      {t("addContent.installedBadge")}
-                    </span>
-                  )}
-                </div>
-                <div className="truncate text-[10px] text-ink-600">
-                  {v.game_versions.join(", ")}
-                  {v.loaders.length ? ` · ${v.loaders.join(", ")}` : ""}
-                </div>
-              </button>
-              <button
-                disabled={!!busy || isInstalled || locked}
-                onClick={() => onPick(v.version_id)}
-                className="shrink-0 rounded-md bg-brass-500/15 px-3 py-1.5 text-xs font-medium text-brass-300 transition hover:bg-brass-500/25 disabled:opacity-50"
-              >
-                {busy === v.version_id ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : isInstalled ? (
-                  t("addContent.current")
-                ) : (
-                  t("mods.install")
-                )}
-              </button>
-            </div>
-            <Collapse open={expanded}>
-              <Changelog
-                instanceId={instanceId}
-                projectId={projectId}
-                versionId={v.version_id}
-                source={source}
-                enabled={expanded}
-              />
-            </Collapse>
+            <Unlock size={14} />
+            {t("addContent.managedUnlock")}
+          </button>
+        ) : (
+          <div className="w-32 rounded-md border border-edge bg-ink-850/60 px-3 py-2 text-center text-[11px] leading-snug text-ink-600">
+            {t("addContent.managedLocked")}
           </div>
-        );
-      })}
-    </div>
+        )
+      ) : (
+        <button
+          disabled={!!busy}
+          onClick={() => install()}
+          className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-60"
+        >
+          {busy === "latest" ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : updateAvailable ? (
+            <>
+              <Download size={15} /> {t("addContent.update")}
+            </>
+          ) : isInstalled ? (
+            <>
+              <Check size={15} /> {t("addContent.reinstall")}
+            </>
+          ) : (
+            <>
+              <Download size={15} /> {t("common.add")}
+            </>
+          )}
+        </button>
+      )}
+      <button
+        onClick={() => setShowVersions((v) => !v)}
+        aria-pressed={showVersions}
+        title={showVersions ? t("addContent.backToDescription") : t("addContent.showAllVersions")}
+        className={`flex items-center justify-center gap-1.5 rounded-md border px-4 py-2 text-xs transition ${
+          showVersions
+            ? "border-brass-500/50 bg-brass-500/15 text-brass-200"
+            : "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
+        }`}
+      >
+        {showVersions ? <ChevronLeft size={14} /> : <ListChecks size={14} />}
+        {showVersions ? t("addContent.description") : t("addContent.versions")}
+      </button>
+    </>
+  );
+
+  return (
+    <DetailShell
+      hit={hit}
+      onExternal={() =>
+        api
+          .openExternal(
+            detail?.url ?? api.sourceUrl(hit.source, hit.slug || hit.project_id),
+          )
+          .catch(() => {})
+      }
+      externalTitle={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
+      subtitle={subtitle}
+      actions={actions}
+      error={error}
+      showVersions={showVersions}
+      bodyNode={
+        detail ? (
+          <Markdown>{detail.body || detail.description}</Markdown>
+        ) : (
+          <div className="grid place-items-center py-10 text-ink-600">
+            <Loader2 className="animate-spin" />
+          </div>
+        )
+      }
+      versionsNode={
+        <VersionList
+          instanceId={instanceId}
+          projectId={hit.project_id}
+          source={hit.source}
+          versions={versions}
+          installedVersion={installedVersion}
+          busy={busy}
+          locked={locked}
+          showLatestBadge
+          onPick={(v) => install(v)}
+        />
+      }
+    />
   );
 }

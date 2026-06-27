@@ -17,7 +17,7 @@ export function useFilters(
   const [options, setOptions] = useState<FilterOptions | null>(
     () => optionsCache.get(cacheKey) ?? null,
   );
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [loadingOptions, setLoadingOptions] = useState(false);
 
   useEffect(() => {

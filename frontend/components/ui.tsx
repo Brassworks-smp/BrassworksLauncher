@@ -14,10 +14,36 @@ import {
   Star,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
   Check,
   RotateCcw,
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
+
+export function BackButton({
+  onClick,
+  title,
+  disabled,
+  className,
+}: {
+  onClick: () => void;
+  title?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-600 transition hover:-translate-x-0.5 hover:bg-ink-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50 ${className ?? ""}`}
+    >
+      <ChevronLeft size={18} />
+    </button>
+  );
+}
 
 export function useClosable(onClose: () => void, duration = 190) {
   const [closing, setClosing] = useState(false);

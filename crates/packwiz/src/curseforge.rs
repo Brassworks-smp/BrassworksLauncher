@@ -347,6 +347,17 @@ impl Curseforge {
         if let Some(id) = filters.loaders.first().map(|s| s.as_str()).and_then(loader_type) {
             q.push(("modLoaderType", id.to_string()));
         }
+        if !filters.categories.is_empty() {
+            let ids = filters
+                .categories
+                .iter()
+                .filter(|c| c.chars().all(|ch| ch.is_ascii_digit()))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !ids.is_empty() {
+                q.push(("categoryIds", format!("[{}]", ids.join(","))));
+            }
+        }
         let body: SearchResponse = self.get(&format!("{}/mods/search", self.api_base()), &q)?;
         Ok(body
             .data

@@ -178,7 +178,8 @@ export function AddInstanceModal({
   const [tab, setTab] = useState<Tab>(
     importOnly ? "import" : initialTab ?? "custom",
   );
-  const [browserFiltersOpen, setBrowserFiltersOpen] = useState(false);
+  const [browserFiltersOpen, setBrowserFiltersOpen] = useState(true);
+  const [modpackDetailOpen, setModpackDetailOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const { closing, close } = useClosable(onClose);
 
@@ -534,6 +535,8 @@ export function AddInstanceModal({
   };
 
   const sharePreview = !!initialPackwiz && pending === null;
+  const modpackBig =
+    (tab === "modrinth" || tab === "curseforge") && modpackDetailOpen;
 
   return (
     <div
@@ -552,13 +555,15 @@ export function AddInstanceModal({
     >
       <div
         style={{
-          width:
-            (tab === "modrinth" || tab === "curseforge") && browserFiltersOpen
+          width: modpackBig
+            ? "min(1100px, 96vw)"
+            : (tab === "modrinth" || tab === "curseforge") && browserFiltersOpen
               ? "min(1040px, 96vw)"
               : "640px",
+          height: modpackBig ? "85vh" : "80vh",
           ...(importOnly ? {} : (ACCENTS[tab] as React.CSSProperties | undefined)),
         }}
-        className="rise relative flex h-[80vh] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        className="rise relative flex max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
       >
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
@@ -966,33 +971,27 @@ export function AddInstanceModal({
           )}
 
           {(tab === "modrinth" || tab === "curseforge") && (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
-              <button
-                onClick={pickFile}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-edge px-3 py-2 text-xs text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-              >
-                <Upload size={14} /> {t("addInstance.uploadInstead")}
-              </button>
-              <ModpackBrowser
-                source={tab}
-                detailInstanceId={detailInstanceId}
-                installing={installing}
-                featured={featured}
-                featuredEnabled={featuredEnabled}
-                onOpenFeatured={onOpenFeatured}
-                onEnableFeatured={onEnableFeatured}
-                onFiltersOpenChange={setBrowserFiltersOpen}
-                onInstall={(projectId, versionId, packName2) =>
-                  beginInstall({
-                    kind: "modpack",
-                    source: tab,
-                    projectId,
-                    versionId,
-                    name: packName2,
-                  })
-                }
-              />
-            </div>
+            <ModpackBrowser
+              source={tab}
+              detailInstanceId={detailInstanceId}
+              installing={installing}
+              featured={featured}
+              featuredEnabled={featuredEnabled}
+              onOpenFeatured={onOpenFeatured}
+              onEnableFeatured={onEnableFeatured}
+              onFiltersOpenChange={setBrowserFiltersOpen}
+              onDetailOpenChange={setModpackDetailOpen}
+              onUpload={pickFile}
+              onInstall={(projectId, versionId, packName2) =>
+                beginInstall({
+                  kind: "modpack",
+                  source: tab,
+                  projectId,
+                  versionId,
+                  name: packName2,
+                })
+              }
+            />
           )}
           </>
           )}

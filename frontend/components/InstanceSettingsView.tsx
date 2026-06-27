@@ -1098,8 +1098,8 @@ function ModpackCard({
                   source={source}
                   versions={versions ?? []}
                   actionLabel={maintaining ? t("instanceSettings.modpack.workingEllipsis") : t("instanceSettings.modpack.switch")}
-                  busy={maintaining}
-                  currentVersionId={currentVersion}
+                  busy={maintaining ? "working" : null}
+                  installedVersion={currentVersion}
                   onPick={(vid) => {
                     setShowVersions(false);
                     run(() => api.updateModpack(id, vid));

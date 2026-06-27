@@ -1050,8 +1050,8 @@ function RowVersions({
             source={mod.source}
             versions={versions}
             actionLabel={t("mods.install")}
-            busy={busy !== null}
-            currentVersionId={mod.version_id}
+            busy={busy}
+            installedVersion={mod.version_id}
             onPick={pick}
           />
         </div>

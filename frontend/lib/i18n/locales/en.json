@@ -1154,6 +1154,8 @@
     "openFeatured": "Open the featured experience",
     "enableAndOpen": "Enable featured & open",
     "installChooseVersion": "Install - choose a version",
+    "installLatest": "Install latest",
+    "versions": "Versions",
     "openPage": "Open page",
     "backToOverview": "Back to overview",
     "searchPlaceholder": "Search {source} modpacks…",
