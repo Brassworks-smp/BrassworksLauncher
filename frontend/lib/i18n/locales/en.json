@@ -669,6 +669,8 @@
     "embed": "Embed icons & descriptions",
     "embedHint": "Lays the export out as cards with each project's icon and description (HTML & Markdown only).",
     "countHint": "{count} installed item(s) will be exported to your Downloads folder.",
+    "fetching": "Fetching project details…",
+    "fetchingCount": "Fetching project details… {done}/{total}",
     "savedToast": "Content list exported to your Downloads folder"
   },
   "mods": {

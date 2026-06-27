@@ -11,7 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import * as api from "@/lib/api";
-import { toast } from "@/lib/toast";
+import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import { useT } from "@/lib/i18n";
 import { useClosable, Toggle } from "./ui";
 import type { InstalledMod } from "@/lib/types";
@@ -117,6 +117,10 @@ export function ExportContentModal({
     const targets = mods
       .map((m, i) => ({ m, i }))
       .filter(({ m }) => m.source !== "local" && !!m.project_id);
+    const total = targets.length;
+    const progressKey = `export-fetch:${instanceId}`;
+    let done = 0;
+    if (total > 0) toastProgress(progressKey, t("exportContent.fetching"), 0);
     let cursor = 0;
     const worker = async () => {
       while (cursor < targets.length) {
@@ -132,11 +136,22 @@ export function ExportContentModal({
         } catch {
           // best-effort enrichment
         }
+        done++;
+        if (total > 0)
+          toastProgress(
+            progressKey,
+            t("exportContent.fetchingCount", { done, total }),
+            done / total,
+          );
       }
     };
-    await Promise.all(
-      Array.from({ length: Math.min(ENRICH_CONCURRENCY, targets.length) }, worker),
-    );
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(ENRICH_CONCURRENCY, targets.length) }, worker),
+      );
+    } finally {
+      if (total > 0) dismissToast(progressKey);
+    }
     return base;
   };
 
