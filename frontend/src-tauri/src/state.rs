@@ -35,6 +35,7 @@ pub(crate) struct ExitInfo {
     pub(crate) instance_id: String,
     pub(crate) code: Option<i32>,
     pub(crate) error: Option<String>,
+    pub(crate) needs_relogin: bool,
     pub(crate) cancelled: bool,
 }
 

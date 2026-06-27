@@ -325,6 +325,7 @@ export interface ExitInfo {
   instance_id: string;
   code: number | null;
   error: string | null;
+  needs_relogin: boolean;
   cancelled: boolean;
 }
 

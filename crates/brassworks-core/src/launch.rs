@@ -9,7 +9,6 @@ use portablemc::forge::{self, Event as ForgeEvent, Loader, Version as ForgeVersi
 use portablemc::moj::{self, Event as MojEvent};
 use portablemc::msa;
 use packwiz::{SyncProgress, SyncStage};
-use uuid::Uuid;
 
 use crate::account::{Account, AccountKind};
 use crate::error::{CoreError, Result};
@@ -23,6 +22,7 @@ pub struct LaunchRequest<'a> {
     pub paths: &'a Paths,
     pub instance: &'a Instance,
     pub account: &'a Account,
+    pub msa_account: Option<&'a msa::Account>,
     pub settings: &'a LauncherSettings,
     pub quick_play: Option<QuickPlay>,
 }
@@ -228,22 +228,13 @@ fn configure_mojang(
             mojang.set_auth_offline_username(req.account.username.clone());
         }
         AccountKind::Microsoft => {
-            let db = msa::Database::new(req.paths.msa_db_file());
-            let uuid = Uuid::parse_str(&req.account.uuid)
-                .map_err(|e| CoreError::Auth(format!("invalid account uuid: {e}")))?;
-            let mut account = db
-                .load_from_uuid(uuid)
-                .map_err(|e| CoreError::Auth(format!("{e:?}")))?
-                .ok_or_else(|| {
-                    CoreError::Auth(
-                        "Microsoft session not found — please sign in again".to_string(),
-                    )
-                })?;
-            account
-                .request_refresh()
-                .map_err(|e| CoreError::Auth(format!("session expired, sign in again ({e:?})")))?;
-            let _ = db.store(account.clone());
-            mojang.set_auth_msa(&account);
+            let account = req.msa_account.ok_or_else(|| {
+                CoreError::AuthExpired(
+                    "Your Microsoft session is no longer available — please sign in again."
+                        .to_string(),
+                )
+            })?;
+            mojang.set_auth_msa(account);
         }
     }
 

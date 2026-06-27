@@ -18,6 +18,7 @@
 * **Steadier loader versions** - choosing the "stable" loader now pins the exact version at creation, so your instance won't quietly drift onto a newer build later on.
 
 ### **Fixes:**
+* **Sign-in is far more reliable** - launching no longer fails with cryptic "authentication failed: Corrupted" errors when your Microsoft session expires. Account refreshes are now serialized so a background check can't clash with a launch, the saved-session file is written atomically (and self-heals if it ever gets damaged), and an expired session sends you straight to a one-click re-login instead of an error.
 * **Export selection** - you can now tick a second file in a folder where one was already selected; the list no longer left checkboxes stale.
 * **Install links** - opening a share link or double-clicking a `.packwiz` file while the launcher is starting up now reliably hands off to the install screen instead of being dropped.
 * **Linux rendering** - applied the WebKit DMA-BUF workaround so the window renders correctly on more Linux setups.

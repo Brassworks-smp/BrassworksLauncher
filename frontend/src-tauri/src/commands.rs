@@ -280,6 +280,7 @@ pub(crate) fn launch(
                     instance_id: id.clone(),
                     code,
                     error: None,
+                    needs_relogin: false,
                     cancelled: false,
                 }
             }
@@ -287,11 +288,13 @@ pub(crate) fn launch(
                 instance_id: id.clone(),
                 code: None,
                 error: None,
+                needs_relogin: false,
                 cancelled: true,
             },
             Err(e) => ExitInfo {
                 instance_id: id.clone(),
                 code: None,
+                needs_relogin: e.needs_relogin(),
                 error: Some(e.to_string()),
                 cancelled: false,
             },

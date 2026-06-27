@@ -453,7 +453,13 @@ pub enum AuthError {
 impl AuthError {
 
     pub fn requires_relogin(&self) -> bool {
-        matches!(self, Self::RefreshRejected(_) | Self::OutdatedToken)
+        matches!(
+            self,
+            Self::RefreshRejected(_)
+                | Self::OutdatedToken
+                | Self::InvalidStatus(401)
+                | Self::InvalidStatus(403)
+        )
     }
 
     #[inline]
@@ -645,7 +651,9 @@ impl Database {
             rw.rewind()?;
 
             data = serde_json::from_reader::<_, DatabaseData>(BufReader::new(&mut rw))
-                .map_err(|e| DatabaseError::Corrupted.map_json_io(e))?;
+                .unwrap_or(DatabaseData {
+                    accounts: Vec::new(),
+                });
 
         }
 
@@ -654,11 +662,20 @@ impl Database {
 
         if save {
 
-            rw.rewind()?;
-            rw.set_len(0)?;
-            
-            serde_json::to_writer(BufWriter::new(rw), &data)
+            drop(rw);
+
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let tmp = self
+                .file
+                .with_extension(format!("tmp-{}-{}", std::process::id(), nanos));
+
+            let writer = File::create(&tmp)?;
+            serde_json::to_writer(BufWriter::new(writer), &data)
                 .map_err(|_| DatabaseError::WriteFailed)?;
+            fs::rename(&tmp, &self.file)?;
 
         }
 

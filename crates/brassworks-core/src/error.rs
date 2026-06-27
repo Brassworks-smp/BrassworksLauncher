@@ -37,6 +37,9 @@ pub enum CoreError {
     #[error("authentication failed: {0}")]
     Auth(String),
 
+    #[error("{0}")]
+    AuthExpired(String),
+
     #[error("session expired")]
     Unauthorized,
 
@@ -116,6 +119,10 @@ mod error_tests {
 impl CoreError {
     pub fn is_cancelled(&self) -> bool {
         matches!(self, CoreError::Cancelled)
+    }
+
+    pub fn needs_relogin(&self) -> bool {
+        matches!(self, CoreError::AuthExpired(_))
     }
 }
 

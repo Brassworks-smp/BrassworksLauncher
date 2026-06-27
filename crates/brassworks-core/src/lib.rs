@@ -326,6 +326,7 @@ pub struct Launcher {
     paths: Paths,
     session_forge_tokens:
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
+    msa_lock: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 impl Launcher {
@@ -335,6 +336,7 @@ impl Launcher {
         Ok(Self {
             paths,
             session_forge_tokens: Default::default(),
+            msa_lock: Default::default(),
         })
     }
 
@@ -344,6 +346,7 @@ impl Launcher {
         Ok(Self {
             paths,
             session_forge_tokens: Default::default(),
+            msa_lock: Default::default(),
         })
     }
 
@@ -413,7 +416,42 @@ impl Launcher {
         Ok(store)
     }
 
-                        pub fn account_status(&self, account_id: &str) -> AccountStatus {
+    fn msa_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.msa_lock.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn load_refreshed_msa(&self, uuid: uuid::Uuid) -> Result<msa::Account> {
+        let _guard = self.msa_guard();
+        let db = msa::Database::new(self.paths.msa_db_file());
+        let mut acc = match db.load_from_uuid(uuid) {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Err(CoreError::AuthExpired(
+                    "Your Microsoft session is no longer saved — please sign in again.".to_string(),
+                ))
+            }
+            Err(_) => {
+                return Err(CoreError::AuthExpired(
+                    "Your saved Microsoft session couldn't be read — please sign in again."
+                        .to_string(),
+                ))
+            }
+        };
+        match acc.request_refresh() {
+            Ok(()) => {
+                let _ = db.store(acc.clone());
+                Ok(acc)
+            }
+            Err(e) if e.requires_relogin() => Err(CoreError::AuthExpired(
+                "Your Microsoft session has expired — please sign in again.".to_string(),
+            )),
+            Err(e) => Err(CoreError::Auth(format!(
+                "Couldn't reach Microsoft to refresh your session ({e}). Check your connection and try again."
+            ))),
+        }
+    }
+
+    pub fn account_status(&self, account_id: &str) -> AccountStatus {
         let Ok(store) = self.accounts() else {
             return AccountStatus::NeedsRelogin;
         };
@@ -423,20 +461,12 @@ impl Launcher {
         if !account.is_microsoft() {
             return AccountStatus::Offline;
         }
-        let db = msa::Database::new(self.paths.msa_db_file());
         let Ok(uuid) = uuid::Uuid::parse_str(&account.uuid) else {
             return AccountStatus::NeedsRelogin;
         };
-        match db.load_from_uuid(uuid) {
-            Ok(Some(mut acc)) => match acc.request_refresh() {
-                Ok(()) => {
-                    let _ = db.store(acc);
-                    AccountStatus::Ok
-                }
-                Err(e) if e.requires_relogin() => AccountStatus::NeedsRelogin,
-                Err(_) => AccountStatus::Ok,
-            },
-            Ok(None) => AccountStatus::NeedsRelogin,
+        match self.load_refreshed_msa(uuid) {
+            Ok(_) => AccountStatus::Ok,
+            Err(e) if e.needs_relogin() => AccountStatus::NeedsRelogin,
             Err(_) => AccountStatus::Ok,
         }
     }
@@ -495,11 +525,20 @@ impl Launcher {
             .clone();
         let settings = self.settings()?;
 
+        let msa_account = if account.is_microsoft() {
+            let uuid = uuid::Uuid::parse_str(&account.uuid)
+                .map_err(|e| CoreError::Auth(format!("invalid account uuid: {e}")))?;
+            Some(self.load_refreshed_msa(uuid)?)
+        } else {
+            None
+        };
+
         let child = launch_instance(
             LaunchRequest {
                 paths: &self.paths,
                 instance: &instance,
                 account: &account,
+                msa_account: msa_account.as_ref(),
                 settings: &settings,
                 quick_play,
             },

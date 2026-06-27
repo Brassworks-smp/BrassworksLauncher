@@ -530,8 +530,17 @@ export default function Home() {
           delete next[id];
           return next;
         });
+        if (info.needs_relogin) {
+          toast(tr("account.sessionExpiredToast"), "error");
+          setMsAuth({ status: "starting" });
+          api.startMicrosoftLogin().catch((e) => {
+            setMsAuth({ status: "error", message: String(e) });
+          });
+          setAccountsRecheck((n) => n + 1);
+        } else if (id === selectedRef.current && info.error) {
+          setError(info.error);
+        }
         if (id === selectedRef.current) {
-          if (info.error) setError(info.error);
           api.modpackStatus(id).then(setModStatus).catch(() => {});
         }
         api.getInstances().then(setInstances).catch(() => {});
@@ -550,7 +559,7 @@ export default function Home() {
     return () => {
       unlisteners.forEach((p) => p.then((un) => un()).catch(() => {}));
     };
-  }, []);
+  }, [tr]);
 
   useEffect(() => {
     if (!api.isTauri()) return;
