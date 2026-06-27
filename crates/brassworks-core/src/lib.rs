@@ -240,6 +240,21 @@ fn share_readme(
         shared = shared_by.unwrap_or("the pack author"),
     )
 }
+
+/// Bump a pack version by one patch level so the auto-updater treats a publish
+/// as a new release. Falls back to a sensible default for non-semver inputs.
+fn bump_pack_version(prev: &str) -> String {
+    let prev = prev.trim();
+    let mut parts = prev.split('.');
+    let major = parts.next().and_then(|p| p.parse::<u64>().ok());
+    let minor = parts.next().and_then(|p| p.parse::<u64>().ok());
+    let patch = parts.next().and_then(|p| p.parse::<u64>().ok());
+    match (major, minor, patch) {
+        (Some(major), Some(minor), Some(patch)) => format!("{major}.{minor}.{}", patch + 1),
+        _ => "1.0.1".to_string(),
+    }
+}
+
 pub use ping::ServerStatus;
 pub use saves::{DatapackInfo, ServerEntry, WorldBackup, WorldInfo};
 pub use stars::StarKind;
@@ -2086,7 +2101,7 @@ impl Launcher {
         let f = forge::get(provider);
         let token = self.require_forge_token(provider)?;
         let user_login = f.verify_token(&token)?;
-        let config = if config_id.trim().is_empty() {
+        let mut config = if config_id.trim().is_empty() {
             self.ensure_share_config(&instance)?
         } else {
             export::load_configs(&self.paths, instance_id)
@@ -2094,6 +2109,18 @@ impl Launcher {
                 .find(|c| c.id == config_id)
                 .ok_or_else(|| CoreError::Modpack("share config not found".to_string()))?
         };
+        // Bump the pack version on every re-publish so the auto-updater picks the
+        // change up as a new version. The first publish keeps the config version.
+        if let Some(prev) = instance
+            .share
+            .as_ref()
+            .and_then(|s| s.published_version.as_deref())
+            .filter(|v| !v.trim().is_empty())
+        {
+            config.version = bump_pack_version(prev);
+        } else if config.version.trim().is_empty() {
+            config.version = "1.0.0".to_string();
+        }
         let mut out = self.build_publish_files(&instance, &config)?;
 
         if !confirm_embedded && !out.embedded.is_empty() {
