@@ -2404,6 +2404,9 @@ pub(crate) fn cli_ready(state: State<AppState>) -> CmdResult<PendingStartup> {
         state.frontend_ready.store(true, Ordering::Relaxed);
         slot.take()
     };
+    // Fall back to the process-global buffer, which captures macOS file-open
+    // events that arrived before AppState/the frontend was ready (cold start).
+    let open = open.or_else(crate::take_pending_open);
     let command = state.pending_cli.lock().map_err(|_| "lock poisoned")?.take();
     Ok(PendingStartup { open, command })
 }

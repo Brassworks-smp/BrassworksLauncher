@@ -5,7 +5,7 @@ mod discord;
 mod state;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use brassworks_core::Launcher;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -20,6 +20,31 @@ fn reveal_main(app: &tauri::AppHandle) {
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
+    }
+}
+
+/// Process-global buffer for files/URLs the OS asks us to open before the
+/// frontend (or even `AppState`) is ready. On macOS the `RunEvent::Opened`
+/// event can fire before `setup()` runs, so we cannot rely on `AppState` being
+/// managed yet — this static is always available and is drained by `cli_ready`.
+static PENDING_OPENS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+fn pending_opens() -> &'static Mutex<Vec<String>> {
+    PENDING_OPENS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub(crate) fn push_pending_open(file: String) {
+    if let Ok(mut v) = pending_opens().lock() {
+        v.push(file);
+    }
+}
+
+pub(crate) fn take_pending_open() -> Option<String> {
+    let mut v = pending_opens().lock().ok()?;
+    if v.is_empty() {
+        None
+    } else {
+        Some(v.remove(0))
     }
 }
 
@@ -589,12 +614,25 @@ pub fn run() {
                     .collect();
                 if let Some(file) = opens.into_iter().next() {
                     reveal_main(app);
-                    if let Some(slot) = app.try_state::<AppState>() {
-                        if let Ok(mut pending) = slot.pending_open.lock() {
-                            if slot.frontend_ready.load(std::sync::atomic::Ordering::Relaxed) {
-                                let _ = app.emit("packwiz://open", file);
-                            } else {
-                                *pending = Some(file);
+                    let ready = app
+                        .try_state::<AppState>()
+                        .map(|s| s.frontend_ready.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(false);
+                    if ready {
+                        let _ = app.emit("packwiz://open", file);
+                    } else {
+                        // Buffer in the process-global so a cold-start open that
+                        // arrives before AppState/the frontend is up is not lost.
+                        push_pending_open(file);
+                        // Guard the narrow window where the frontend flips ready
+                        // between our check above and the push.
+                        if app
+                            .try_state::<AppState>()
+                            .map(|s| s.frontend_ready.load(std::sync::atomic::Ordering::Relaxed))
+                            .unwrap_or(false)
+                        {
+                            if let Some(f) = take_pending_open() {
+                                let _ = app.emit("packwiz://open", f);
                             }
                         }
                     }
