@@ -146,7 +146,47 @@ command is installed and lets you remove it again at any time.
 
 ---
 
-## Share a pack
+## Export to any launcher
+
+<table>
+<tr>
+<td width="45%" valign="middle">
+
+Turn any instance into a shareable pack in **three formats** - packwiz, Modrinth `.mrpack`, or CurseForge `.zip` - straight from the launcher. A guided window lets you choose a format, pick exactly which mods, configs, and files to include, and name the pack with its author and version, then writes the finished pack to your Downloads folder.
+
+Flip on **unsup flavors** to extend a packwiz pack with flavor groups, so players can choose variants (different mods or assets) when they install, and optionally **sign** the pack so installers can verify it's genuine. Save any setup as a reusable **export config** and re-export with a single click whenever the pack changes - blocked CurseForge mods are bundled in automatically so packs verify cleanly everywhere.
+
+</td>
+<td width="55%">
+<img src="assets/ExportMenu.png" alt="Export modpack window" width="100%">
+</td>
+</tr>
+</table>
+
+---
+
+## Publish and share your pack
+
+<table>
+<tr>
+<td width="55%">
+<img src="assets/SharingMenu.png" alt="Share modpack window" width="100%">
+</td>
+<td width="45%" valign="middle">
+
+Turn any instance into a link you can hand to friends. Connect a GitHub or GitLab account once with an access token (stored only on your computer), and Brassworks publishes the pack to a repo for you and hands back a share link. When a friend opens it, the launcher installs an auto-updating copy that re-syncs every time you publish a change - or save the pack as a `.packwiz` file to share by hand.
+
+A built-in **content editor** lets you pick exactly which mods, configs, and files go into the shared pack, author **flavor groups** so players can choose variants at install time, and mark mods as **optional**. The **Details** tab carries the pack description, RAM, JVM args, news and player-count sources; the **Changes** tab shows precisely what the next publish will push. **Publish update** pushes your edits, **Sync from shared** pulls the live pack back into your copy, and **Disconnect** unlinks at any time.
+
+</td>
+</tr>
+</table>
+
+> While you're hosting a pack, flavors and optional mods are locked on your **local** copy so the published version always contains every mod. You design the flavor and optional choices *for your players* in the Share window's content editor - linking an existing repo even re-enables anything local toggling had switched off, so nothing is missing from the published pack.
+
+---
+
+## The `.packwiz` share format
 
 <table>
 <tr>
