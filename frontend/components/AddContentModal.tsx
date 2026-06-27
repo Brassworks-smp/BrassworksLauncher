@@ -21,10 +21,12 @@ import {
   ChevronDown,
   ListChecks,
   Unlock,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { ResultRow, useInfiniteSearch, SEARCH_PAGE } from "./Browse";
+import { FilterSidebar, useFilters } from "./FilterSidebar";
 import { Markdown, Changelog } from "./Markdown";
 import { SegmentedTabs, Collapse, useClosable } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -162,13 +164,27 @@ export function AddContentModal({
         ? MODRINTH_ACCENT_LIGHT
         : MODRINTH_ACCENT_DARK;
 
+  const {
+    filters,
+    setFilters,
+    options: filterOptions,
+    open: filtersOpen,
+    setOpen: setFiltersOpen,
+    loadingOptions,
+    activeCount,
+    key: filtersK,
+  } = useFilters(
+    () => api.contentFilterOptions(instanceId, type, source),
+    `${instanceId}:${type}:${source}`,
+  );
+
   const fetchPage = useCallback(
     (q: string, offset: number) =>
-      api.searchContent(instanceId, q, type, source, offset),
-    [instanceId, type, source],
+      api.searchContent(instanceId, q, type, source, offset, filters),
+    [instanceId, type, source, filters],
   );
   const { hits, loading, loadingMore, hasMore, error, handleScroll } =
-    useInfiniteSearch(fetchPage, query, `${type}:${source}`, {
+    useInfiniteSearch(fetchPage, query, `${type}:${source}:${filtersK}`, {
       enabled: !detailOnly,
     });
 
@@ -203,8 +219,11 @@ export function AddContentModal({
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
-        className="rise flex h-[80vh] w-[780px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-colors"
-        style={accent}
+        className="rise flex h-[80vh] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width,color,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{
+          width: filtersOpen ? "min(1080px, 96vw)" : "820px",
+          ...accent,
+        }}
       >
         {}
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
@@ -295,17 +314,44 @@ export function AddContentModal({
                   className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
                 />
               </div>
+              <button
+                onClick={() => setFiltersOpen((o) => !o)}
+                title={t("mods.filter.button")}
+                className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm transition ${
+                  filtersOpen || activeCount > 0
+                    ? "border-brass-500/60 bg-brass-500/10 text-brass-200"
+                    : "border-edge text-ink-600 hover:text-gray-200"
+                }`}
+              >
+                <SlidersHorizontal size={15} />
+                {activeCount > 0 && (
+                  <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brass-500 px-1 text-[10px] font-semibold text-ink-950">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
             </div>
 
+            <div className="flex min-h-0 flex-1">
+            <FilterSidebar
+              open={filtersOpen}
+              source={source}
+              options={filterOptions}
+              loading={loadingOptions}
+              filters={filters}
+              onChange={setFilters}
+              accentStyle={accent}
+            />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {error && (
-              <div className="mx-5 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              <div className="mx-5 mb-2 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                 {error}
               </div>
             )}
 
             <div
               ref={listScrollRef}
-              className="flex-1 overflow-y-auto px-5 pb-5"
+              className="flex-1 overflow-y-auto px-5 pb-5 pt-3"
               onScroll={onListScroll}
             >
               {loading ? (
@@ -361,6 +407,8 @@ export function AddContentModal({
                   )}
                 </div>
               )}
+            </div>
+            </div>
             </div>
 
             <div className="border-t border-edge px-5 py-2 text-center text-[11px] text-ink-600">

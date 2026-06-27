@@ -209,22 +209,51 @@ impl Curseforge {
         project_type: &str,
         loader: Option<&str>,
         game_version: &str,
+        filters: &crate::SearchFilters,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
+        let (sort_field, sort_order) = cf_sort(filters.sort.as_deref());
         let mut q: Vec<(&str, String)> = vec![
             ("gameId", MINECRAFT_GAME_ID.to_string()),
             ("classId", class_id(project_type).to_string()),
             ("searchFilter", query.to_string()),
-            ("gameVersion", game_version.to_string()),
-            ("sortField", "2".to_string()), 
-            ("sortOrder", "desc".to_string()),
+            ("sortField", sort_field.to_string()),
+            ("sortOrder", sort_order.to_string()),
             ("index", offset.to_string()),
             ("pageSize", limit.to_string()),
         ];
-        if let Some(id) = loader.and_then(loader_type) {
+
+        let gv = filters
+            .game_versions
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or(if filters.allow_any_version { "" } else { game_version });
+        if !gv.is_empty() {
+            q.push(("gameVersion", gv.to_string()));
+        }
+
+        let cf_loader = filters
+            .loaders
+            .first()
+            .map(|s| s.as_str())
+            .or(if filters.allow_any_loader { None } else { loader });
+        if let Some(id) = cf_loader.and_then(loader_type) {
             q.push(("modLoaderType", id.to_string()));
         }
+
+        if !filters.categories.is_empty() {
+            let ids = filters
+                .categories
+                .iter()
+                .filter(|c| c.chars().all(|ch| ch.is_ascii_digit()))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !ids.is_empty() {
+                q.push(("categoryIds", format!("[{}]", ids.join(","))));
+            }
+        }
+
         let body: SearchResponse = self.get(&format!("{}/mods/search", self.api_base()), &q)?;
         Ok(body
             .data
@@ -233,21 +262,91 @@ impl Curseforge {
             .collect())
     }
 
+    pub fn filter_options(&self, project_type: &str) -> crate::FilterOptions {
+        let key = format!("filteropts-v2-{project_type}");
+        if let Some(o) = self.read_cache::<crate::FilterOptions>(&key) {
+            return o;
+        }
+        let categories = self.fetch_categories(project_type);
+        let opts = crate::FilterOptions {
+            categories,
+            game_versions: self.fetch_game_versions(),
+            loaders: LOADER_NAMES.iter().map(|s| s.to_string()).collect(),
+            licenses: Vec::new(),
+            sorts: vec![
+                "relevance".into(),
+                "downloads".into(),
+                "updated".into(),
+                "newest".into(),
+            ],
+            supports_environment: false,
+            supports_advanced_facets: false,
+        };
+        if !opts.categories.is_empty() {
+            self.write_cache(&key, &opts);
+        }
+        opts
+    }
+
+    fn fetch_categories(&self, project_type: &str) -> Vec<crate::FilterCategory> {
+        let q = vec![
+            ("gameId", MINECRAFT_GAME_ID.to_string()),
+            ("classId", class_id(project_type).to_string()),
+        ];
+        let body: DataWrap<Vec<ApiCategory>> =
+            match self.get(&format!("{}/categories", self.api_base()), &q) {
+                Ok(b) => b,
+                Err(_) => return Vec::new(),
+            };
+        body.data
+            .into_iter()
+            .map(|c| crate::FilterCategory {
+                id: c.id.to_string(),
+                name: c.name,
+                icon: c.icon_url,
+            })
+            .collect()
+    }
+
+    fn fetch_game_versions(&self) -> Vec<String> {
+        let body: DataWrap<Vec<ApiMcVersion>> =
+            match self.get(&format!("{}/minecraft/version", self.api_base()), &[]) {
+                Ok(b) => b,
+                Err(_) => return Vec::new(),
+            };
+        let mut versions: Vec<String> = body
+            .data
+            .into_iter()
+            .map(|v| v.version_string)
+            .filter(|v| v.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            .collect();
+        crate::sort_mc_versions_desc(&mut versions);
+        versions
+    }
+
     pub fn search_modpacks(
         &self,
         query: &str,
+        filters: &crate::SearchFilters,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
-        let q: Vec<(&str, String)> = vec![
+        let (sort_field, sort_order) = cf_sort(filters.sort.as_deref());
+        let mut q: Vec<(&str, String)> = vec![
             ("gameId", MINECRAFT_GAME_ID.to_string()),
             ("classId", class_id("modpack").to_string()),
             ("searchFilter", query.to_string()),
-            ("sortField", "2".to_string()),
-            ("sortOrder", "desc".to_string()),
+            ("sortField", sort_field.to_string()),
+            ("sortOrder", sort_order.to_string()),
             ("index", offset.to_string()),
             ("pageSize", limit.to_string()),
         ];
+        if let Some(gv) = filters.game_versions.first() {
+            q.push(("gameVersion", gv.clone()));
+        }
+        if let Some(id) = filters.loaders.first().map(|s| s.as_str()).and_then(loader_type) {
+            q.push(("modLoaderType", id.to_string()));
+        }
         let body: SearchResponse = self.get(&format!("{}/mods/search", self.api_base()), &q)?;
         Ok(body
             .data
@@ -404,6 +503,42 @@ struct ApiMod {
     authors: Vec<ApiAuthor>,
     #[serde(default)]
     links: Option<ApiLinks>,
+    #[serde(default)]
+    categories: Vec<ApiCategoryRef>,
+    #[serde(rename = "dateModified", default)]
+    date_modified: Option<String>,
+    #[serde(rename = "thumbsUpCount", default)]
+    thumbs_up_count: u64,
+}
+
+#[derive(Deserialize)]
+struct ApiCategoryRef {
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct ApiCategory {
+    id: i64,
+    #[serde(default)]
+    name: String,
+    #[serde(rename = "iconUrl", default)]
+    icon_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ApiMcVersion {
+    #[serde(rename = "versionString", default)]
+    version_string: String,
+}
+
+pub(crate) fn cf_sort(sort: Option<&str>) -> (u32, &'static str) {
+    match sort {
+        Some("downloads") => (6, "desc"),
+        Some("updated") | Some("newest") => (3, "desc"),
+        Some("follows") => (2, "desc"),
+        _ => (2, "desc"),
+    }
 }
 
 #[derive(Deserialize)]
@@ -425,6 +560,14 @@ impl ApiMod {
             project_type: project_type.to_string(),
             versions: Vec::new(),
             source: "curseforge".to_string(),
+            categories: self
+                .categories
+                .into_iter()
+                .map(|c| c.name)
+                .filter(|n| !n.is_empty())
+                .collect(),
+            date_modified: self.date_modified,
+            follows: Some(self.thumbs_up_count),
         }
     }
 }
@@ -526,7 +669,16 @@ impl ApiFile {
 
 #[cfg(test)]
 mod cf_tests {
-    use super::{cdn_url, class_id, encode_filename, loader_type};
+    use super::{cdn_url, cf_sort, class_id, encode_filename, loader_type};
+
+    #[test]
+    fn sort_maps_to_cf_fields() {
+        assert_eq!(cf_sort(None), (2, "desc"));
+        assert_eq!(cf_sort(Some("relevance")), (2, "desc"));
+        assert_eq!(cf_sort(Some("downloads")), (6, "desc"));
+        assert_eq!(cf_sort(Some("updated")), (3, "desc"));
+        assert_eq!(cf_sort(Some("newest")), (3, "desc"));
+    }
 
     #[test]
     fn class_ids_by_project_type() {

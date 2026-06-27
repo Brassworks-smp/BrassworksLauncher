@@ -54,6 +54,72 @@ pub use manifest::{FileFailure, FileRecord, ManagedMod, Manifest};
 pub use model::{Index, IndexFile, MetaFile, ModOption, Pack, Versions};
 pub use modrinth::{Modrinth, ModrinthProject, ResolvedVersion, SearchHit, VersionDep};
 
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SearchFilters {
+    pub categories: Vec<String>,
+    pub sort: Option<String>,
+    pub game_versions: Vec<String>,
+    pub loaders: Vec<String>,
+    pub environment: Option<String>,
+    pub open_source: bool,
+    pub license: Option<String>,
+    pub updated_after: Option<i64>,
+    pub created_after: Option<i64>,
+    pub allow_any_version: bool,
+    pub allow_any_loader: bool,
+}
+
+impl SearchFilters {
+    pub fn is_default(&self) -> bool {
+        self.categories.is_empty()
+            && self.sort.is_none()
+            && self.game_versions.is_empty()
+            && self.loaders.is_empty()
+            && self.environment.is_none()
+            && !self.open_source
+            && self.license.is_none()
+            && self.updated_after.is_none()
+            && self.created_after.is_none()
+            && !self.allow_any_version
+            && !self.allow_any_loader
+    }
+}
+
+pub(crate) fn sort_mc_versions_desc(versions: &mut Vec<String>) {
+    fn parse(v: &str) -> Option<Vec<u32>> {
+        v.split('.').map(|p| p.parse::<u32>().ok()).collect()
+    }
+    versions.sort_by(|a, b| match (parse(a), parse(b)) {
+        (Some(pa), Some(pb)) => pb.cmp(&pa),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => b.cmp(a),
+    });
+    versions.dedup();
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterCategory {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterOptions {
+    pub categories: Vec<FilterCategory>,
+    pub game_versions: Vec<String>,
+    pub loaders: Vec<String>,
+    pub licenses: Vec<FilterCategory>,
+    pub sorts: Vec<String>,
+    pub supports_environment: bool,
+    pub supports_advanced_facets: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Client,

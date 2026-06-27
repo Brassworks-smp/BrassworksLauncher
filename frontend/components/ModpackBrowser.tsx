@@ -7,6 +7,7 @@ import {
   Package,
   ExternalLink,
   Star,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import type {
@@ -18,6 +19,7 @@ import type {
 import { Markdown } from "@/components/Markdown";
 import { VersionList } from "@/components/VersionList";
 import { ResultRow, SourceBadge, useInfiniteSearch, SEARCH_PAGE } from "@/components/Browse";
+import { FilterSidebar, useFilters } from "@/components/FilterSidebar";
 import { useT } from "@/lib/i18n";
 
 
@@ -30,18 +32,20 @@ export function ModpackBrowser({
   featuredEnabled = true,
   onOpenFeatured,
   onEnableFeatured,
+  onFiltersOpenChange,
 }: {
   source: "modrinth" | "curseforge";
   detailInstanceId: string | null;
   installing: boolean;
   onInstall: (projectId: string, versionId: string, name: string) => void;
-  
+
   featured?: FeaturedPack[];
   featuredEnabled?: boolean;
-  
+
   onOpenFeatured?: (id: string) => void;
-  
+
   onEnableFeatured?: () => void;
+  onFiltersOpenChange?: (open: boolean) => void;
 }) {
   const t = useT();
   const matchFeatured = useCallback(
@@ -60,12 +64,27 @@ export function ModpackBrowser({
   const [showVersions, setShowVersions] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const {
+    filters,
+    setFilters,
+    options: filterOptions,
+    open: filtersOpen,
+    setOpen: setFiltersOpen,
+    loadingOptions,
+    activeCount,
+    key: filtersK,
+  } = useFilters(() => api.modpackFilterOptions(source), `modpack:${source}`);
+
+  useEffect(() => {
+    onFiltersOpenChange?.(filtersOpen);
+  }, [filtersOpen, onFiltersOpenChange]);
+
   const fetchPage = useCallback(
-    (q: string, offset: number) => api.searchModpacks(source, q, offset),
-    [source],
+    (q: string, offset: number) => api.searchModpacks(source, q, offset, filters),
+    [source, filters],
   );
   const { hits, loading, loadingMore, hasMore, error, handleScroll } =
-    useInfiniteSearch(fetchPage, query, source);
+    useInfiniteSearch(fetchPage, query, `${source}:${filtersK}`);
 
   
   
@@ -232,50 +251,78 @@ export function ModpackBrowser({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 items-center gap-2 rounded-md bg-ink-950/70 px-3 ring-1 ring-edge focus-within:ring-brass-500/60">
-        <Search size={15} className="text-ink-600" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("modpackBrowser.searchPlaceholder", { source: api.sourceLabel(source) })}
-          className="flex-1 bg-transparent py-2 text-sm outline-none"
-        />
-        {(loading || loadingMore) && (
-          <Loader2 size={14} className="animate-spin text-ink-600" />
-        )}
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-md bg-ink-950/70 px-3 ring-1 ring-edge focus-within:ring-brass-500/60">
+          <Search size={15} className="text-ink-600" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("modpackBrowser.searchPlaceholder", { source: api.sourceLabel(source) })}
+            className="flex-1 bg-transparent py-2 text-sm outline-none"
+          />
+          {(loading || loadingMore) && (
+            <Loader2 size={14} className="animate-spin text-ink-600" />
+          )}
+        </div>
+        <button
+          onClick={() => setFiltersOpen((o) => !o)}
+          title={t("mods.filter.button")}
+          className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm transition ${
+            filtersOpen || activeCount > 0
+              ? "border-brass-500/60 bg-brass-500/10 text-brass-200"
+              : "border-edge text-ink-600 hover:text-gray-200"
+          }`}
+        >
+          <SlidersHorizontal size={15} />
+          {activeCount > 0 && (
+            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brass-500 px-1 text-[10px] font-semibold text-ink-950">
+              {activeCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {error && <div className="text-xs text-red-300">{error}</div>}
 
-      <div
-        ref={listScrollRef}
-        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
-        onScroll={onListScroll}
-      >
-        {hits.map((h) => (
-          <ResultRow
-            key={`${h.source}:${h.project_id}`}
-            hit={h}
-            featured={!!matchFeatured(h)}
-            showSource
-            onOpen={() => setSelected(h)}
-          />
-        ))}
-        {loadingMore && (
-          <div className="grid place-items-center py-3 text-ink-600">
-            <Loader2 size={18} className="animate-spin" />
-          </div>
-        )}
-        {!loading && hits.length === 0 && (
-          <div className="py-6 text-center text-xs text-ink-600">
-            {query ? t("modpackBrowser.noResults") : t("modpackBrowser.loadingPopular")}
-          </div>
-        )}
-        {!hasMore && hits.length >= SEARCH_PAGE && (
-          <div className="py-3 text-center text-[11px] text-ink-600">
-            {t("addContent.endOfResults")}
-          </div>
-        )}
+      <div className="flex min-h-0 flex-1">
+        <FilterSidebar
+          open={filtersOpen}
+          source={source}
+          options={filterOptions}
+          loading={loadingOptions}
+          filters={filters}
+          onChange={setFilters}
+        />
+        <div
+          ref={listScrollRef}
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pl-px pr-1"
+          onScroll={onListScroll}
+        >
+          {hits.map((h) => (
+            <ResultRow
+              key={`${h.source}:${h.project_id}`}
+              hit={h}
+              featured={!!matchFeatured(h)}
+              showSource
+              onOpen={() => setSelected(h)}
+            />
+          ))}
+          {loadingMore && (
+            <div className="grid place-items-center py-3 text-ink-600">
+              <Loader2 size={18} className="animate-spin" />
+            </div>
+          )}
+          {!loading && hits.length === 0 && (
+            <div className="py-6 text-center text-xs text-ink-600">
+              {query ? t("modpackBrowser.noResults") : t("modpackBrowser.loadingPopular")}
+            </div>
+          )}
+          {!hasMore && hits.length >= SEARCH_PAGE && (
+            <div className="py-3 text-center text-[11px] text-ink-600">
+              {t("addContent.endOfResults")}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

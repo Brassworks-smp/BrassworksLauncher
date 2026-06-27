@@ -47,6 +47,8 @@ import type {
   ProjectDetail,
   Screenshot,
   SearchHit,
+  SearchFilters,
+  FilterOptions,
   UpdateInfo,
   UpdateProgress,
   McVersion,
@@ -62,6 +64,8 @@ import type {
   ServerStatus,
   StarKind,
 } from "./types";
+
+import { EMPTY_FILTERS } from "./types";
 
 export const isTauri = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -187,8 +191,15 @@ export const searchContent = (
   projectType: string,
   source: string,
   offset: number,
+  filters: SearchFilters = EMPTY_FILTERS,
 ): Promise<SearchHit[]> =>
-  invoke("search_content", { instanceId, query, projectType, source, offset });
+  invoke("search_content", { instanceId, query, projectType, source, filters, offset });
+export const contentFilterOptions = (
+  instanceId: string,
+  projectType: string,
+  source: string,
+): Promise<FilterOptions> =>
+  invoke("content_filter_options", { instanceId, projectType, source });
 export const installContent = (
   instanceId: string,
   projectId: string,
@@ -593,8 +604,11 @@ export const searchModpacks = (
   source: string,
   query: string,
   offset: number,
+  filters: SearchFilters = EMPTY_FILTERS,
 ): Promise<SearchHit[]> =>
-  invoke("search_modpacks", { source, query, offset });
+  invoke("search_modpacks", { source, query, filters, offset });
+export const modpackFilterOptions = (source: string): Promise<FilterOptions> =>
+  invoke("modpack_filter_options", { source });
 export const modpackVersions = (
   source: string,
   projectId: string,

@@ -46,7 +46,10 @@ pub use launch::{launch_instance, LaunchRequest, QuickPlay};
 pub use modpack::{
     ContentVersion, InstallResult, InstalledMod, ModInfo, Modpack, ModpackStatus, ProjectDetail,
 };
-pub use packwiz::{FlavorChoice, FlavorGroup, PackwizBranch, SearchHit};
+pub use packwiz::{
+    FilterCategory, FilterOptions, FlavorChoice, FlavorGroup, PackwizBranch, SearchFilters,
+    SearchHit,
+};
 pub use packwiz_share::{PackInstallMeta, PackwizShare};
 pub use paths::Paths;
 
@@ -939,12 +942,21 @@ impl Launcher {
         &self,
         source: &str,
         query: &str,
+        filters: &SearchFilters,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
         if source == "curseforge" {
-            Ok(self.cf_client().search_modpacks(query, 20, offset)?)
+            Ok(self.cf_client().search_modpacks(query, filters, 20, offset)?)
         } else {
-            Ok(self.modrinth_client().search_modpacks(query, 20, offset)?)
+            Ok(self.modrinth_client().search_modpacks(query, filters, 20, offset)?)
+        }
+    }
+
+    pub fn modpack_filter_options(&self, source: &str) -> Result<FilterOptions> {
+        if source == "curseforge" {
+            Ok(self.cf_client().filter_options("modpack"))
+        } else {
+            Ok(self.modrinth_client().filter_options("modpack"))
         }
     }
 
@@ -1487,10 +1499,21 @@ impl Launcher {
         query: &str,
         project_type: &str,
         source: &str,
+        filters: &SearchFilters,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
         self.modpack_for(instance_id)
-            .search(query, project_type, source, offset)
+            .search(query, project_type, source, filters, offset)
+    }
+
+    pub fn content_filter_options(
+        &self,
+        instance_id: &str,
+        project_type: &str,
+        source: &str,
+    ) -> Result<FilterOptions> {
+        self.modpack_for(instance_id)
+            .filter_options(project_type, source)
     }
 
     pub fn content_detail(

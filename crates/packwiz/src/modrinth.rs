@@ -41,10 +41,115 @@ pub struct SearchHit {
     pub versions: Vec<String>,
     #[serde(default = "default_source")]
     pub source: String,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub date_modified: Option<String>,
+    #[serde(default)]
+    pub follows: Option<u64>,
 }
 
 fn default_source() -> String {
     "modrinth".to_string()
+}
+
+pub(crate) fn modrinth_index(sort: Option<&str>) -> &'static str {
+    match sort {
+        Some("downloads") => "downloads",
+        Some("follows") => "follows",
+        Some("newest") => "newest",
+        Some("updated") => "updated",
+        _ => "relevance",
+    }
+}
+
+pub(crate) fn build_search_facets(
+    project_type: &str,
+    loader: Option<&str>,
+    game_version: &str,
+    filters: &crate::SearchFilters,
+) -> String {
+    let mut groups: Vec<String> = vec![or_group(&[format!("project_type:{project_type}")])];
+
+    if !filters.game_versions.is_empty() {
+        groups.push(or_group(
+            &filters
+                .game_versions
+                .iter()
+                .map(|v| format!("versions:{v}"))
+                .collect::<Vec<_>>(),
+        ));
+    } else if !filters.allow_any_version && !game_version.is_empty() {
+        groups.push(or_group(&[format!("versions:{game_version}")]));
+    }
+
+    if !filters.loaders.is_empty() {
+        groups.push(or_group(
+            &filters
+                .loaders
+                .iter()
+                .map(|l| format!("categories:{l}"))
+                .collect::<Vec<_>>(),
+        ));
+    } else if !filters.allow_any_loader {
+        if let Some(loader) = loader {
+            groups.push(or_group(&[format!("categories:{loader}")]));
+        }
+    }
+
+    for cat in &filters.categories {
+        groups.push(or_group(&[format!("categories:{cat}")]));
+    }
+
+    match filters.environment.as_deref() {
+        Some("client") => groups.push(or_group(&["client_side:required".into()])),
+        Some("server") => groups.push(or_group(&["server_side:required".into()])),
+        _ => {}
+    }
+    if filters.open_source {
+        groups.push(or_group(&["open_source:true".into()]));
+    }
+    if let Some(license) = &filters.license {
+        groups.push(or_group(&[format!("license:{license}")]));
+    }
+    if let Some(ts) = filters.created_after {
+        groups.push(format!("[\"created_timestamp\",\">=\",\"{ts}\"]"));
+    }
+    if let Some(ts) = filters.updated_after {
+        groups.push(format!("[\"modified_timestamp\",\">=\",\"{ts}\"]"));
+    }
+
+    format!("[{}]", groups.join(","))
+}
+
+fn or_group(values: &[String]) -> String {
+    let inner = values
+        .iter()
+        .map(|v| format!("\"{}\"", v.replace('"', "")))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{inner}]")
+}
+
+#[derive(Deserialize, Default)]
+struct ApiCategoryTag {
+    name: String,
+    project_type: String,
+    #[serde(default)]
+    icon: String,
+}
+
+#[derive(Deserialize, Default)]
+struct ApiLoaderTag {
+    name: String,
+    #[serde(default)]
+    supported_project_types: Vec<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct ApiGameVersionTag {
+    version: String,
+    version_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,17 +361,12 @@ impl Modrinth {
         project_type: &str,
         loader: Option<&str>,
         game_version: &str,
+        filters: &crate::SearchFilters,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
-        let mut facets: Vec<String> = vec![
-            format!("[\"project_type:{project_type}\"]"),
-            format!("[\"versions:{game_version}\"]"),
-        ];
-        if let Some(loader) = loader {
-            facets.push(format!("[\"categories:{loader}\"]"));
-        }
-        let facets = format!("[{}]", facets.join(","));
+        let facets = build_search_facets(project_type, loader, game_version, filters);
+        let index = modrinth_index(filters.sort.as_deref());
 
         let resp = self
             .client
@@ -275,7 +375,7 @@ impl Modrinth {
                 ("query", query),
                 ("limit", &limit.to_string()),
                 ("offset", &offset.to_string()),
-                ("index", "relevance"),
+                ("index", index),
                 ("facets", &facets),
             ])
             .send()
@@ -290,10 +390,13 @@ impl Modrinth {
     pub fn search_modpacks(
         &self,
         query: &str,
+        filters: &crate::SearchFilters,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
-        let facets = "[[\"project_type:modpack\"]]";
+        let loader = filters.loaders.first().map(|s| s.as_str());
+        let facets = build_search_facets("modpack", loader, "", filters);
+        let index = modrinth_index(filters.sort.as_deref());
         let resp = self
             .client
             .get("https://api.modrinth.com/v2/search")
@@ -301,8 +404,8 @@ impl Modrinth {
                 ("query", query),
                 ("limit", &limit.to_string()),
                 ("offset", &offset.to_string()),
-                ("index", "relevance"),
-                ("facets", facets),
+                ("index", index),
+                ("facets", &facets),
             ])
             .send()
             .map_err(PackwizError::http)?;
@@ -311,6 +414,86 @@ impl Modrinth {
         }
         let body: SearchResponse = resp.json().map_err(PackwizError::http)?;
         Ok(body.hits)
+    }
+
+    pub fn filter_options(&self, project_type: &str) -> crate::FilterOptions {
+        let key = format!("filteropts-v2-{project_type}");
+        if let Some(o) = self.read_cache::<crate::FilterOptions>(&key) {
+            return o;
+        }
+        let categories = self.fetch_tag_categories(project_type);
+        let loaders = self.fetch_tag_loaders(project_type);
+        let game_versions = self.fetch_release_versions();
+        let licenses = self.fetch_tag_licenses();
+        let opts = crate::FilterOptions {
+            categories,
+            game_versions,
+            loaders,
+            licenses,
+            sorts: vec![
+                "relevance".into(),
+                "downloads".into(),
+                "follows".into(),
+                "newest".into(),
+                "updated".into(),
+            ],
+            supports_environment: true,
+            supports_advanced_facets: true,
+        };
+        if !opts.categories.is_empty() || !opts.game_versions.is_empty() {
+            self.write_cache(&key, &opts);
+        }
+        opts
+    }
+
+    fn fetch_tag_categories(&self, project_type: &str) -> Vec<crate::FilterCategory> {
+        let resp = match self.client.get("https://api.modrinth.com/v2/tag/category").send() {
+            Ok(r) if r.status().is_success() => r,
+            _ => return Vec::new(),
+        };
+        let tags: Vec<ApiCategoryTag> = resp.json().unwrap_or_default();
+        tags.into_iter()
+            .filter(|t| t.project_type == project_type)
+            .map(|t| crate::FilterCategory {
+                id: t.name.clone(),
+                name: t.name,
+                icon: Some(t.icon).filter(|s| !s.is_empty()),
+            })
+            .collect()
+    }
+
+    fn fetch_tag_loaders(&self, project_type: &str) -> Vec<String> {
+        let resp = match self.client.get("https://api.modrinth.com/v2/tag/loader").send() {
+            Ok(r) if r.status().is_success() => r,
+            _ => return Vec::new(),
+        };
+        let tags: Vec<ApiLoaderTag> = resp.json().unwrap_or_default();
+        tags.into_iter()
+            .filter(|t| t.supported_project_types.iter().any(|p| p == project_type))
+            .map(|t| t.name)
+            .collect()
+    }
+
+    fn fetch_release_versions(&self) -> Vec<String> {
+        let resp = match self.client.get("https://api.modrinth.com/v2/tag/game_version").send() {
+            Ok(r) if r.status().is_success() => r,
+            _ => return Vec::new(),
+        };
+        let tags: Vec<ApiGameVersionTag> = resp.json().unwrap_or_default();
+        let mut versions: Vec<String> = tags
+            .into_iter()
+            .filter(|t| t.version_type == "release")
+            .map(|t| t.version)
+            .collect();
+        crate::sort_mc_versions_desc(&mut versions);
+        versions
+    }
+
+    fn fetch_tag_licenses(&self) -> Vec<crate::FilterCategory> {
+        ["MIT", "Apache-2.0", "GPL-3.0-or-later", "LGPL-3.0-or-later", "MPL-2.0", "BSD-3-Clause", "Unlicense", "CC0-1.0"]
+            .iter()
+            .map(|id| crate::FilterCategory { id: id.to_string(), name: id.to_string(), icon: None })
+            .collect()
     }
 
     pub fn version_files(
@@ -513,6 +696,85 @@ impl Modrinth {
 
     pub fn clear_cache(cache_dir: &Path) {
         let _ = std::fs::remove_dir_all(cache_dir);
+    }
+}
+
+#[cfg(test)]
+mod facet_tests {
+    use super::{build_search_facets, modrinth_index};
+    use crate::SearchFilters;
+
+    #[test]
+    fn empty_filters_match_legacy_facets() {
+        let f = SearchFilters::default();
+        let facets = build_search_facets("mod", Some("neoforge"), "1.21.1", &f);
+        assert_eq!(
+            facets,
+            "[[\"project_type:mod\"],[\"versions:1.21.1\"],[\"categories:neoforge\"]]"
+        );
+        assert_eq!(modrinth_index(None), "relevance");
+    }
+
+    #[test]
+    fn version_and_loader_override_replace_defaults() {
+        let f = SearchFilters {
+            game_versions: vec!["1.20.1".into()],
+            loaders: vec!["fabric".into(), "quilt".into()],
+            ..Default::default()
+        };
+        let facets = build_search_facets("mod", Some("neoforge"), "1.21.1", &f);
+        assert!(facets.contains("[\"versions:1.20.1\"]"));
+        assert!(facets.contains("[\"categories:fabric\",\"categories:quilt\"]"));
+        assert!(!facets.contains("1.21.1"));
+        assert!(!facets.contains("neoforge"));
+    }
+
+    #[test]
+    fn allow_any_drops_version_and_loader_groups() {
+        let f = SearchFilters { allow_any_version: true, allow_any_loader: true, ..Default::default() };
+        let facets = build_search_facets("mod", Some("neoforge"), "1.21.1", &f);
+        assert_eq!(facets, "[[\"project_type:mod\"]]");
+    }
+
+    #[test]
+    fn categories_environment_and_advanced_facets() {
+        let f = SearchFilters {
+            categories: vec!["technology".into(), "utility".into()],
+            environment: Some("client".into()),
+            open_source: true,
+            license: Some("MIT".into()),
+            allow_any_version: true,
+            allow_any_loader: true,
+            ..Default::default()
+        };
+        let facets = build_search_facets("mod", Some("neoforge"), "1.21.1", &f);
+        assert!(facets.contains("[\"categories:technology\"]"));
+        assert!(facets.contains("[\"categories:utility\"]"));
+        assert!(facets.contains("[\"client_side:required\"]"));
+        assert!(facets.contains("[\"open_source:true\"]"));
+        assert!(facets.contains("[\"license:MIT\"]"));
+    }
+
+    #[test]
+    fn versions_sort_newest_first() {
+        let mut v = vec![
+            "1.20.1".to_string(),
+            "1.21".to_string(),
+            "1.21.1".to_string(),
+            "1.9".to_string(),
+            "23w31a".to_string(),
+        ];
+        crate::sort_mc_versions_desc(&mut v);
+        assert_eq!(v, vec!["1.21.1", "1.21", "1.20.1", "1.9", "23w31a"]);
+    }
+
+    #[test]
+    fn sort_maps_to_index() {
+        assert_eq!(modrinth_index(Some("downloads")), "downloads");
+        assert_eq!(modrinth_index(Some("newest")), "newest");
+        assert_eq!(modrinth_index(Some("updated")), "updated");
+        assert_eq!(modrinth_index(Some("follows")), "follows");
+        assert_eq!(modrinth_index(Some("bogus")), "relevance");
     }
 }
 

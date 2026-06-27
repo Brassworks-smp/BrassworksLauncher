@@ -448,7 +448,54 @@ export interface SearchHit {
   project_type: string;
   versions: string[];
   source: ContentSource;
+  categories?: string[];
+  date_modified?: string | null;
+  follows?: number | null;
 }
+
+export interface SearchFilters {
+  categories: string[];
+  sort: string | null;
+  gameVersions: string[];
+  loaders: string[];
+  environment: string | null;
+  openSource: boolean;
+  license: string | null;
+  updatedAfter: number | null;
+  createdAfter: number | null;
+  allowAnyVersion: boolean;
+  allowAnyLoader: boolean;
+}
+
+export interface FilterCategory {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+export interface FilterOptions {
+  categories: FilterCategory[];
+  gameVersions: string[];
+  loaders: string[];
+  licenses: FilterCategory[];
+  sorts: string[];
+  supportsEnvironment: boolean;
+  supportsAdvancedFacets: boolean;
+}
+
+export const EMPTY_FILTERS: SearchFilters = {
+  categories: [],
+  sort: null,
+  gameVersions: [],
+  loaders: [],
+  environment: null,
+  openSource: false,
+  license: null,
+  updatedAfter: null,
+  createdAfter: null,
+  allowAnyVersion: false,
+  allowAnyLoader: false,
+};
 
 export interface ProjectDetail {
   id: string;

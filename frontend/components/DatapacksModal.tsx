@@ -18,10 +18,12 @@ import {
   FolderOpen,
   ExternalLink,
   Users,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useInfiniteSearch, ResultRow, SourceBadge } from "./Browse";
+import { FilterSidebar, useFilters } from "./FilterSidebar";
 import { VersionList } from "./VersionList";
 import { SegmentedTabs, BrassSwitch, useClosable } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -125,13 +127,29 @@ export function DatapacksModal({
       .map((d) => [dpKey(d.source, d.project_id), d] as const),
   );
 
+  const {
+    filters,
+    setFilters,
+    options: filterOptions,
+    open: filtersOpen,
+    setOpen: setFiltersOpen,
+    loadingOptions,
+    activeCount,
+    key: filtersK,
+  } = useFilters(
+    () => api.contentFilterOptions(instanceId, "datapack", source),
+    `${instanceId}:datapack:${source}`,
+  );
+
   const fetchPage = useCallback(
     (q: string, offset: number) =>
-      api.searchContent(instanceId, q, "datapack", source, offset),
-    [instanceId, source],
+      api.searchContent(instanceId, q, "datapack", source, offset, filters),
+    [instanceId, source, filters],
   );
   const { hits, loading, loadingMore, hasMore, error, handleScroll } =
-    useInfiniteSearch(fetchPage, query, source, { enabled: tab === "browse" });
+    useInfiniteSearch(fetchPage, query, `${source}:${filtersK}`, {
+      enabled: tab === "browse",
+    });
 
   
   
@@ -197,8 +215,11 @@ export function DatapacksModal({
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
-        style={accent}
-        className="flex h-[80vh] w-[760px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-colors"
+        style={{
+          width: tab === "browse" && filtersOpen ? "min(1040px, 96vw)" : "760px",
+          ...accent,
+        }}
+        className="flex h-[80vh] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width,color,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
       >
         <div className="flex items-center justify-between gap-3 border-b border-edge px-5 py-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -298,15 +319,42 @@ export function DatapacksModal({
                     className="w-full rounded-lg bg-ink-950/60 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
                   />
                 </div>
+                <button
+                  onClick={() => setFiltersOpen((o) => !o)}
+                  title={t("mods.filter.button")}
+                  className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm transition ${
+                    filtersOpen || activeCount > 0
+                      ? "border-brass-500/60 bg-brass-500/10 text-brass-200"
+                      : "border-edge text-ink-600 hover:text-gray-200"
+                  }`}
+                >
+                  <SlidersHorizontal size={15} />
+                  {activeCount > 0 && (
+                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brass-500 px-1 text-[10px] font-semibold text-ink-950">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
               </div>
+              <div className="flex min-h-0 flex-1">
+              <FilterSidebar
+                open={filtersOpen}
+                source={source}
+                options={filterOptions}
+                loading={loadingOptions}
+                filters={filters}
+                onChange={setFilters}
+                accentStyle={accent}
+              />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               {error && (
-                <div className="mx-5 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                <div className="mx-5 mb-2 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                   {error}
                 </div>
               )}
               <div
                 ref={listScrollRef}
-                className="flex-1 overflow-y-auto px-5 pb-5"
+                className="flex-1 overflow-y-auto px-5 pb-5 pt-3"
                 onScroll={onListScroll}
               >
                 {loading ? (
@@ -339,6 +387,8 @@ export function DatapacksModal({
                     )}
                   </div>
                 )}
+              </div>
+              </div>
               </div>
             </>
           )}

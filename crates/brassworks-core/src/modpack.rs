@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use packwiz::{
-    Curseforge, FlavorGroup, Installer, Manifest, Modrinth, OptionalChoice, ResolvedVersion,
-    SearchHit, Side, SyncOptions, SyncProgress,
+    Curseforge, FilterOptions, FlavorGroup, Installer, Manifest, Modrinth, OptionalChoice,
+    ResolvedVersion, SearchFilters, SearchHit, Side, SyncOptions, SyncProgress,
 };
 
 use crate::packs::OptionalComponent;
@@ -621,18 +621,34 @@ impl<'a> Modpack<'a> {
         query: &str,
         project_type: &str,
         source: &str,
+        filters: &SearchFilters,
         offset: u32,
     ) -> Result<Vec<SearchHit>> {
         let loader = self.loader_for(project_type);
         let game_version = self.game_version();
         if source == "curseforge" {
-            return Ok(self
-                .curseforge()?
-                .search(query, project_type, loader, &game_version, 20, offset)?);
+            return Ok(self.curseforge()?.search(
+                query,
+                project_type,
+                loader,
+                &game_version,
+                filters,
+                20,
+                offset,
+            )?);
         }
         let installer = self.installer();
         let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
-        Ok(modrinth.search(query, project_type, loader, &game_version, 20, offset)?)
+        Ok(modrinth.search(query, project_type, loader, &game_version, filters, 20, offset)?)
+    }
+
+    pub fn filter_options(&self, project_type: &str, source: &str) -> Result<FilterOptions> {
+        if source == "curseforge" {
+            return Ok(self.curseforge()?.filter_options(project_type));
+        }
+        let installer = self.installer();
+        let modrinth = installer.modrinth(self.paths.modrinth_cache_dir());
+        Ok(modrinth.filter_options(project_type))
     }
 
     pub fn project_detail(&self, project_id: &str, source: &str) -> Result<ProjectDetail> {

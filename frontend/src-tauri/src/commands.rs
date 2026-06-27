@@ -2,11 +2,11 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use brassworks_core::{
-    AccountStore, ContentVersion, DatapackInfo, InstallResult, InstalledMod, Instance,
-    LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo, LogUpload,
-    McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
-    ProjectDetail, SavedSkin, SearchHit, ServerEntry, ServerStatus, SkinLibraryView, SkinProfile,
-    PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
+    AccountStore, ContentVersion, DatapackInfo, FilterOptions, InstallResult, InstalledMod,
+    Instance, LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo,
+    LogUpload, McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
+    ProjectDetail, SavedSkin, SearchFilters, SearchHit, ServerEntry, ServerStatus, SkinLibraryView,
+    SkinProfile, PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -472,12 +472,30 @@ pub(crate) async fn search_content(
     query: String,
     project_type: String,
     source: String,
+    filters: SearchFilters,
     offset: u32,
 ) -> CmdResult<Vec<SearchHit>> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .search_content(&instance_id, &query, &project_type, &source, offset)
+            .search_content(&instance_id, &query, &project_type, &source, &filters, offset)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn content_filter_options(
+    state: State<'_, AppState>,
+    instance_id: String,
+    project_type: String,
+    source: String,
+) -> CmdResult<FilterOptions> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .content_filter_options(&instance_id, &project_type, &source)
             .map_err(err)
     })
     .await
@@ -1231,11 +1249,25 @@ pub(crate) async fn search_modpacks(
     state: State<'_, AppState>,
     source: String,
     query: String,
+    filters: SearchFilters,
     offset: u32,
 ) -> CmdResult<Vec<SearchHit>> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher.search_modpacks(&source, &query, offset).map_err(err)
+        launcher.search_modpacks(&source, &query, &filters, offset).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn modpack_filter_options(
+    state: State<'_, AppState>,
+    source: String,
+) -> CmdResult<FilterOptions> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.modpack_filter_options(&source).map_err(err)
     })
     .await
     .map_err(err)?

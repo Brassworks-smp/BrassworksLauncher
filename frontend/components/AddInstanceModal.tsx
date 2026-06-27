@@ -178,6 +178,7 @@ export function AddInstanceModal({
   const [tab, setTab] = useState<Tab>(
     importOnly ? "import" : initialTab ?? "custom",
   );
+  const [browserFiltersOpen, setBrowserFiltersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const { closing, close } = useClosable(onClose);
 
@@ -550,8 +551,14 @@ export function AddInstanceModal({
       }}
     >
       <div
-        style={importOnly ? undefined : (ACCENTS[tab] as React.CSSProperties | undefined)}
-        className="rise relative flex h-[80vh] w-[640px] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl"
+        style={{
+          width:
+            (tab === "modrinth" || tab === "curseforge") && browserFiltersOpen
+              ? "min(1040px, 96vw)"
+              : "640px",
+          ...(importOnly ? {} : (ACCENTS[tab] as React.CSSProperties | undefined)),
+        }}
+        className="rise relative flex h-[80vh] max-w-full flex-col overflow-hidden rounded-xl border border-brass-700/30 bg-ink-900 shadow-2xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
       >
         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <h2 className="flex items-center gap-2 font-mc text-base tracking-wide text-gray-100">
@@ -974,6 +981,7 @@ export function AddInstanceModal({
                 featuredEnabled={featuredEnabled}
                 onOpenFeatured={onOpenFeatured}
                 onEnableFeatured={onEnableFeatured}
+                onFiltersOpenChange={setBrowserFiltersOpen}
                 onInstall={(projectId, versionId, packName2) =>
                   beginInstall({
                     kind: "modpack",

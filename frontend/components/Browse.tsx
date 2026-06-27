@@ -17,6 +17,16 @@ function fmtDownloads(n: number): string {
   return `${n}`;
 }
 
+function relTime(iso: string): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "";
+  const days = Math.max(0, Math.floor((Date.now() - then) / 86_400_000));
+  if (days < 1) return "today";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
 
 export function useInfiniteSearch(
   fetchPage: (query: string, offset: number) => Promise<SearchHit[]>,
@@ -188,8 +198,25 @@ export function ResultRow({
         <div className="truncate text-[12px] text-ink-600">
           {hit.description}
         </div>
-        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-600">
-          <Users size={11} /> {t("addContent.downloads", { count: fmtDownloads(hit.downloads) })}
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-600">
+          <span className="flex items-center gap-1">
+            <Users size={11} /> {t("addContent.downloads", { count: fmtDownloads(hit.downloads) })}
+          </span>
+          {hit.date_modified && (
+            <span className="hidden sm:inline">· {relTime(hit.date_modified)}</span>
+          )}
+          {hit.categories && hit.categories.length > 0 && (
+            <span className="hidden items-center gap-1 md:flex">
+              {hit.categories.slice(0, 3).map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full bg-ink-800 px-1.5 py-px text-[10px] capitalize text-ink-500"
+                >
+                  {c}
+                </span>
+              ))}
+            </span>
+          )}
         </div>
       </div>
       <span className="shrink-0 text-[11px] text-ink-600 opacity-0 transition group-hover:opacity-100">
