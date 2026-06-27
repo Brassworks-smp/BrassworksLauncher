@@ -325,7 +325,9 @@ impl Installer {
                         .and_then(|r| r.metafile_flavors.get(&entry.file))
                         .cloned()
                         .unwrap_or_default();
-                    if !crate::unsup::keep_metafile(&flavors, &opts.flavors) {
+                    if !opts.keep_all_flavors
+                        && !crate::unsup::keep_metafile(&flavors, &opts.flavors)
+                    {
                         continue;
                     }
                 } else if let Some(opt) = meta.option.as_ref().filter(|o| o.optional) {

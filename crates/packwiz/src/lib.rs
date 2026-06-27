@@ -163,6 +163,10 @@ pub struct SyncOptions {
     pub optional: OptionalChoice,
     pub unsup: bool,
     pub flavors: HashSet<String>,
+    /// Keep every flavored metafile regardless of `flavors`. Used by pack hosts
+    /// so toggling a flavor locally never prunes mods out of the pack they
+    /// publish (which would delete them from the published index).
+    pub keep_all_flavors: bool,
     pub public_key: Option<String>,
 }
 
@@ -176,6 +180,7 @@ impl SyncOptions {
             optional: OptionalChoice::Default,
             unsup: false,
             flavors: HashSet::new(),
+            keep_all_flavors: false,
             public_key: None,
         }
     }

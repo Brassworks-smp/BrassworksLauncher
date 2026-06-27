@@ -176,6 +176,10 @@ pub struct Modpack<'a> {
     flavors: HashSet<String>,
     public_key: Option<String>,
     concurrency: usize,
+    /// True when this instance is the host/author of a shared pack. Hosts keep
+    /// every flavor variant on disk so toggling a flavor never drops mods out of
+    /// the pack they publish.
+    host: bool,
 }
 
 pub fn optional_choice(selection: &Option<Vec<String>>) -> OptionalChoice {
@@ -207,6 +211,7 @@ impl<'a> Modpack<'a> {
             flavors: HashSet::new(),
             public_key: None,
             concurrency: packwiz::DEFAULT_CONCURRENCY,
+            host: false,
         }
     }
 
@@ -227,6 +232,7 @@ impl<'a> Modpack<'a> {
             flavors: instance.unsup_flavors.iter().flatten().cloned().collect(),
             public_key: instance.unsup_public_key.clone().filter(|k| !k.trim().is_empty()),
             concurrency: packwiz::DEFAULT_CONCURRENCY,
+            host: instance.share.is_some(),
         }
     }
 
@@ -317,6 +323,7 @@ impl<'a> Modpack<'a> {
             optional: self.optional.clone(),
             unsup: self.unsup,
             flavors: self.flavors.clone(),
+            keep_all_flavors: self.host,
             public_key: self.public_key.clone(),
         }
     }
