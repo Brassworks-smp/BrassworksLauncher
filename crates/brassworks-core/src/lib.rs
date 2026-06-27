@@ -2152,11 +2152,20 @@ impl Launcher {
             }
         };
         let pack_url = f.raw_url(&owner, &repo_name, &branch, "pack.toml");
-        let existing_params = instance
+        let mut existing_params = instance
             .share
             .as_ref()
             .map(|s| s.params.clone())
             .unwrap_or_default();
+        // Manual news: write a news.json at the repo root and point the news URL
+        // at its raw file, so simply re-publishing updates the news for everyone.
+        if let Some(news) = existing_params.news.clone().filter(|n| !n.is_empty()) {
+            let doc = serde_json::json!({ "title": news.title, "body": news.body });
+            if let Ok(bytes) = serde_json::to_vec_pretty(&doc) {
+                out.files.push(("news.json".to_string(), bytes));
+            }
+            existing_params.news_url = Some(f.raw_url(&owner, &repo_name, &branch, "news.json"));
+        }
         let publish_sig = files_signature(&out.files, &existing_params);
 
         let base_share = |incomplete: bool| instance::PackShare {
@@ -2180,6 +2189,11 @@ impl Launcher {
         if first_time {
             instance.share = Some(base_share(true));
             self.instances().update(&instance)?;
+        }
+        // Ensure the descriptor below sees the effective params, including any
+        // auto-managed news_url produced by manual news above.
+        if let Some(s) = instance.share.as_mut() {
+            s.params = existing_params.clone();
         }
 
         let icon = self.resolve_export_icon(&instance);

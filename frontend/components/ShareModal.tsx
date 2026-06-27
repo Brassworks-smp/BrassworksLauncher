@@ -1009,6 +1009,7 @@ function emptyParams(): SharePackParams {
     jvm_args: [],
     news_url: null,
     playercount_url: null,
+    news: null,
   };
 }
 
@@ -1258,13 +1259,57 @@ function DetailsTab({
           </div>
 
           <div>
-            <label className={label}>{t("share.paramNewsUrl")}</label>
-            <input
-              value={p.news_url ?? ""}
-              onChange={(e) => patch({ news_url: e.target.value || null })}
-              placeholder="https://…"
-              className={inputCls}
-            />
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className={label.replace("mb-1.5 ", "")}>
+                {t("share.paramNewsUrl")}
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  patch(
+                    p.news
+                      ? { news: null }
+                      : { news: { title: "", body: "" }, news_url: null },
+                  )
+                }
+                className="text-[10px] text-brass-300 hover:text-brass-400"
+              >
+                {p.news
+                  ? t("share.newsUseUrl")
+                  : t("share.newsWriteManually")}
+              </button>
+            </div>
+            {p.news ? (
+              <div className="flex flex-col gap-2">
+                <input
+                  value={p.news.title}
+                  onChange={(e) =>
+                    patch({ news: { title: e.target.value, body: p.news!.body } })
+                  }
+                  placeholder={t("share.newsTitlePlaceholder")}
+                  className={inputCls}
+                />
+                <textarea
+                  value={p.news.body}
+                  onChange={(e) =>
+                    patch({ news: { title: p.news!.title, body: e.target.value } })
+                  }
+                  rows={5}
+                  placeholder={t("share.newsBodyPlaceholder")}
+                  className={`${inputCls} resize-y font-sans`}
+                />
+                <p className="text-[10px] leading-snug text-ink-600">
+                  {t("share.newsManualHint")}
+                </p>
+              </div>
+            ) : (
+              <input
+                value={p.news_url ?? ""}
+                onChange={(e) => patch({ news_url: e.target.value || null })}
+                placeholder="https://…"
+                className={inputCls}
+              />
+            )}
           </div>
 
           <div>

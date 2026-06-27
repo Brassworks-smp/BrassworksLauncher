@@ -241,6 +241,24 @@ pub struct SharePackParams {
     pub news_url: Option<String>,
     #[serde(default)]
     pub playercount_url: Option<String>,
+    /// Manual news authored in the launcher. When set, publishing writes a
+    /// `news.json` to the repo root and points `news_url` at its raw URL.
+    #[serde(default)]
+    pub news: Option<SharedNews>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedNews {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+impl SharedNews {
+    pub fn is_empty(&self) -> bool {
+        self.title.trim().is_empty() && self.body.trim().is_empty()
+    }
 }
 
 fn default_main() -> String {

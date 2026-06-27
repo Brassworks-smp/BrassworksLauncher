@@ -70,6 +70,11 @@ export interface PackShare {
   params: SharePackParams;
 }
 
+export interface SharedNews {
+  title: string;
+  body: string;
+}
+
 export interface SharePackParams {
   author: string | null;
   description: string | null;
@@ -78,6 +83,7 @@ export interface SharePackParams {
   jvm_args: string[];
   news_url: string | null;
   playercount_url: string | null;
+  news: SharedNews | null;
 }
 
 export interface PackFileKind {
