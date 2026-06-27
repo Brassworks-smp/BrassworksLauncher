@@ -235,6 +235,9 @@ export function ShareModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Consume Escape so it doesn't reach the page handler, which would
+      // navigate back to the instances list behind this modal.
+      e.stopPropagation();
       if (embeddedConfirm) setEmbeddedConfirm(null);
       else if (syncConfirm) setSyncConfirm(false);
       else if (disconnectConfirm) setDisconnectConfirm(false);
