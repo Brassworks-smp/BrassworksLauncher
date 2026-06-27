@@ -647,7 +647,7 @@
       "newsPlaceholder": "https://api.example.com/news/",
       "showPlayers": "Show player count",
       "playersUrl": "Player count URL",
-      "playersPlaceholder": "https://api.example.com/playercount"
+      "playersPlaceholder": "https://api.example.com/playercount or play.example.com"
     },
     "danger": {
       "title": "Danger zone",
@@ -1375,6 +1375,7 @@
     "paramJvmArgsHint": "One argument per line.",
     "paramNewsUrl": "News URL",
     "paramPlayercountUrl": "Player-count URL",
+    "paramPlayercountHint": "A JSON endpoint, or a Minecraft server address (like play.example.com) to ping live.",
     "saveParams": "Save settings",
     "paramsSaved": "Modpack settings saved",
     "diffInSync": "Up to date",

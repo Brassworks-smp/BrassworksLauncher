@@ -61,7 +61,30 @@ pub fn news(url: &str) -> Result<NewsItem> {
 }
 
 pub fn player_count(url: &str) -> Result<PlayerCount> {
-    get_json(url)
+    let target = url.trim();
+    let lower = target.to_ascii_lowercase();
+    // A JSON endpoint is an http(s) URL; anything else is treated as a plain
+    // Minecraft server address and pinged with the Server List Ping protocol.
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return get_json(target);
+    }
+    let status = crate::ping::ping(target);
+    if !status.online {
+        return Err(CoreError::Remote(
+            status
+                .error
+                .unwrap_or_else(|| format!("could not reach {target}")),
+        ));
+    }
+    Ok(PlayerCount {
+        main: PlayerGroup {
+            online: true,
+            players_online: status.players_online.max(0) as u32,
+            players_max: status.players_max.max(0) as u32,
+        },
+        queue: PlayerGroup::default(),
+        timestamp: None,
+    })
 }
 
 #[derive(Deserialize)]

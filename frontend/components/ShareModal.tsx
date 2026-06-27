@@ -1252,9 +1252,12 @@ function DetailsTab({
               onChange={(e) =>
                 patch({ playercount_url: e.target.value || null })
               }
-              placeholder="https://…"
+              placeholder="https://… or play.example.com"
               className={inputCls}
             />
+            <p className="mt-1 text-[10px] text-ink-600">
+              {t("share.paramPlayercountHint")}
+            </p>
           </div>
 
           <button

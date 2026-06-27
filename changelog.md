@@ -11,6 +11,7 @@
 * **Right-click an instance** - a context menu gives you quick access to play, settings, the game folder, sharing, and more without opening the gear panel.
 
 ### **Improvements:**
+* **Live server player counts** - the player-count URL now also accepts a Minecraft server address (like `play.example.com`, with an optional `:port`) and pings the server directly for its live player count, alongside the existing JSON endpoint support.
 * **Pack icons stick around** - exported packs now embed their icon, importing a pack reads it back in, and installing a Modrinth or CurseForge modpack saves its icon locally so it shows up offline.
 * **Blocked mods stay installable** - CurseForge mods that can't be redistributed are bundled directly into packwiz and Modrinth exports, and hashes are written correctly for every format so packs verify cleanly.
 * **Steadier loader versions** - choosing the "stable" loader now pins the exact version at creation, so your instance won't quietly drift onto a newer build later on.
