@@ -35,6 +35,7 @@ import { toast, toastProgress, dismissToast } from "@/lib/toast";
 import { PackContentEditor, type PackContentValue } from "./PackContentEditor";
 import { CheckBox } from "./ExportModal";
 import { PROVIDERS, providerInfo } from "@/lib/providers";
+import { getCachedDiff, setCachedDiff } from "@/lib/modcache";
 import type {
   GitProvider,
   Instance,
@@ -115,7 +116,11 @@ export function ShareModal({
   const [repoInfo, setRepoInfo] = useState<ShareRepoInfo | null>(null);
   const [repoInfoLoading, setRepoInfoLoading] = useState(false);
 
-  const [diff, setDiff] = useState<ShareDiffEntry[] | null>(null);
+  // Seed from the last known change list so the Changes tab shows instantly
+  // while a fresh diff is computed in the background.
+  const [diff, setDiff] = useState<ShareDiffEntry[] | null>(() =>
+    getCachedDiff(instance.id),
+  );
   const [diffLoading, setDiffLoading] = useState(false);
 
   useEffect(() => {
@@ -193,8 +198,12 @@ export function ShareModal({
       .current()
       .catch(() => "")
       .then(() => api.shareDiff(instance.id))
-      .then(setDiff)
-      .catch(() => setDiff(null))
+      .then((d) => {
+        setDiff(d);
+        setCachedDiff(instance.id, d);
+      })
+      // Keep the cached list on failure rather than blanking the view.
+      .catch(() => {})
       .finally(() => setDiffLoading(false));
   }, [instance.id]);
 
@@ -284,7 +293,8 @@ export function ShareModal({
         .then(() => api.sharePendingChanges(instance.id))
         .then(setPending)
         .catch(() => {});
-      setDiff(null);
+      // Leave the cached change list on screen; it refreshes when the Changes
+      // tab is opened so the user never stares at a blank loader.
     }, 500);
   }, [share, instance.id]);
 
@@ -318,7 +328,9 @@ export function ShareModal({
       setPending(false);
       if (dirtyTimer.current) clearTimeout(dirtyTimer.current);
       setRepoInfo(null);
-      setDiff(null);
+      // Just published — everything is in sync, so the change list is empty.
+      setDiff([]);
+      setCachedDiff(instance.id, []);
       if (tab === "details") loadRepoInfo();
       if (tab === "diff") loadDiff();
       if (res.share) api.shareLink(instance.id).then(setLink).catch(() => {});
