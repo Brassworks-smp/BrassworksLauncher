@@ -44,7 +44,7 @@ parts:
     source-type: deb
     override-pull: |
       craftctl default
-      craftctl set-version "${SNAP_VERSION:-0.0.0}"
+      craftctl set version="${SNAP_VERSION:-0.0.0}"
     # The release ships the desktop file as "Brassworks Launcher.desktop";
     # rename it so the `desktop:` key above resolves.
     organize:
