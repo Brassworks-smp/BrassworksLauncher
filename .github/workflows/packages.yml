@@ -1,0 +1,181 @@
+name: Linux Packages
+
+# Repacks the published release's amd64 .deb into the extra Linux package
+# formats (Flatpak bundle, pacman, snap, xbps) and attaches them to the SAME
+# GitHub release for direct download. The .deb/.rpm/AppImage are already built
+# by the Tauri release workflow.
+#
+# Auto-update safety: this workflow only *adds* assets. It never touches
+# latest.json, the AppImage, or its .sig, so the Tauri updater (which reads only
+# the latest.json endpoint) is unaffected. No signing keys or secrets needed.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to package (e.g. v0.7.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  REPO: ${{ github.repository }}
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.m.outputs.tag }}
+      version: ${{ steps.m.outputs.version }}
+    steps:
+      - id: m
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  # Download the release amd64 .deb once and share it with the builder jobs.
+  fetch:
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release .deb
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ needs.meta.outputs.tag }}" --repo "$REPO" \
+            --pattern '*_amd64.deb' --dir assets
+          # Stable name the builders expect, regardless of release asset naming.
+          cp assets/*_amd64.deb brassworks-launcher_amd64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: brassworks-launcher_amd64.deb
+
+  flatpak:
+    needs: [meta, fetch]
+    runs-on: ubuntu-latest
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:gnome-47
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: packaging/flatpak }
+      - name: Build .flatpak bundle
+        working-directory: packaging/flatpak
+        run: |
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            --repo=repo build com.brassworks.launcher.yaml
+          flatpak build-bundle repo \
+            "brassworks-launcher_${{ needs.meta.outputs.version }}_amd64.flatpak" \
+            com.brassworks.launcher
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-flatpak
+          path: packaging/flatpak/*.flatpak
+
+  pacman:
+    needs: meta
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare build user and tooling
+        run: |
+          pacman -Syu --noconfirm pacman-contrib
+          useradd -m builder
+          chown -R builder:builder .
+      - name: Build pacman package
+        run: |
+          # update.sh bumps pkgver, downloads the source and writes real
+          # sha256sums; makepkg then repacks the .deb into a pacman package.
+          sudo -u builder bash packaging/aur/update.sh "${{ needs.meta.outputs.version }}"
+          cd packaging/aur
+          sudo -u builder makepkg -f --nodeps
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-pacman
+          path: packaging/aur/*.pkg.tar.zst
+
+  snap:
+    needs: [meta, fetch]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: packaging/snap }
+      - name: Build snap
+        uses: snapcore/action-build@v1
+        id: snapbuild
+        env:
+          SNAP_VERSION: ${{ needs.meta.outputs.version }}
+        with:
+          path: packaging/snap
+      - name: Collect .snap
+        run: |
+          mkdir -p out
+          cp "${{ steps.snapbuild.outputs.snap }}" \
+            "out/brassworks-launcher_${{ needs.meta.outputs.version }}_amd64.snap"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-snap
+          path: out/*.snap
+
+  xbps:
+    needs: [meta, fetch]
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc-full:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: . }
+      - name: Build xbps package
+        run: |
+          xbps-install -Sy xbps binutils tar
+          PKGROOT="$(mktemp -d)"
+          ( cd "$PKGROOT" && ar x "$GITHUB_WORKSPACE/brassworks-launcher_amd64.deb" \
+              && tar -xf data.tar.* )
+          mkdir -p out && cd out
+          xbps-create \
+            -A x86_64 \
+            -n "brassworks-launcher-${{ needs.meta.outputs.version }}_1" \
+            -s "Brassworks Launcher" \
+            -S "Launcher for the Brassworks SMP (NeoForge 1.21.1 modpack)." \
+            -m "Brassworks <omarahmedmsalem@gmail.com>" \
+            -H "https://brassworks.opnsoc.org/launcher" \
+            -l "GPL-3.0-or-later" \
+            -D "webkit2gtk>=0 gtk+3>=0 libayatana-appindicator>=0" \
+            "$PKGROOT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-xbps
+          path: out/*.xbps
+
+  publish:
+    needs: [meta, flatpak, pacman, snap, xbps]
+    # Attach whatever built; a single format failing must not block the rest.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: dl
+      - name: Attach packages to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=(dl/pkg-*/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no package artifacts were produced" >&2
+            exit 1
+          fi
+          printf 'uploading: %s\n' "${files[@]}"
+          gh release upload "${{ needs.meta.outputs.tag }}" "${files[@]}" \
+            --repo "$REPO" --clobber

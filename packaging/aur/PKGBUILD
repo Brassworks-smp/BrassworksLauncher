@@ -1,0 +1,27 @@
+# Maintainer: Brassworks <omarahmedmsalem@gmail.com>
+#
+# Built in CI into a standalone pacman package (.pkg.tar.zst) that is attached
+# to the GitHub release for direct `pacman -U` install. It repacks the official
+# amd64 .deb; CI rewrites `pkgver` + `sha256sums` via packaging/aur/update.sh.
+pkgname=brassworks-launcher-bin
+pkgver=0.7.0
+pkgrel=1
+pkgdesc="Launcher for the Brassworks SMP (NeoForge 1.21.1 modpack)"
+arch=('x86_64')
+url="https://brassworks.opnsoc.org/launcher"
+license=('GPL-3.0-or-later')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'openssl')
+optdepends=('xdg-utils: open downloads and links in your browser')
+provides=('brassworks-launcher')
+conflicts=('brassworks-launcher')
+options=('!strip' '!debug')
+source=("brassworks-launcher-${pkgver}.deb::https://github.com/Brassworks-smp/BrassworksLauncher/releases/download/v${pkgver}/Brassworks.Launcher_${pkgver}_amd64.deb")
+sha256sums=('SKIP')
+
+package() {
+    cd "${srcdir}"
+    # makepkg does not auto-extract .deb; unpack the data archive ourselves.
+    # This already ships the binary, .desktop and icons.
+    ar x "brassworks-launcher-${pkgver}.deb"
+    tar -xf data.tar.* -C "${pkgdir}"
+}

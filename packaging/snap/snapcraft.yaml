@@ -1,0 +1,55 @@
+name: brassworks-launcher
+base: core22
+adopt-info: brassworks-launcher
+summary: Launcher for the Brassworks SMP
+description: |
+  The Brassworks Launcher installs and launches the Brassworks SMP modpack
+  (NeoForge 1.21.1) and keeps you up to date. It manages multiple instances,
+  installs mods, resource packs and shaders from Modrinth and CurseForge, and
+  signs you in with your Microsoft account.
+license: GPL-3.0-or-later
+icon: gui/brassworks-launcher.png
+
+grade: stable
+confinement: strict
+compression: lzo
+
+# CI copies the amd64 release .deb to the project root and exports SNAP_VERSION
+# before running snapcraft (see .github/workflows/packages.yml).
+architectures:
+  - build-on: amd64
+
+apps:
+  brassworks-launcher:
+    command: usr/bin/brassworks-launcher
+    extensions: [gnome]
+    common-id: com.brassworks.launcher
+    desktop: usr/share/applications/brassworks-launcher.desktop
+    plugs:
+      - network
+      - network-bind
+      - opengl
+      - home
+      - audio-playback
+      - x11
+      - wayland
+      - browser-support
+      - desktop
+      - desktop-legacy
+
+parts:
+  brassworks-launcher:
+    plugin: dump
+    source: brassworks-launcher_amd64.deb
+    source-type: deb
+    override-pull: |
+      craftctl default
+      craftctl set-version "${SNAP_VERSION:-0.0.0}"
+    # The release ships the desktop file as "Brassworks Launcher.desktop";
+    # rename it so the `desktop:` key above resolves.
+    organize:
+      'usr/share/applications/Brassworks Launcher.desktop': usr/share/applications/brassworks-launcher.desktop
+    stage-packages:
+      # webkit2gtk is not part of the gnome extension's runtime.
+      - libwebkit2gtk-4.1-0
+      - libayatana-appindicator3-1
