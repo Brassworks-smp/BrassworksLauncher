@@ -1,0 +1,68 @@
+# Flatpak manifest for the Brassworks Launcher.
+#
+# Builds an installable, single-file `.flatpak` bundle by extracting the
+# prebuilt .deb from the Tauri release (the approach recommended by the Tauri
+# docs for Flatpak) and renaming the desktop file, icons and metainfo to the
+# app-id. CI copies the release .deb next to this manifest as
+# `brassworks-launcher_amd64.deb`, builds, then `flatpak build-bundle`s it and
+# attaches the bundle to the release. Not submitted to Flathub.
+app-id: com.brassworks.launcher
+runtime: org.gnome.Platform
+runtime-version: "47"
+sdk: org.gnome.Sdk
+command: brassworks-launcher
+
+finish-args:
+  # Networking: modpack/content downloads, Microsoft auth, server pings.
+  - --share=network
+  - --share=ipc
+  # The launched Minecraft JVM opens an OpenGL window.
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Game audio.
+  - --socket=pulseaudio
+  # Instance data, Java runtimes and game files live under the user's home.
+  - --filesystem=home
+  # Desktop notifications.
+  - --talk-name=org.freedesktop.Notifications
+
+modules:
+  - name: brassworks-launcher
+    buildsystem: simple
+    build-commands:
+      # Unpack the Debian package: control archive is ignored, data.tar.* holds
+      # the filesystem tree (/usr/bin/brassworks-launcher, /usr/share/...).
+      - ar x *.deb
+      - tar -xf data.tar.* -C .
+      # Binary.
+      - install -Dm755 usr/bin/brassworks-launcher /app/bin/brassworks-launcher
+      # Desktop file -> app-id name; point its Icon at the app-id. The release
+      # ships it as "Brassworks Launcher.desktop", so match by glob.
+      - |
+        install -Dm644 usr/share/applications/*.desktop \
+          /app/share/applications/com.brassworks.launcher.desktop
+        sed -i 's/^Icon=.*/Icon=com.brassworks.launcher/' \
+          /app/share/applications/com.brassworks.launcher.desktop
+      # Icons -> app-id names (Tauri installs them as brassworks-launcher.png).
+      - |
+        for d in usr/share/icons/hicolor/*/apps; do
+          [ -f "$d/brassworks-launcher.png" ] || continue
+          size="$(basename "$(dirname "$d")")"
+          install -Dm644 "$d/brassworks-launcher.png" \
+            "/app/share/icons/hicolor/$size/apps/com.brassworks.launcher.png"
+        done
+      # Metainfo -> app-id name + app-id launchable (present in builds that ship
+      # metainfo; absent in older releases, so guarded).
+      - |
+        if [ -f usr/share/metainfo/com.brassworks.launcher.metainfo.xml ]; then
+          sed 's/brassworks-launcher.desktop/com.brassworks.launcher.desktop/' \
+            usr/share/metainfo/com.brassworks.launcher.metainfo.xml \
+            > /tmp/metainfo.xml
+          install -Dm644 /tmp/metainfo.xml \
+            /app/share/metainfo/com.brassworks.launcher.metainfo.xml
+        fi
+    sources:
+      # CI drops the release .deb here under this fixed name before building.
+      - type: file
+        path: brassworks-launcher_amd64.deb

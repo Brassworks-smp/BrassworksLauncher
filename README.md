@@ -17,6 +17,26 @@ The official launcher for the Brassworks SMP. Built with Rust and Tauri under th
 
 ---
 
+## Install on Linux
+
+Every format ships as a file on the [latest release](https://github.com/Brassworks-smp/BrassworksLauncher/releases/latest) — download the one for your distro and install it directly. The **AppImage** auto-updates in place; the package-manager formats below are updated by downloading the new file from a later release.
+
+| Format | Install |
+| --- | --- |
+| **AppImage** (any distro, auto-updates) | `chmod +x Brassworks.Launcher_*_amd64.AppImage && ./Brassworks.Launcher_*_amd64.AppImage` |
+| **Debian / Ubuntu** (`.deb`) | `sudo apt install ./Brassworks.Launcher_*_amd64.deb` |
+| **Fedora / RHEL** (`.rpm`) | `sudo dnf install ./Brassworks.Launcher-*.x86_64.rpm` |
+| **Arch** (`.pkg.tar.zst`) | `sudo pacman -U ./brassworks-launcher-bin-*-x86_64.pkg.tar.zst` |
+| **Flatpak** (`.flatpak`) | `flatpak install ./brassworks-launcher_*_amd64.flatpak` |
+| **Snap** (`.snap`) | `sudo snap install ./brassworks-launcher_*_amd64.snap --dangerous` |
+| **Void** (`.xbps`) | put the file in a folder, then `xbps-rindex -a *.xbps && sudo xbps-install --repository=. brassworks-launcher` |
+
+The `.deb`, `.rpm` and AppImage are produced by the release build; the Flatpak,
+pacman, snap and xbps files are added by `.github/workflows/packages.yml`, which
+repacks the release `.deb` and attaches them to the same release.
+
+---
+
 ## Technical Architecture
 
 To keep the launcher fast and reliable, it builds on existing open-source projects while making significant changes and improvements behind the scenes.
