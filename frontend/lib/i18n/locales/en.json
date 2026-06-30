@@ -47,6 +47,11 @@
     "openPalette": "Open the command palette"
   },
   "schematics": {
+    "heroTitle": "Schematics",
+    "heroSub": "Discover Create contraptions from createmod.com",
+    "gallery": "Gallery",
+    "dimensions": "Size",
+    "blocks": "Blocks",
     "searchPlaceholder": "Search schematics, creators, tags…",
     "trending": "Trending",
     "latest": "Latest",
