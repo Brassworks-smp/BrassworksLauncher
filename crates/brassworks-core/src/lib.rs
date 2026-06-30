@@ -12,6 +12,7 @@
 
 pub mod account;
 pub mod auth;
+pub mod createmod;
 pub mod error;
 pub mod export;
 pub mod featured;
@@ -38,6 +39,10 @@ use std::process::Child;
 
 pub use account::{Account, AccountKind, AccountStatus, AccountStore};
 pub use auth::MicrosoftCode;
+pub use createmod::{
+    SchematicCard, SchematicDetail, SchematicFilters, SchematicHome, SchematicSearch,
+    SchematicSearchParams, SchematicsStatus,
+};
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
 pub use import::ImportCandidate;
@@ -1653,6 +1658,43 @@ impl Launcher {
 
     pub fn list_mods(&self, instance_id: &str) -> Result<Vec<InstalledMod>> {
         self.modpack_for(instance_id).list_mods()
+    }
+
+    pub fn schematics_status(&self, instance_id: &str) -> Result<SchematicsStatus> {
+        let instance = self.instances().get(instance_id)?;
+        let mods = self.list_mods(instance_id).unwrap_or_default();
+        Ok(createmod::schematics_status(&instance, &mods))
+    }
+
+    pub fn set_integration(
+        &self,
+        instance_id: &str,
+        key: &str,
+        value: Option<bool>,
+    ) -> Result<()> {
+        let mut instance = self.instances().get(instance_id)?;
+        match value {
+            Some(v) => {
+                instance.integrations.insert(key.to_string(), v);
+            }
+            None => {
+                instance.integrations.remove(key);
+            }
+        }
+        self.instances().update(&instance)
+    }
+
+    pub fn import_schematic(&self, instance_id: &str, src_path: &str) -> Result<String> {
+        let dir = self.paths.instance_game_dir(instance_id).join("schematics");
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let src = std::path::Path::new(src_path);
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "schematic.nbt".to_string());
+        let dest = dir.join(&name);
+        std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+        Ok(dest.to_string_lossy().to_string())
     }
 
     pub fn mod_info(
