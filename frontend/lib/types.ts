@@ -50,6 +50,98 @@ export interface Instance {
   auto_join: QuickPlay | null;
   share: PackShare | null;
   shared_by: string | null;
+  integrations: Record<string, boolean>;
+}
+
+export interface SchematicCard {
+  name: string;
+  title: string;
+  featured_image: string | null;
+  rating: number | null;
+  views: number;
+  downloads: number;
+  author: string | null;
+  categories: string[];
+  tags: string[];
+  web_url: string | null;
+}
+
+export interface SchematicMaterial {
+  name: string;
+  count: number;
+  block_id: string | null;
+}
+
+export interface SchematicDimensions {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface SchematicDetail {
+  id: string | null;
+  name: string;
+  title: string;
+  author: string | null;
+  description_html: string;
+  excerpt: string;
+  featured_image: string | null;
+  gallery: string[];
+  video: string;
+  categories: string[];
+  tags: string[];
+  required_mods: string[];
+  dependencies_html: string;
+  materials: SchematicMaterial[];
+  minecraft_version: string;
+  createmod_version: string;
+  block_count: number;
+  dimensions: SchematicDimensions;
+  views: number;
+  downloads: number;
+  rating: number | null;
+  rating_count: number;
+  comment_count: number;
+  web_url: string | null;
+}
+
+export interface SchematicHome {
+  trending: SchematicCard[];
+  latest: SchematicCard[];
+  highest: SchematicCard[];
+}
+
+export interface SchematicSearch {
+  items: SchematicCard[];
+  page: number;
+  has_next: boolean;
+  total: number;
+}
+
+export interface FilterOption {
+  value: string;
+  label: string;
+}
+
+export interface SchematicFilters {
+  categories: FilterOption[];
+  mc_versions: FilterOption[];
+  create_versions: FilterOption[];
+}
+
+export interface SchematicSearchParams {
+  query: string;
+  sort: string;
+  category: string;
+  mc_version: string;
+  create_version: string;
+  page: number;
+}
+
+export interface SchematicsStatus {
+  enabled: boolean;
+  create_detected: boolean;
+  mode: string;
 }
 
 export type GitProvider = "github" | "gitlab";

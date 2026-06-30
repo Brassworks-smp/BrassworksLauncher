@@ -47,6 +47,12 @@ import type {
   PlayerCount,
   ProjectDetail,
   Screenshot,
+  SchematicHome,
+  SchematicSearch,
+  SchematicSearchParams,
+  SchematicDetail,
+  SchematicFilters,
+  SchematicsStatus,
   SearchHit,
   SearchFilters,
   FilterOptions,
@@ -890,5 +896,31 @@ export const sourceUrl = (source: string, slugOrId: string): string =>
 
 export const sourceLabel = (source: string): string =>
   source === "curseforge" ? "CurseForge" : "Modrinth";
+
+export const schematicsHome = (): Promise<SchematicHome> =>
+  invoke("schematics_home");
+export const schematicsSearch = (
+  params: SchematicSearchParams,
+): Promise<SchematicSearch> => invoke("schematics_search", { params });
+export const schematicDetail = (name: string): Promise<SchematicDetail> =>
+  invoke("schematic_detail", { name });
+export const schematicsFilters = (): Promise<SchematicFilters> =>
+  invoke("schematics_filters");
+export const schematicsStatus = (
+  instanceId: string,
+): Promise<SchematicsStatus> => invoke("schematics_status", { instanceId });
+export const setIntegration = (
+  instanceId: string,
+  key: string,
+  value: boolean | null,
+): Promise<void> => invoke("set_integration", { instanceId, key, value });
+export const importSchematic = (
+  instanceId: string,
+  path: string,
+): Promise<string> => invoke("import_schematic", { instanceId, path });
+export const scanSchematicDownloads = (
+  folders: string[],
+): Promise<[string, string][]> =>
+  invoke("scan_schematic_downloads", { folders });
 
 export type { Account };
