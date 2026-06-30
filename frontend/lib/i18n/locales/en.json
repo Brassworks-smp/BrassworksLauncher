@@ -23,6 +23,7 @@
     "content": "Content",
     "worlds": "Worlds",
     "servers": "Servers",
+    "schematics": "Schematics",
     "skins": "Skins",
     "screenshots": "Screenshots",
     "settings": "Settings",
@@ -30,6 +31,7 @@
     "commandPalette": "Command palette",
     "selectInstanceFirst": "Select an instance first",
     "skinsNeedAccount": "Skins require a Microsoft account",
+    "schematicsNeedIntegration": "Enable the CreateMod integration in instance settings",
     "openInstanceSettings": "Open instance settings",
     "about": "About Brassworks Launcher",
     "brandSub": "Launcher",
@@ -43,6 +45,44 @@
     "viewPrevLog": "View the previous session's log",
     "searchPlaceholder": "Search…",
     "openPalette": "Open the command palette"
+  },
+  "schematics": {
+    "searchPlaceholder": "Search schematics, creators, tags…",
+    "trending": "Trending",
+    "latest": "Latest",
+    "highest": "Highest Rated",
+    "allCategories": "Category",
+    "allMcVersions": "MC Version",
+    "allCreateVersions": "Create Version",
+    "loadMore": "Load more",
+    "loadError": "Could not load schematics",
+    "detailError": "Could not load this schematic",
+    "empty": "No schematics to show yet",
+    "noResults": "No results",
+    "back": "Back",
+    "by": "by",
+    "viewOnSite": "View on CreateMod.com",
+    "download": "Download",
+    "watchHint": "Your browser opened the schematic page. Download the .nbt and it will appear here.",
+    "watching": "Watching your downloads folder…",
+    "import": "Add to instance",
+    "imported": "Schematic added to the instance",
+    "importFailed": "Could not add the schematic",
+    "watchVideo": "Watch video",
+    "requiredMods": "Required Mods",
+    "materials": "Materials",
+    "description": "Description",
+    "viewComments": "View comments on CreateMod.com",
+    "sort": {
+      "best_match": "Best match",
+      "trending": "Trending",
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "highest_rated": "Highest rated",
+      "lowest_rated": "Lowest rated",
+      "most_viewed": "Most viewed",
+      "least_viewed": "Least viewed"
+    }
   },
   "account": {
     "manageAccounts": "Manage accounts",
@@ -652,6 +692,18 @@
       "showPlayers": "Show player count",
       "playersUrl": "Player count URL",
       "playersPlaceholder": "https://api.example.com/playercount or play.example.com"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "desc": "Connect this instance to extra services. Auto enables automatically when the matching mod is installed.",
+      "detected": "Create mod detected",
+      "createmod": "CreateMod Schematics",
+      "createmodDesc": "Browse and import schematics from createmod.com.",
+      "mode": {
+        "auto": "Auto",
+        "on": "On",
+        "off": "Off"
+      }
     },
     "danger": {
       "title": "Danger zone",
