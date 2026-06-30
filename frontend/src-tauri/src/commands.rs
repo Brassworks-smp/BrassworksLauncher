@@ -5,8 +5,9 @@ use brassworks_core::{
     AccountStore, ContentVersion, DatapackInfo, FilterOptions, InstallResult, InstalledMod,
     Instance, LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo,
     LogUpload, McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
-    ProjectDetail, SavedSkin, SearchFilters, SearchHit, ServerEntry, ServerStatus, SkinLibraryView,
-    SkinProfile, PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
+    ProjectDetail, SavedSkin, SchematicDetail, SchematicFilters, SchematicHome, SchematicSearch,
+    SchematicSearchParams, SchematicsStatus, SearchFilters, SearchHit, ServerEntry, ServerStatus,
+    SkinLibraryView, SkinProfile, PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
 use brassworks_core::progress::LaunchStage;
@@ -432,6 +433,111 @@ pub(crate) async fn list_mods(
     tauri::async_runtime::spawn_blocking(move || launcher.list_mods(&instance_id).map_err(err))
         .await
         .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematics_home() -> CmdResult<SchematicHome> {
+    tauri::async_runtime::spawn_blocking(|| brassworks_core::createmod::home().map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematics_search(
+    params: SchematicSearchParams,
+) -> CmdResult<SchematicSearch> {
+    tauri::async_runtime::spawn_blocking(move || {
+        brassworks_core::createmod::search(&params).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematic_detail(name: String) -> CmdResult<SchematicDetail> {
+    tauri::async_runtime::spawn_blocking(move || {
+        brassworks_core::createmod::detail(&name).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematics_filters() -> CmdResult<SchematicFilters> {
+    tauri::async_runtime::spawn_blocking(|| brassworks_core::createmod::filters().map_err(err))
+        .await
+        .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematics_status(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<SchematicsStatus> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.schematics_status(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn set_integration(
+    state: State<'_, AppState>,
+    instance_id: String,
+    key: String,
+    value: Option<bool>,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.set_integration(&instance_id, &key, value).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn import_schematic(
+    state: State<'_, AppState>,
+    instance_id: String,
+    path: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.import_schematic(&instance_id, &path).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn scan_schematic_downloads(
+    folders: Vec<String>,
+) -> CmdResult<Vec<(String, String)>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut out = Vec::new();
+        for folder in folders {
+            let read = match std::fs::read_dir(&folder) {
+                Ok(read) => read,
+                Err(_) => continue,
+            };
+            for entry in read.flatten() {
+                let path = entry.path();
+                let is_nbt = path
+                    .extension()
+                    .map(|e| e.eq_ignore_ascii_case("nbt"))
+                    .unwrap_or(false);
+                if is_nbt {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    out.push((name, path.to_string_lossy().to_string()));
+                }
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(err)?
 }
 
 #[tauri::command]
