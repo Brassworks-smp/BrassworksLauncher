@@ -30,6 +30,7 @@ import { ModsView } from "@/components/ModsView";
 import { WorldsView } from "@/components/WorldsView";
 import { ServersView } from "@/components/ServersView";
 import { ScreenshotsView } from "@/components/ScreenshotsView";
+import { SchematicsView } from "@/components/SchematicsView";
 import { SkinView } from "@/components/SkinView";
 import { TooltipLayer } from "@/components/Tooltip";
 import { SettingsView } from "@/components/SettingsView";
@@ -101,9 +102,11 @@ const isNavDisabled = (
   v: View,
   hasSelected: boolean,
   skinsAvailable: boolean,
+  schematicsAvailable: boolean,
 ): boolean =>
   (INSTANCE_VIEWS.includes(v) && !hasSelected) ||
-  (v === "skin" && !skinsAvailable);
+  (v === "skin" && !skinsAvailable) ||
+  (v === "schematics" && !schematicsAvailable);
 
 export default function Home() {
   const [view, setView] = useState<View>("play");
@@ -174,6 +177,8 @@ export default function Home() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const skinsAvailableRef = useRef(false);
+  const [schematicsAvailable, setSchematicsAvailable] = useState(false);
+  const schematicsAvailableRef = useRef(false);
   const installingIdRef = useRef<string | null>(null);
   const deleteInstallOnCancelRef = useRef(false);
 
@@ -404,7 +409,14 @@ export default function Home() {
         else if (action === "view-log") setLogView(false);
         else if (NAV[action]) {
           const v = NAV[action];
-          if (!isNavDisabled(v, !!selectedRef.current, skinsAvailableRef.current))
+          if (
+            !isNavDisabled(
+              v,
+              !!selectedRef.current,
+              skinsAvailableRef.current,
+              schematicsAvailableRef.current,
+            )
+          )
             setView(v);
         }
       })
@@ -447,7 +459,28 @@ export default function Home() {
       accounts.accounts[0];
     if (view === "skin" && acc?.kind !== "microsoft")
       setView(selectedId ? "play" : "instances");
-  }, [settings, selectedId, view, accounts]);
+    if (view === "schematics" && !schematicsAvailable)
+      setView(selectedId ? "play" : "instances");
+  }, [settings, selectedId, view, accounts, schematicsAvailable]);
+
+  useEffect(() => {
+    schematicsAvailableRef.current = schematicsAvailable;
+  }, [schematicsAvailable]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSchematicsAvailable(false);
+      return;
+    }
+    let alive = true;
+    api
+      .schematicsStatus(selectedId)
+      .then((s) => alive && setSchematicsAvailable(s.enabled))
+      .catch(() => alive && setSchematicsAvailable(false));
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, instances]);
 
   
   
@@ -1076,6 +1109,7 @@ export default function Home() {
           onShowAbout={() => setAboutOpen(true)}
           hasInstance={!!selectedId}
           skinsAvailable={skinsAvailable}
+          schematicsAvailable={schematicsAvailable}
           activeName={instance?.name}
           onActiveClick={() => {
             if (selectedId) {
@@ -1261,6 +1295,10 @@ export default function Home() {
 
           {view === "screenshots" && selectedId && (
             <ScreenshotsView instanceId={selectedId} />
+          )}
+
+          {view === "schematics" && selectedId && (
+            <SchematicsView instanceId={selectedId} />
           )}
 
           {view === "skin" &&

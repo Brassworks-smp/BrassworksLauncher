@@ -10,6 +10,7 @@ import {
   Globe2,
   Server,
   Search,
+  Blocks,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useT } from "@/lib/i18n";
@@ -24,6 +25,7 @@ export type View =
   | "mods"
   | "worlds"
   | "servers"
+  | "schematics"
   | "screenshots"
   | "skin"
   | "settings"
@@ -35,6 +37,7 @@ const NAV: { id: View; tkey: string; icon: typeof Play }[] = [
   { id: "mods", tkey: "sidebar.content", icon: Package },
   { id: "worlds", tkey: "sidebar.worlds", icon: Globe2 },
   { id: "servers", tkey: "sidebar.servers", icon: Server },
+  { id: "schematics", tkey: "sidebar.schematics", icon: Blocks },
   { id: "skin", tkey: "sidebar.skins", icon: Shirt },
   { id: "screenshots", tkey: "sidebar.screenshots", icon: ImageIcon },
   { id: "settings", tkey: "sidebar.settings", icon: Settings },
@@ -46,6 +49,7 @@ export const INSTANCE_VIEWS: View[] = [
   "mods",
   "worlds",
   "servers",
+  "schematics",
   "screenshots",
   "instance-settings",
 ];
@@ -62,6 +66,7 @@ export function Sidebar({
   onShowAbout,
   hasInstance = true,
   skinsAvailable = true,
+  schematicsAvailable = true,
   footer,
 }: {
   view: View;
@@ -74,8 +79,9 @@ export function Sidebar({
   onOpenPalette?: () => void;
   onShowAbout?: () => void;
   hasInstance?: boolean;
-  
+
   skinsAvailable?: boolean;
+  schematicsAvailable?: boolean;
   footer?: React.ReactNode;
 }) {
   const t = useT();
@@ -125,7 +131,8 @@ export function Sidebar({
             view === id || (id === "instances" && view === "instance-settings");
           const noInstance = !hasInstance && INSTANCE_VIEWS.includes(id);
           const noSkins = id === "skin" && !skinsAvailable;
-          const disabled = noInstance || noSkins;
+          const noSchematics = id === "schematics" && !schematicsAvailable;
+          const disabled = noInstance || noSkins || noSchematics;
           return (
             <button
               key={id}
@@ -134,9 +141,11 @@ export function Sidebar({
               title={
                 noSkins
                   ? t("sidebar.skinsNeedAccount")
-                  : noInstance
-                    ? t("sidebar.selectInstanceFirst")
-                    : undefined
+                  : noSchematics
+                    ? t("sidebar.schematicsNeedIntegration")
+                    : noInstance
+                      ? t("sidebar.selectInstanceFirst")
+                      : undefined
               }
               className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
                 disabled
