@@ -4,7 +4,13 @@ use crate::error::{CoreError, Result};
 use crate::modpack::InstalledMod;
 use crate::instance::Instance;
 
-pub const SCHEMATICS_API_BASE: &str = "https://api.opnsoc.org";
+pub const CREATEMOD_API_BASE: &str = "https://createmod.com";
+const CREATEMOD_API_KEY: &str =
+    "48177256575aa311ab7ed4e01cb82d00a3c5565c551f77819b624f4be1378b53";
+
+fn api_key() -> &'static str {
+    option_env!("CREATEMOD_API_KEY").unwrap_or(CREATEMOD_API_KEY)
+}
 
 pub const INTEGRATION_SCHEMATICS: &str = "createmod_schematics";
 pub const CREATE_MODRINTH_ID: &str = "LNytGWDc";
@@ -166,6 +172,19 @@ pub struct SchematicsStatus {
     pub mode: String,
 }
 
+fn sort_to_order(sort: &str) -> i32 {
+    match sort {
+        "newest" => 2,
+        "oldest" => 3,
+        "highest_rated" => 4,
+        "lowest_rated" => 5,
+        "most_viewed" => 6,
+        "least_viewed" => 7,
+        "trending" => 8,
+        _ => 1,
+    }
+}
+
 fn client() -> Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -173,51 +192,425 @@ fn client() -> Result<reqwest::blocking::Client> {
         .map_err(|e| CoreError::Remote(e.to_string()))
 }
 
-fn get_json<T: serde::de::DeserializeOwned>(url: &str, params: &[(&str, String)]) -> Result<T> {
+fn get_json<T: serde::de::DeserializeOwned>(path: &str, params: &[(&str, String)]) -> Result<T> {
+    let url = format!("{CREATEMOD_API_BASE}{path}");
     let resp = client()?
-        .get(url)
+        .get(&url)
         .query(params)
         .header("Accept", "application/json")
+        .header("X-API-Key", api_key())
         .send()
         .map_err(|e| CoreError::Remote(e.to_string()))?;
-    if !resp.status().is_success() {
-        return Err(CoreError::Remote(format!("{url} -> {}", resp.status())));
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(CoreError::Remote(format!("{path} -> {status}")));
     }
     resp.json::<T>()
-        .map_err(|e| CoreError::Remote(format!("decode {url}: {e}")))
+        .map_err(|e| CoreError::Remote(format!("decode {path}: {e}")))
 }
 
-pub fn home() -> Result<SchematicHome> {
-    get_json(&format!("{SCHEMATICS_API_BASE}/schematics/home"), &[])
+#[derive(Deserialize, Default)]
+struct RawSchematic {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    author: Option<serde_json::Value>,
+    #[serde(default, rename = "htmlContent")]
+    html_content: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    excerpt: String,
+    #[serde(default, rename = "featuredImage")]
+    featured_image: String,
+    #[serde(default)]
+    gallery: Vec<String>,
+    #[serde(default)]
+    video: String,
+    #[serde(default)]
+    categories: Vec<serde_json::Value>,
+    #[serde(default)]
+    tags: Vec<serde_json::Value>,
+    #[serde(default)]
+    mods: Vec<String>,
+    #[serde(default, rename = "htmlDependencies")]
+    html_dependencies: String,
+    #[serde(default)]
+    materials: serde_json::Value,
+    #[serde(default, rename = "minecraftVersion")]
+    minecraft_version: String,
+    #[serde(default, rename = "createmodVersion")]
+    createmod_version: String,
+    #[serde(default, rename = "blockCount")]
+    block_count: i64,
+    #[serde(default, rename = "dimX")]
+    dim_x: i64,
+    #[serde(default, rename = "dimY")]
+    dim_y: i64,
+    #[serde(default, rename = "dimZ")]
+    dim_z: i64,
+    #[serde(default)]
+    views: i64,
+    #[serde(default)]
+    downloads: i64,
+    #[serde(default)]
+    rating: serde_json::Value,
+    #[serde(default, rename = "ratingCount")]
+    rating_count: i64,
+    #[serde(default, rename = "commentCount")]
+    comment_count: i64,
 }
 
-pub fn detail(name: &str) -> Result<SchematicDetail> {
-    get_json(&format!("{SCHEMATICS_API_BASE}/schematics/{name}"), &[])
+fn json_str(v: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    if let Some(s) = v.as_str() {
+        return Some(s.to_string());
+    }
+    if let Some(obj) = v.as_object() {
+        for k in keys {
+            if let Some(s) = obj.get(*k).and_then(|x| x.as_str()) {
+                if !s.is_empty() {
+                    return Some(s.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
-pub fn filters() -> Result<SchematicFilters> {
-    get_json(&format!("{SCHEMATICS_API_BASE}/schematics/filters"), &[])
+fn name_list(vals: &[serde_json::Value]) -> Vec<String> {
+    vals.iter()
+        .filter_map(|v| json_str(v, &["name", "Name"]))
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
-pub fn search(p: &SchematicSearchParams) -> Result<SchematicSearch> {
+fn image_url(id: Option<&str>, file: &str) -> Option<String> {
+    if file.is_empty() {
+        return None;
+    }
+    if file.starts_with("http") {
+        return Some(file.to_string());
+    }
+    let id = id?;
+    Some(format!("{CREATEMOD_API_BASE}/api/files/schematics/{id}/{file}"))
+}
+
+fn parse_rating(v: &serde_json::Value) -> Option<f64> {
+    if let Some(n) = v.as_f64() {
+        return if n > 0.0 { Some(n) } else { None };
+    }
+    if let Some(s) = v.as_str() {
+        if let Ok(n) = s.trim().parse::<f64>() {
+            return if n > 0.0 { Some(n) } else { None };
+        }
+    }
+    None
+}
+
+fn parse_material_line(line: &str) -> Option<SchematicMaterial> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let bytes = line.as_bytes();
+    if bytes[0].is_ascii_digit() {
+        let mut i = 0;
+        while i < bytes.len()
+            && (bytes[i].is_ascii_digit() || bytes[i] == b',' || bytes[i] == b'.')
+        {
+            i += 1;
+        }
+        let count: i64 = line[..i].replace(',', "").parse().unwrap_or(0);
+        let rest = line[i..]
+            .trim_start()
+            .trim_start_matches(['x', 'X', '×'])
+            .trim();
+        return Some(SchematicMaterial {
+            name: rest.to_string(),
+            count,
+            block_id: None,
+        });
+    }
+    Some(SchematicMaterial {
+        name: line.to_string(),
+        count: 0,
+        block_id: None,
+    })
+}
+
+fn parse_materials(v: &serde_json::Value) -> Vec<SchematicMaterial> {
+    if let Some(arr) = v.as_array() {
+        return arr
+            .iter()
+            .filter_map(|m| {
+                let name = json_str(m, &["name", "Name", "block_id"])?;
+                let count = m
+                    .get("count")
+                    .and_then(|c| c.as_i64())
+                    .unwrap_or(0);
+                let block_id = m
+                    .get("block_id")
+                    .and_then(|c| c.as_str())
+                    .map(|s| s.to_string());
+                Some(SchematicMaterial {
+                    name,
+                    count,
+                    block_id,
+                })
+            })
+            .collect();
+    }
+    if let Some(s) = v.as_str() {
+        return s
+            .split(['\n', ','])
+            .filter_map(parse_material_line)
+            .collect();
+    }
+    Vec::new()
+}
+
+impl RawSchematic {
+    fn into_card(self) -> SchematicCard {
+        let image = image_url(self.id.as_deref(), &self.featured_image);
+        SchematicCard {
+            web_url: if self.name.is_empty() {
+                None
+            } else {
+                Some(format!("{CREATEMOD_API_BASE}/schematics/{}", self.name))
+            },
+            author: self
+                .author
+                .as_ref()
+                .and_then(|a| json_str(a, &["username", "Username", "name"])),
+            rating: parse_rating(&self.rating),
+            categories: name_list(&self.categories),
+            tags: name_list(&self.tags),
+            featured_image: image,
+            title: if self.title.is_empty() {
+                self.name.clone()
+            } else {
+                self.title.clone()
+            },
+            name: self.name,
+            views: self.views,
+            downloads: self.downloads,
+        }
+    }
+
+    fn into_detail(self) -> SchematicDetail {
+        let image = image_url(self.id.as_deref(), &self.featured_image);
+        let gallery = self
+            .gallery
+            .iter()
+            .filter_map(|g| image_url(self.id.as_deref(), g))
+            .collect();
+        let description = if !self.html_content.is_empty() {
+            self.html_content.clone()
+        } else {
+            self.content.clone()
+        };
+        SchematicDetail {
+            web_url: if self.name.is_empty() {
+                None
+            } else {
+                Some(format!("{CREATEMOD_API_BASE}/schematics/{}", self.name))
+            },
+            author: self
+                .author
+                .as_ref()
+                .and_then(|a| json_str(a, &["username", "Username", "name"])),
+            rating: parse_rating(&self.rating),
+            categories: name_list(&self.categories),
+            tags: name_list(&self.tags),
+            required_mods: self.mods,
+            materials: parse_materials(&self.materials),
+            featured_image: image,
+            gallery,
+            title: if self.title.is_empty() {
+                self.name.clone()
+            } else {
+                self.title.clone()
+            },
+            description_html: description,
+            excerpt: self.excerpt,
+            dependencies_html: self.html_dependencies,
+            video: self.video,
+            minecraft_version: self.minecraft_version,
+            createmod_version: self.createmod_version,
+            block_count: self.block_count,
+            dimensions: SchematicDimensions {
+                x: self.dim_x,
+                y: self.dim_y,
+                z: self.dim_z,
+            },
+            views: self.views,
+            downloads: self.downloads,
+            rating_count: self.rating_count,
+            comment_count: self.comment_count,
+            id: self.id,
+            name: self.name,
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct RawList {
+    #[serde(default)]
+    items: Vec<RawSchematic>,
+    #[serde(default)]
+    page: u32,
+    #[serde(default, rename = "hasNext")]
+    has_next: bool,
+    #[serde(default)]
+    total: i64,
+}
+
+#[derive(Deserialize, Default)]
+struct RawHome {
+    #[serde(default)]
+    trending: Vec<RawSchematic>,
+    #[serde(default)]
+    latest: Vec<RawSchematic>,
+    #[serde(default, rename = "highestRated")]
+    highest_rated: Vec<RawSchematic>,
+}
+
+fn cards(items: Vec<RawSchematic>) -> Vec<SchematicCard> {
+    items.into_iter().map(RawSchematic::into_card).collect()
+}
+
+fn run_search(p: &SchematicSearchParams) -> Result<SchematicSearch> {
     let page = if p.page == 0 { 1 } else { p.page };
-    let mut params: Vec<(&str, String)> = vec![("page", page.to_string())];
+    let mut params: Vec<(&str, String)> = vec![
+        ("page", page.to_string()),
+        ("sort", sort_to_order(&p.sort).to_string()),
+    ];
     if !p.query.is_empty() {
         params.push(("query", p.query.clone()));
-    }
-    if !p.sort.is_empty() {
-        params.push(("sort", p.sort.clone()));
     }
     if !p.category.is_empty() && p.category != "all" {
         params.push(("category", p.category.clone()));
     }
     if !p.mc_version.is_empty() && p.mc_version != "all" {
-        params.push(("mc_version", p.mc_version.clone()));
+        params.push(("mcv", p.mc_version.clone()));
     }
     if !p.create_version.is_empty() && p.create_version != "all" {
-        params.push(("create_version", p.create_version.clone()));
+        params.push(("cv", p.create_version.clone()));
     }
-    get_json(&format!("{SCHEMATICS_API_BASE}/schematics/search"), &params)
+    let raw: RawList = get_json("/api/schematics", &params)?;
+    Ok(SchematicSearch {
+        page: if raw.page == 0 { page } else { raw.page },
+        has_next: raw.has_next,
+        total: raw.total,
+        items: cards(raw.items),
+    })
+}
+
+pub fn home() -> Result<SchematicHome> {
+    match get_json::<RawHome>("/api/home", &[]) {
+        Ok(raw) => Ok(SchematicHome {
+            trending: cards(raw.trending),
+            latest: cards(raw.latest),
+            highest: cards(raw.highest_rated),
+        }),
+        Err(_) => {
+            let trending = run_search(&SchematicSearchParams {
+                sort: "trending".to_string(),
+                page: 1,
+                ..Default::default()
+            })?;
+            Ok(SchematicHome {
+                trending: trending.items.into_iter().take(12).collect(),
+                latest: Vec::new(),
+                highest: Vec::new(),
+            })
+        }
+    }
+}
+
+pub fn detail(name: &str) -> Result<SchematicDetail> {
+    let raw: RawSchematic = get_json(&format!("/api/schematics/{name}"), &[])?;
+    Ok(raw.into_detail())
+}
+
+#[derive(Deserialize, Default)]
+struct RawFilterOpt {
+    #[serde(default)]
+    key: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    value: String,
+    #[serde(default)]
+    group: String,
+    #[serde(default)]
+    versions: Vec<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct RawFilters {
+    #[serde(default)]
+    categories: Vec<RawFilterOpt>,
+    #[serde(default, rename = "minecraftVersions")]
+    minecraft_versions: Vec<String>,
+    #[serde(default, rename = "createVersions")]
+    create_versions: Vec<RawFilterOpt>,
+}
+
+pub fn filters() -> Result<SchematicFilters> {
+    let raw: RawFilters = match get_json("/api/schematics/filters", &[]) {
+        Ok(raw) => raw,
+        Err(_) => return Ok(SchematicFilters::default()),
+    };
+    let categories = raw
+        .categories
+        .into_iter()
+        .filter(|c| !c.key.is_empty())
+        .map(|c| FilterOption {
+            value: c.key,
+            label: c.name,
+        })
+        .collect();
+    let mc_versions = raw
+        .minecraft_versions
+        .into_iter()
+        .map(|v| FilterOption {
+            label: v.clone(),
+            value: v,
+        })
+        .collect();
+    let mut create_versions = Vec::new();
+    for g in raw.create_versions {
+        if !g.value.is_empty() {
+            create_versions.push(FilterOption {
+                value: g.value,
+                label: if g.group.is_empty() {
+                    "All".to_string()
+                } else {
+                    g.group
+                },
+            });
+        }
+        for v in g.versions {
+            create_versions.push(FilterOption {
+                label: v.clone(),
+                value: v,
+            });
+        }
+    }
+    Ok(SchematicFilters {
+        categories,
+        mc_versions,
+        create_versions,
+    })
+}
+
+pub fn search(p: &SchematicSearchParams) -> Result<SchematicSearch> {
+    run_search(p)
 }
 
 pub fn create_mod_detected(mods: &[InstalledMod]) -> bool {
