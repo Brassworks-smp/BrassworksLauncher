@@ -4,9 +4,12 @@ use crate::error::{CoreError, Result};
 use crate::modpack::InstalledMod;
 use crate::instance::Instance;
 
-pub const CREATEMOD_API_BASE: &str = "https://createmod.com";
+pub const CREATEMOD_API_BASE: &str = match option_env!("CREATEMOD_API_BASE") {
+    Some(v) => v,
+    None => "https://createmod.com",
+};
 const CREATEMOD_API_KEY: &str =
-    "48177256575aa311ab7ed4e01cb82d00a3c5565c551f77819b624f4be1378b53";
+    "05c26e2012eb82ddd88d40b04ff0ddddc6159385a516338d8cda798f0ea275ea";
 
 fn api_key() -> &'static str {
     option_env!("CREATEMOD_API_KEY").unwrap_or(CREATEMOD_API_KEY)
@@ -342,20 +345,41 @@ fn parse_material_line(line: &str) -> Option<SchematicMaterial> {
     })
 }
 
+fn friendly_block_name(id: &str) -> String {
+    let local = id.rsplit(':').next().unwrap_or(id);
+    let words: Vec<String> = local
+        .split('_')
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect();
+    if words.is_empty() {
+        id.to_string()
+    } else {
+        words.join(" ")
+    }
+}
+
 fn parse_materials(v: &serde_json::Value) -> Vec<SchematicMaterial> {
     if let Some(arr) = v.as_array() {
         return arr
             .iter()
             .filter_map(|m| {
-                let name = json_str(m, &["name", "Name", "block_id"])?;
-                let count = m
-                    .get("count")
-                    .and_then(|c| c.as_i64())
-                    .unwrap_or(0);
                 let block_id = m
                     .get("block_id")
                     .and_then(|c| c.as_str())
                     .map(|s| s.to_string());
+                let name = json_str(m, &["name", "Name"])
+                    .or_else(|| block_id.as_deref().map(friendly_block_name))?;
+                let count = m
+                    .get("count")
+                    .and_then(|c| c.as_i64())
+                    .unwrap_or(0);
                 Some(SchematicMaterial {
                     name,
                     count,
@@ -365,7 +389,15 @@ fn parse_materials(v: &serde_json::Value) -> Vec<SchematicMaterial> {
             .collect();
     }
     if let Some(s) = v.as_str() {
-        return s
+        let trimmed = s.trim();
+        if trimmed.starts_with('[') || trimmed.starts_with('{') {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if parsed.is_array() || parsed.is_object() {
+                    return parse_materials(&parsed);
+                }
+            }
+        }
+        return trimmed
             .split(['\n', ','])
             .filter_map(parse_material_line)
             .collect();
@@ -670,6 +702,20 @@ mod tests {
     #[test]
     fn detects_create_by_filename() {
         assert!(create_mod_detected(&[mc(None, "create-1.20.1-0.5.1.jar")]));
+    }
+
+    #[test]
+    fn parses_materials_from_json_string() {
+        let raw = serde_json::Value::String(
+            r#"[{"count": 285, "block_id": "minecraft:grass_block"}, {"count": 72, "block_id": "create:gantry_shaft"}]"#
+                .to_string(),
+        );
+        let mats = parse_materials(&raw);
+        assert_eq!(mats.len(), 2);
+        assert_eq!(mats[0].name, "Grass Block");
+        assert_eq!(mats[0].count, 285);
+        assert_eq!(mats[0].block_id.as_deref(), Some("minecraft:grass_block"));
+        assert_eq!(mats[1].name, "Gantry Shaft");
     }
 
     #[test]
