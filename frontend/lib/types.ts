@@ -144,6 +144,15 @@ export interface SchematicsStatus {
   mode: string;
 }
 
+export interface SchematicStat {
+  name: string;
+  views: number;
+  downloads: number;
+  rating: number;
+  ratingCount: number;
+  commentCount: number;
+}
+
 export type GitProvider = "github" | "gitlab";
 
 export interface PackShare {

@@ -23,6 +23,7 @@ import type {
   SchematicHome,
   SchematicFilters,
   SchematicSearchParams,
+  SchematicStat,
 } from "@/lib/types";
 
 const SORTS = [
@@ -38,6 +39,19 @@ const SORTS = [
 
 const homeCache: Record<string, SchematicHome> = {};
 let filtersCache: SchematicFilters | null = null;
+const statsCache: Record<string, SchematicStat> = {};
+
+async function loadStats(names: string[], done: () => void) {
+  const missing = names.filter((n) => !statsCache[n]);
+  if (missing.length === 0) return;
+  try {
+    const stats = await api.schematicStats(missing);
+    for (const s of stats) statsCache[s.name] = s;
+    done();
+  } catch {
+    // stats are best-effort; cached content still renders
+  }
+}
 
 const fmt = (n: number) =>
   n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
@@ -58,6 +72,10 @@ function Card({
   card: SchematicCard;
   onOpen: (name: string) => void;
 }) {
+  const st = statsCache[card.name];
+  const views = st ? st.views : card.views;
+  const downloads = st ? st.downloads : card.downloads;
+  const rating = st && st.rating > 0 ? st.rating : card.rating;
   return (
     <button
       onClick={() => onOpen(card.name)}
@@ -77,10 +95,10 @@ function Card({
           </div>
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ink-950/90 to-transparent" />
-        {card.rating != null && (
+        {rating != null && (
           <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-ink-950/80 px-2 py-0.5 text-[11px] font-medium text-brass-300 backdrop-blur">
             <Star size={11} className="fill-brass-400 text-brass-400" />
-            {card.rating.toFixed(1)}
+            {rating.toFixed(1)}
           </span>
         )}
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-2.5">
@@ -92,10 +110,10 @@ function Card({
       <div className="flex items-center justify-between gap-2 px-2.5 py-2">
         <div className="flex items-center gap-3 text-[11px] text-ink-600">
           <span className="flex items-center gap-1">
-            <Eye size={11} /> {fmt(card.views)}
+            <Eye size={11} /> {fmt(views)}
           </span>
           <span className="flex items-center gap-1">
-            <Download size={11} /> {fmt(card.downloads)}
+            <Download size={11} /> {fmt(downloads)}
           </span>
         </div>
         {card.author && (
@@ -146,6 +164,7 @@ function Detail({
   const [detail, setDetail] = useState<SchematicDetail | null>(null);
   const [err, setErr] = useState(false);
   const [hero, setHero] = useState<string | null>(null);
+  const [stat, setStat] = useState<SchematicStat | null>(statsCache[name] ?? null);
   const [watching, setWatching] = useState(false);
   const [found, setFound] = useState<[string, string][]>([]);
   const baseline = useRef<Set<string>>(new Set());
@@ -155,6 +174,7 @@ function Detail({
     setDetail(null);
     setErr(false);
     setHero(null);
+    setStat(statsCache[name] ?? null);
     api
       .schematicDetail(name)
       .then((d) => {
@@ -163,6 +183,9 @@ function Detail({
         setHero(d.featured_image);
       })
       .catch(() => alive && setErr(true));
+    void loadStats([name], () => {
+      if (alive && statsCache[name]) setStat(statsCache[name]);
+    });
     return () => {
       alive = false;
     };
@@ -288,14 +311,17 @@ function Detail({
           )}
 
           <div className="flex flex-wrap gap-2">
-            {detail.rating != null && (
+            {(stat && stat.rating > 0 ? stat.rating : detail.rating) != null && (
               <Pill icon={<Star size={12} className="fill-brass-400 text-brass-400" />}>
-                {detail.rating.toFixed(1)}
-                <span className="text-ink-700"> ({detail.rating_count})</span>
+                {(stat && stat.rating > 0 ? stat.rating : detail.rating!).toFixed(1)}
+                <span className="text-ink-700">
+                  {" "}
+                  ({stat ? stat.ratingCount : detail.rating_count})
+                </span>
               </Pill>
             )}
-            <Pill icon={<Eye size={12} />}>{fmt(detail.views)}</Pill>
-            <Pill icon={<Download size={12} />}>{fmt(detail.downloads)}</Pill>
+            <Pill icon={<Eye size={12} />}>{fmt(stat ? stat.views : detail.views)}</Pill>
+            <Pill icon={<Download size={12} />}>{fmt(stat ? stat.downloads : detail.downloads)}</Pill>
             {(detail.dimensions.x > 0 || detail.dimensions.y > 0) && (
               <Pill icon={<Ruler size={12} />}>
                 {detail.dimensions.x}×{detail.dimensions.y}×{detail.dimensions.z}
@@ -365,15 +391,16 @@ function Detail({
                 </div>
               )}
 
-              {detail.comment_count > 0 && detail.web_url && (
-                <button
-                  onClick={() => api.openExternal(detail.web_url!)}
-                  className="flex items-center gap-1.5 self-start text-[12px] text-ink-600 transition hover:text-brass-300"
-                >
-                  <MessageSquare size={13} /> {t("schematics.viewComments")} (
-                  {detail.comment_count})
-                </button>
-              )}
+              {(stat ? stat.commentCount : detail.comment_count) > 0 &&
+                detail.web_url && (
+                  <button
+                    onClick={() => api.openExternal(detail.web_url!)}
+                    className="flex items-center gap-1.5 self-start text-[12px] text-ink-600 transition hover:text-brass-300"
+                  >
+                    <MessageSquare size={13} /> {t("schematics.viewComments")} (
+                    {stat ? stat.commentCount : detail.comment_count})
+                  </button>
+                )}
             </div>
 
             <div className="flex flex-col gap-5">
@@ -440,6 +467,11 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
   const [searching, setSearching] = useState(false);
   const [openName, setOpenName] = useState<string | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
+  const [, bumpStats] = useState(0);
+  const refreshStats = useCallback(
+    (names: string[]) => void loadStats(names, () => bumpStats((v) => v + 1)),
+    [],
+  );
 
   const isSearch =
     active.trim().length > 0 ||
@@ -472,9 +504,11 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
       .then((h) => {
         homeCache[instanceId] = h;
         setHome(h);
+        const names = [...h.trending, ...h.latest, ...h.highest].map((c) => c.name);
+        refreshStats(names);
       })
       .catch(() => setLoadErr(true));
-  }, [instanceId]);
+  }, [instanceId, refreshStats]);
 
   const runSearch = useCallback(
     async (nextPage: number) => {
@@ -494,13 +528,14 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
         );
         setHasNext(res.has_next);
         setPage(res.page);
+        refreshStats(res.items.map((c) => c.name));
       } catch {
         if (nextPage === 1) setResults([]);
       } finally {
         setSearching(false);
       }
     },
-    [active, sort, category, mcVersion, createVersion],
+    [active, sort, category, mcVersion, createVersion, refreshStats],
   );
 
   useEffect(() => {

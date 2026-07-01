@@ -52,6 +52,7 @@ import type {
   SchematicSearchParams,
   SchematicDetail,
   SchematicFilters,
+  SchematicStat,
   SchematicsStatus,
   SearchHit,
   SearchFilters,
@@ -904,6 +905,8 @@ export const schematicsSearch = (
 ): Promise<SchematicSearch> => invoke("schematics_search", { params });
 export const schematicDetail = (name: string): Promise<SchematicDetail> =>
   invoke("schematic_detail", { name });
+export const schematicStats = (names: string[]): Promise<SchematicStat[]> =>
+  invoke("schematic_stats", { names });
 export const schematicsFilters = (): Promise<SchematicFilters> =>
   invoke("schematics_filters");
 export const schematicsStatus = (
