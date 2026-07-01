@@ -41,7 +41,7 @@ pub use account::{Account, AccountKind, AccountStatus, AccountStore};
 pub use auth::MicrosoftCode;
 pub use createmod::{
     SchematicCard, SchematicDetail, SchematicFilters, SchematicHome, SchematicSearch,
-    SchematicSearchParams, SchematicsStatus,
+    SchematicSearchParams, SchematicStat, SchematicsStatus,
 };
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};

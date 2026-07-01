@@ -462,6 +462,7 @@ pub fn run() {
             commands::schematics_home,
             commands::schematics_search,
             commands::schematic_detail,
+            commands::schematic_stats,
             commands::schematics_filters,
             commands::schematics_status,
             commands::set_integration,

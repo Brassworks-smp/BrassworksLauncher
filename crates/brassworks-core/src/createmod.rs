@@ -175,6 +175,21 @@ pub struct SchematicsStatus {
     pub mode: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchematicStat {
+    pub name: String,
+    #[serde(default)]
+    pub views: i64,
+    #[serde(default)]
+    pub downloads: i64,
+    #[serde(default)]
+    pub rating: f64,
+    #[serde(default, rename = "ratingCount")]
+    pub rating_count: i64,
+    #[serde(default, rename = "commentCount")]
+    pub comment_count: i64,
+}
+
 fn sort_to_order(sort: &str) -> i32 {
     match sort {
         "newest" => 2,
@@ -567,6 +582,13 @@ pub fn home() -> Result<SchematicHome> {
 pub fn detail(name: &str) -> Result<SchematicDetail> {
     let raw: RawSchematic = get_json(&format!("/api/schematics/{name}"), &[])?;
     Ok(raw.into_detail())
+}
+
+pub fn stats(names: &[String]) -> Result<Vec<SchematicStat>> {
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    get_json("/api/schematics/stats", &[("names", names.join(","))])
 }
 
 #[derive(Deserialize, Default)]

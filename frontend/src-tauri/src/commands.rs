@@ -6,7 +6,7 @@ use brassworks_core::{
     Instance, LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo,
     LogUpload, McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
     ProjectDetail, SavedSkin, SchematicDetail, SchematicFilters, SchematicHome, SchematicSearch,
-    SchematicSearchParams, SchematicsStatus, SearchFilters, SearchHit, ServerEntry, ServerStatus,
+    SchematicSearchParams, SchematicStat, SchematicsStatus, SearchFilters, SearchHit, ServerEntry, ServerStatus,
     SkinLibraryView, SkinProfile, PackInstallMeta, PackwizShare, WorldBackup, WorldInfo,
 };
 use brassworks_core::packs::SyncProgress;
@@ -457,6 +457,15 @@ pub(crate) async fn schematics_search(
 pub(crate) async fn schematic_detail(name: String) -> CmdResult<SchematicDetail> {
     tauri::async_runtime::spawn_blocking(move || {
         brassworks_core::createmod::detail(&name).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn schematic_stats(names: Vec<String>) -> CmdResult<Vec<SchematicStat>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        brassworks_core::createmod::stats(&names).map_err(err)
     })
     .await
     .map_err(err)?
