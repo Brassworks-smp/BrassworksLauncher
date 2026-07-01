@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { Dropdown } from "./ui";
 import { Markdown } from "./Markdown";
 import { toast } from "@/lib/toast";
 import type {
@@ -259,7 +260,7 @@ function Detail({
                   )}
                   <button
                     onClick={startDownload}
-                    className="brass-btn flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-semibold text-ink-950"
+                    className="brass-btn flex items-center gap-1.5 rounded-lg bg-brass-500 px-4 py-2 text-[12px] font-semibold text-ink-950 transition hover:bg-brass-400"
                   >
                     <Download size={13} /> {t("schematics.download")}
                   </button>
@@ -331,7 +332,7 @@ function Detail({
                       <span className="truncate text-[12px] text-gray-200">{fname}</span>
                       <button
                         onClick={() => doImport(path)}
-                        className="brass-btn rounded-md px-3 py-1 text-[11px] text-ink-950"
+                        className="brass-btn rounded-md bg-brass-500 px-3 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
                       >
                         {t("schematics.import")}
                       </button>
@@ -520,14 +521,16 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
     );
   }
 
-  const selectCls =
-    "rounded-lg border border-edge bg-ink-950/40 px-2.5 py-2 text-[12px] text-gray-200 outline-none transition focus:border-brass-500/50";
+  const sortOptions = SORTS.map((s) => ({
+    value: s,
+    label: t(`schematics.sort.${s}`),
+  }));
 
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 border-b border-edge bg-ink-900/70 px-5 py-3 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[240px] flex-1">
+      <div className="sticky top-0 z-20 px-5 pb-2 pt-5">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-edge bg-gradient-to-b from-ink-900/85 to-ink-900/55 p-2.5 shadow-lg shadow-ink-950/40 backdrop-blur-xl">
+          <div className="relative min-w-[220px] flex-1">
             <Search
               size={15}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-600"
@@ -539,57 +542,47 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
                 if (e.key === "Enter") setActive(query);
               }}
               placeholder={t("schematics.searchPlaceholder")}
-              className="w-full rounded-full border border-edge bg-ink-950/50 py-2 pl-10 pr-4 text-[13px] text-gray-100 outline-none transition focus:border-brass-500/50"
+              className="w-full rounded-xl border border-edge bg-ink-950/60 py-2 pl-10 pr-4 text-[13px] text-gray-100 outline-none transition focus:border-brass-500/50 focus:bg-ink-950/80"
             />
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className={selectCls}>
-            {SORTS.map((s) => (
-              <option key={s} value={s}>
-                {t(`schematics.sort.${s}`)}
-              </option>
-            ))}
-          </select>
+          <div className="w-40">
+            <Dropdown value={sort} onChange={setSort} options={sortOptions} />
+          </div>
           {filters && filters.categories.length > 0 && (
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className={selectCls}
-            >
-              <option value="all">{t("schematics.allCategories")}</option>
-              {filters.categories.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            <div className="w-40">
+              <Dropdown
+                value={category}
+                onChange={setCategory}
+                options={[
+                  { value: "all", label: t("schematics.allCategories") },
+                  ...filters.categories,
+                ]}
+              />
+            </div>
           )}
           {filters && filters.mc_versions.length > 0 && (
-            <select
-              value={mcVersion}
-              onChange={(e) => setMcVersion(e.target.value)}
-              className={selectCls}
-            >
-              <option value="all">{t("schematics.allMcVersions")}</option>
-              {filters.mc_versions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            <div className="w-36">
+              <Dropdown
+                value={mcVersion}
+                onChange={setMcVersion}
+                options={[
+                  { value: "all", label: t("schematics.allMcVersions") },
+                  ...filters.mc_versions,
+                ]}
+              />
+            </div>
           )}
           {filters && filters.create_versions.length > 0 && (
-            <select
-              value={createVersion}
-              onChange={(e) => setCreateVersion(e.target.value)}
-              className={selectCls}
-            >
-              <option value="all">{t("schematics.allCreateVersions")}</option>
-              {filters.create_versions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            <div className="w-36">
+              <Dropdown
+                value={createVersion}
+                onChange={setCreateVersion}
+                options={[
+                  { value: "all", label: t("schematics.allCreateVersions") },
+                  ...filters.create_versions,
+                ]}
+              />
+            </div>
           )}
         </div>
       </div>
