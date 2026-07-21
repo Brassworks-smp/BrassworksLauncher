@@ -29,6 +29,8 @@ pub struct Manifest {
     pub optional: Vec<String>,
                 #[serde(default)]
     pub flavors: Vec<String>,
+                #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

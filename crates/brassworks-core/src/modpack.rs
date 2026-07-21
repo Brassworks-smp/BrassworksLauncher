@@ -325,6 +325,7 @@ impl<'a> Modpack<'a> {
             flavors: self.flavors.clone(),
             keep_all_flavors: self.host,
             public_key: self.public_key.clone(),
+            exclude: Vec::new(),
         }
     }
 

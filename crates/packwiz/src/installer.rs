@@ -232,8 +232,9 @@ impl Installer {
         let index_text = self.get_text(&index_url)?;
         let index_hash = hex_digest("sha256", index_text.as_bytes());
 
-                                                let selection_matches =
-            flavors_match(&opts.flavors, &old.flavors) && optional_matches(&opts.optional, &old.optional);
+                                                let selection_matches = flavors_match(&opts.flavors, &old.flavors)
+            && optional_matches(&opts.optional, &old.optional)
+            && normalized_exclude(&opts.exclude) == old.exclude;
         if !force
             && old.complete
             && !old.pack_version.is_empty()
@@ -315,6 +316,10 @@ impl Installer {
                     continue;
                 };
 
+                if opts.is_excluded(&[&entry.file, &meta.filename, &meta.name]) {
+                    continue;
+                }
+
                 if !opts.side.wants(&meta.side) {
                     continue;
                 }
@@ -383,6 +388,9 @@ impl Installer {
                     }),
                 });
             } else {
+                if opts.is_excluded(&[&entry.file]) {
+                    continue;
+                }
                 let hash_format = entry
                     .hash_format
                     .clone()
@@ -627,6 +635,7 @@ impl Installer {
                 f.sort();
                 f
             },
+            exclude: normalized_exclude(&opts.exclude),
             ..Default::default()
         };
         let mut present = 0usize;
@@ -669,6 +678,17 @@ impl Installer {
     }
 }
 
+
+fn normalized_exclude(exclude: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = exclude
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
 
 fn flavors_match(requested: &std::collections::HashSet<String>, recorded: &[String]) -> bool {
     requested.len() == recorded.len() && recorded.iter().all(|f| requested.contains(f))
