@@ -19,7 +19,7 @@ The official launcher for the Brassworks SMP. Built with Rust and Tauri under th
 
 ## Install on Linux
 
-Every format ships as a file on the [latest release](https://github.com/Brassworks-smp/BrassworksLauncher/releases/latest) — download the one for your distro and install it directly. The **AppImage** auto-updates in place; the package-manager formats below are updated by downloading the new file from a later release.
+Every format ships as a file on the [latest release](https://github.com/Brassworks-smp/BrassworksLauncher/releases/latest), download the one for your distro and install it directly. The **AppImage** auto-updates in place; the package-manager formats below are updated by downloading the new file from a later release.
 
 | Format | Install |
 | --- | --- |
@@ -116,6 +116,8 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 ---
 
 ## CreateMod.com schematics
+
+<img src="assets/CreateModCom.png" alt="Browse CreateMod.com schematics" width="100%">
 
 Each instance can expose a dedicated **Schematics** library. The integration automatically detects the Create mod, can be forced on or off from **Instance Settings → Integrations**, and disappears cleanly from the sidebar when it is unavailable.
 
