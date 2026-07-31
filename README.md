@@ -45,6 +45,7 @@ To keep the launcher fast and reliable, it builds on existing open-source projec
 - Includes a from-scratch rewrite of the [packwiz](https://github.com/packwiz/packwiz) installer logic in Rust, with the [unsup](https://github.com/unascribed/unsup) update specification implemented on top for resumable, hash-verified pack updates.
 - The core is a Cargo workspace of focused Rust crates (`brassworks-core`, `packwiz`, `portablemc`, `java`) behind a Tauri shell, so the heavy lifting stays native while the UI stays a thin React (Vite) layer.
 - Java runtimes are provisioned automatically from Adoptium, and mod content resolves against both Modrinth and CurseForge.
+- CreateMod.com schematic browsing uses the Brassworks cache proxy at `https://api.opnsoc.org/createmodschem` by default, with a direct CreateMod.com fallback. Set `CREATEMOD_CACHE_BASE` to another mirror, or to an empty value to disable the proxy.
 
 ---
 
@@ -111,6 +112,28 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 </td>
 </tr>
 </table>
+
+---
+
+## CreateMod.com schematics
+
+Each instance can expose a dedicated **Schematics** library. The integration automatically detects the Create mod, can be forced on or off from **Instance Settings → Integrations**, and disappears cleanly from the sidebar when it is unavailable.
+
+The installed view follows the same local-first model as Content:
+
+- Every `.nbt` file in the instance is listed, searchable, removable, and filterable as **All**, **CreateMod.com**, or **Local**.
+- Schematics installed through Brassworks retain their CreateMod.com title, author, artwork, description, project link, and provider identity. Files copied into the folder manually remain ordinary local schematics without invented provider metadata.
+- Remote thumbnails, galleries, required-mod icons, and material previews use the launcher's on-disk image cache and continue to fall back safely to their original URLs.
+
+Choose **Add Schematics** to open a provider browser built from the same components as **Add Content**. It includes a CreateMod.com provider tab, blue provider accent, compatibility filters, search, infinite scrolling, quick installation, and continuously paged **Trending**, **Latest**, **Highest Rated**, and **More Schematics** feeds.
+
+Opening a schematic shows its upload date, categories, every tag, dimensions, block count, Minecraft/Create versions, rating, downloads, and properly rendered HTML description. Gallery images open in the same full-window keyboard-navigable viewer as Screenshots. The detail view also includes:
+
+- Required mods with cached artwork. Clicking one resolves the compatible Modrinth or CurseForge project and opens its normal Add Content page, including installed status, dependencies, version selection, and installation.
+- A cached block-by-block materials list with counts and a one-click **Copy list** action.
+- CreateMod.com version history with revision dates and change summaries.
+
+Downloads are written directly into the instance's schematic folder. The launcher stores provider metadata separately, so replacing a downloaded schematic with a local file correctly removes the old association.
 
 ---
 

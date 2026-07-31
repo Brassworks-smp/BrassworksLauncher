@@ -29,10 +29,23 @@ import type {
 } from "@/lib/types";
 import { FilterSidebar } from "./FilterSidebar";
 import { BackButton } from "./ui";
+import { CachedImage } from "./CachedImage";
 
 
 
 export const SEARCH_PAGE = 20;
+
+export interface InfiniteSearchPage {
+  hits: SearchHit[];
+  hasMore: boolean;
+}
+
+type InfiniteSearchResult = SearchHit[] | InfiniteSearchPage;
+
+const unpackPage = (result: InfiniteSearchResult): InfiniteSearchPage =>
+  Array.isArray(result)
+    ? { hits: result, hasMore: result.length >= SEARCH_PAGE }
+    : result;
 
 const keyOf = (h: { source: string; project_id: string }) =>
   `${h.source}:${h.project_id}`;
@@ -55,7 +68,7 @@ function relTime(iso: string): string {
 
 
 export function useInfiniteSearch(
-  fetchPage: (query: string, offset: number) => Promise<SearchHit[]>,
+  fetchPage: (query: string, offset: number) => Promise<InfiniteSearchResult>,
   query: string,
   resetKey: string,
   opts?: { debounce?: number; enabled?: boolean },
@@ -68,6 +81,7 @@ export function useInfiniteSearch(
   const [error, setError] = useState<string | null>(null);
 
   const reqId = useRef(0);
+  const loadingMoreRef = useRef(false);
   const hitsRef = useRef<SearchHit[]>([]);
   hitsRef.current = hits;
   const fetchRef = useRef(fetchPage);
@@ -81,14 +95,17 @@ export function useInfiniteSearch(
     setHasMore(true);
     setError(null);
     setLoading(true);
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
     const id = ++reqId.current;
     const h = setTimeout(() => {
       fetchRef
         .current(query, 0)
-        .then((res) => {
+        .then((result) => {
           if (id !== reqId.current) return;
-          setHits(res);
-          setHasMore(res.length >= SEARCH_PAGE);
+          const page = unpackPage(result);
+          setHits(page.hits);
+          setHasMore(page.hasMore);
         })
         .catch((e) => id === reqId.current && setError(String(e)))
         .finally(() => id === reqId.current && setLoading(false));
@@ -97,21 +114,26 @@ export function useInfiniteSearch(
   }, [query, resetKey, enabled, debounce]);
 
   const loadMore = useCallback(() => {
-    if (!api.isTauri()) return;
+    if (!api.isTauri() || loadingMoreRef.current) return;
     const id = reqId.current;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     fetchRef
       .current(query, hitsRef.current.length)
-      .then((res) => {
+      .then((result) => {
         if (id !== reqId.current) return;
+        const page = unpackPage(result);
         setHits((prev) => {
           const seen = new Set(prev.map(keyOf));
-          return [...prev, ...res.filter((h) => !seen.has(keyOf(h)))];
+          return [...prev, ...page.hits.filter((h) => !seen.has(keyOf(h)))];
         });
-        setHasMore(res.length >= SEARCH_PAGE);
+        setHasMore(page.hasMore);
       })
       .catch(() => {})
-      .finally(() => setLoadingMore(false));
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      });
   }, [query]);
 
   const handleScroll = useCallback(
@@ -189,7 +211,7 @@ export function ResultRow({
     >
       <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
         {hit.icon_url && !iconFailed ? (
-          <img
+          <CachedImage
             src={hit.icon_url}
             alt={hit.title}
             className="h-full w-full object-cover"
@@ -308,6 +330,9 @@ export function BrowseResults({
   accent,
   onUpload,
   footer,
+  filterSidebar,
+  contentBefore,
+  contentOverride,
   scrollKeyBase,
   hidden = false,
   padded = true,
@@ -319,7 +344,7 @@ export function BrowseResults({
   placeholder: string;
   headerLeft?: ReactNode;
   filtering: Filtering;
-  fetchPage: (q: string, offset: number) => Promise<SearchHit[]>;
+  fetchPage: (q: string, offset: number) => Promise<InfiniteSearchResult>;
   resetKey: string;
   enabled?: boolean;
   renderRow: (hit: SearchHit, open: () => void) => ReactNode;
@@ -329,6 +354,9 @@ export function BrowseResults({
   accent?: CSSProperties;
   onUpload?: () => void;
   footer?: ReactNode;
+  filterSidebar?: ReactNode;
+  contentBefore?: ReactNode;
+  contentOverride?: ReactNode;
   scrollKeyBase: string;
   hidden?: boolean;
   padded?: boolean;
@@ -435,15 +463,17 @@ export function BrowseResults({
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <FilterSidebar
-            open={open}
-            source={source}
-            options={options}
-            loading={loadingOptions}
-            filters={filters}
-            onChange={setFilters}
-            accentStyle={accent}
-          />
+          {filterSidebar ?? (
+            <FilterSidebar
+              open={open}
+              source={source}
+              options={options}
+              loading={loadingOptions}
+              filters={filters}
+              onChange={setFilters}
+              accentStyle={accent}
+            />
+          )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {error && (
               <div className="mx-5 mb-2 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
@@ -459,28 +489,37 @@ export function BrowseResults({
                   : `flex-1 overflow-y-auto pr-1 ${open ? "pl-4" : "pl-px"}`
               }
             >
-              {loading ? (
-                <div className="grid h-full place-items-center text-ink-600">
-                  <Loader2 className="animate-spin" />
-                </div>
-              ) : hits.length === 0 ? (
-                <div className="grid h-full place-items-center text-center text-sm text-ink-600">
-                  {query ? emptyText : startTypingText}
-                </div>
+              {contentOverride ? (
+                contentOverride
               ) : (
-                <div className="flex flex-col gap-2">
-                  {hits.map((hit) => renderRow(hit, () => onOpen(hit)))}
-                  {loadingMore && (
-                    <div className="grid place-items-center py-3 text-ink-600">
-                      <Loader2 size={18} className="animate-spin" />
+                <>
+                  {contentBefore}
+                  {loading ? (
+                    <div className={`${contentBefore ? "py-6" : "h-full"} grid place-items-center text-ink-600`}>
+                      <Loader2 className="animate-spin" />
+                    </div>
+                  ) : hits.length === 0 ? (
+                    contentBefore ? null : (
+                      <div className="grid h-full place-items-center text-center text-sm text-ink-600">
+                        {query ? emptyText : startTypingText}
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {hits.map((hit) => renderRow(hit, () => onOpen(hit)))}
+                      {loadingMore && (
+                        <div className="grid place-items-center py-3 text-ink-600">
+                          <Loader2 size={18} className="animate-spin" />
+                        </div>
+                      )}
+                      {!hasMore && (
+                        <div className="py-3 text-center text-[11px] text-ink-600">
+                          {t("addContent.endOfResults")}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {!hasMore && hits.length >= SEARCH_PAGE && (
-                    <div className="py-3 text-center text-[11px] text-ink-600">
-                      {t("addContent.endOfResults")}
-                    </div>
-                  )}
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -556,7 +595,7 @@ export function DetailShell({
           }`}
         >
           {hit.icon_url ? (
-            <img
+            <CachedImage
               src={hit.icon_url}
               alt={hit.title}
               className="h-full w-full object-cover"

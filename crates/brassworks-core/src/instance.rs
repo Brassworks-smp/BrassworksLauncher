@@ -195,6 +195,8 @@ pub struct Instance {
     pub share: Option<PackShare>,
     #[serde(default)]
     pub shared_by: Option<String>,
+    #[serde(default)]
+    pub integrations: std::collections::BTreeMap<String, bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +330,7 @@ impl Instance {
             auto_join: None,
             share: None,
             shared_by: None,
+            integrations: std::collections::BTreeMap::new(),
         }
     }
 
@@ -384,6 +387,7 @@ impl Instance {
             auto_join: None,
             share: None,
             shared_by: None,
+            integrations: std::collections::BTreeMap::new(),
         }
     }
 

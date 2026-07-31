@@ -12,6 +12,7 @@
 
 pub mod account;
 pub mod auth;
+pub mod createmod;
 pub mod error;
 pub mod export;
 pub mod featured;
@@ -38,6 +39,10 @@ use std::process::Child;
 
 pub use account::{Account, AccountKind, AccountStatus, AccountStore};
 pub use auth::MicrosoftCode;
+pub use createmod::{
+    InstalledSchematic, SchematicCard, SchematicDetail, SchematicFilters, SchematicHome,
+    SchematicSearch, SchematicSearchParams, SchematicStat, SchematicsStatus,
+};
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
 pub use import::ImportCandidate;
@@ -1653,6 +1658,100 @@ impl Launcher {
 
     pub fn list_mods(&self, instance_id: &str) -> Result<Vec<InstalledMod>> {
         self.modpack_for(instance_id).list_mods()
+    }
+
+    pub fn schematics_status(&self, instance_id: &str) -> Result<SchematicsStatus> {
+        let instance = self.instances().get(instance_id)?;
+        let mods = self.list_mods(instance_id).unwrap_or_default();
+        Ok(createmod::schematics_status(&instance, &mods))
+    }
+
+    pub fn set_integration(
+        &self,
+        instance_id: &str,
+        key: &str,
+        value: Option<bool>,
+    ) -> Result<()> {
+        let mut instance = self.instances().get(instance_id)?;
+        match value {
+            Some(v) => {
+                instance.integrations.insert(key.to_string(), v);
+            }
+            None => {
+                instance.integrations.remove(key);
+            }
+        }
+        self.instances().update(&instance)
+    }
+
+    pub fn import_schematic(&self, instance_id: &str, src_path: &str) -> Result<String> {
+        let dir = self.paths.instance_game_dir(instance_id).join("schematics");
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let src = std::path::Path::new(src_path);
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "schematic.nbt".to_string());
+        let dest = dir.join(&name);
+        std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+        createmod::forget_installed_schematic(&self.paths.schematics_index(instance_id), &name)?;
+        Ok(dest.to_string_lossy().to_string())
+    }
+
+    pub fn list_schematics(&self, instance_id: &str) -> Result<Vec<InstalledSchematic>> {
+        createmod::list_installed_schematics(
+            &self.paths.instance_game_dir(instance_id).join("schematics"),
+            &self.paths.schematics_index(instance_id),
+        )
+    }
+
+    pub fn download_schematic(
+        &self,
+        instance_id: &str,
+        name: &str,
+        username: &str,
+    ) -> Result<String> {
+        let dir = self.paths.instance_game_dir(instance_id).join("schematics");
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let detail = createmod::detail(name).ok();
+        let (filename, bytes) = createmod::download_schematic_bytes(name, username)?;
+        // Guard against a hostile filename escaping the schematics dir.
+        let safe = std::path::Path::new(&filename)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| format!("{name}.nbt"));
+        let dest = dir.join(&safe);
+        std::fs::write(&dest, &bytes).map_err(|e| CoreError::io(&dest, e))?;
+        createmod::record_installed_schematic(
+            &self.paths.schematics_index(instance_id),
+            &safe,
+            name,
+            detail.as_ref(),
+        )?;
+        Ok(dest.to_string_lossy().to_string())
+    }
+
+    pub fn remove_schematic(&self, instance_id: &str, filename: &str) -> Result<()> {
+        let safe = std::path::Path::new(filename)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .filter(|name| name == filename && name.to_lowercase().ends_with(".nbt"))
+            .ok_or_else(|| CoreError::Modpack("invalid schematic filename".to_string()))?;
+        let path = self
+            .paths
+            .instance_game_dir(instance_id)
+            .join("schematics")
+            .join(&safe);
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(CoreError::io(&path, e)),
+        }
+        createmod::forget_installed_schematic(
+            &self.paths.schematics_index(instance_id),
+            &safe,
+        )
     }
 
     pub fn mod_info(

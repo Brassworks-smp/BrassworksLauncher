@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   ExternalLink,
   StickyNote,
+  Puzzle,
   X,
   Share2,
   GitBranch,
@@ -80,6 +81,7 @@ import {
   inputCls,
   CardColumns,
   NumberField,
+  SegmentedTabs,
 } from "@/components/ui";
 
 const JVM_PRESETS: { id: string; tkey: string; args: string[] }[] = [
@@ -704,6 +706,8 @@ export function InstanceSettingsView({
               </Field>
             </Card>
           )}
+
+          <IntegrationsCard instance={instance} onSave={onSaveInstance} />
 
           {!instance.featured && (
             <Card title={t("instanceSettings.danger.title")} icon={<Trash2 size={14} />}>
@@ -1722,6 +1726,86 @@ function VersionLoaderCard({
       <p className="text-xs text-ink-600">
         {t("instanceSettings.version.modsNote")}
       </p>
+    </Card>
+  );
+}
+
+const INTEGRATIONS: { id: string; titleKey: string; descKey: string }[] = [
+  {
+    id: "createmod_schematics",
+    titleKey: "instanceSettings.integrations.createmod",
+    descKey: "instanceSettings.integrations.createmodDesc",
+  },
+];
+
+function IntegrationsCard({
+  instance,
+  onSave,
+}: {
+  instance: Instance;
+  onSave: (i: Instance) => void;
+}) {
+  const t = useT();
+  const [detected, setDetected] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .schematicsStatus(instance.id)
+      .then((s) => alive && setDetected(s.create_detected))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [instance.id]);
+
+  const setMode = (id: string, mode: string) => {
+    const next = { ...instance.integrations };
+    if (mode === "auto") delete next[id];
+    else next[id] = mode === "on";
+    onSave({ ...instance, integrations: next });
+  };
+
+  return (
+    <Card title={t("instanceSettings.integrations.title")} icon={<Puzzle size={14} />}>
+      <p className="text-xs text-ink-600">
+        {t("instanceSettings.integrations.desc")}
+      </p>
+      <div className="flex flex-col gap-3">
+        {INTEGRATIONS.map((intg) => {
+          const cur = instance.integrations[intg.id];
+          const mode = cur === undefined ? "auto" : cur ? "on" : "off";
+          return (
+            <div
+              key={intg.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-ink-950/30 p-3"
+            >
+              <div className="min-w-0">
+                <div className="font-mc text-[12px] text-gray-100">
+                  {t(intg.titleKey)}
+                </div>
+                <div className="mt-0.5 text-[11px] text-ink-600">
+                  {t(intg.descKey)}
+                </div>
+                {intg.id === "createmod_schematics" && detected && (
+                  <div className="mt-1 text-[10px] uppercase tracking-wide text-patina-300">
+                    {t("instanceSettings.integrations.detected")}
+                  </div>
+                )}
+              </div>
+              <SegmentedTabs
+                size="sm"
+                value={mode}
+                onChange={(nextMode) => setMode(intg.id, nextMode)}
+                options={["auto", "on", "off"].map((item) => ({
+                  id: item,
+                  label: t(`instanceSettings.integrations.mode.${item}`),
+                }))}
+              />
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }
