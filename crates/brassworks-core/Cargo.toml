@@ -24,7 +24,11 @@ fastnbt.workspace = true
 flate2.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "multipart"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
+sha2.workspace = true
+hmac.workspace = true
+hex.workspace = true
 base64 = "0.22"
+regex.workspace = true
 git2 = { version = "0.19", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
 
 [dev-dependencies]

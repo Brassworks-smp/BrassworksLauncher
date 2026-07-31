@@ -77,6 +77,10 @@ impl Paths {
         self.instance_dir(id).join("datapacks.json")
     }
 
+    pub fn schematics_index(&self, id: &str) -> PathBuf {
+        self.instance_dir(id).join("schematics.json")
+    }
+
     pub fn instance_game_subdir(&self, id: &str, sub: &str) -> PathBuf {
         self.instance_game_dir(id).join(sub)
     }
@@ -175,6 +179,7 @@ mod paths_tests {
         assert_eq!(p.user_content("foo"), base.join("user_content.json"));
         assert_eq!(p.stars_file("foo"), base.join("stars.json"));
         assert_eq!(p.datapacks_index("foo"), base.join("datapacks.json"));
+        assert_eq!(p.schematics_index("foo"), base.join("schematics.json"));
     }
 
     #[test]

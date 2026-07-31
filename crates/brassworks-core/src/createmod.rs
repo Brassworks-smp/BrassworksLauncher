@@ -1,4 +1,6 @@
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 use crate::error::{CoreError, Result};
 use crate::modpack::InstalledMod;
@@ -11,8 +13,22 @@ pub const CREATEMOD_API_BASE: &str = match option_env!("CREATEMOD_API_BASE") {
 const CREATEMOD_API_KEY: &str =
     "05c26e2012eb82ddd88d40b04ff0ddddc6159385a516338d8cda798f0ea275ea";
 
+// Downloads go straight to createmod.com (never the cache, since files aren't
+// cached) and are authenticated with the shared HMAC secret distributed with
+// the launcher, like a client id. The secret has no per-key rate limit.
+const CREATEMOD_DOWNLOAD_BASE: &str = match option_env!("CREATEMOD_DOWNLOAD_BASE") {
+    Some(v) => v,
+    None => "https://createmod.com",
+};
+const CREATEMOD_DOWNLOAD_SECRET: &str =
+    "9bc0fdf937f05a30befb17abb8a455a41887d3f84e93aaa73c3e3e0c1f202a5f";
+
 fn api_key() -> &'static str {
     option_env!("CREATEMOD_API_KEY").unwrap_or(CREATEMOD_API_KEY)
+}
+
+fn download_secret() -> &'static str {
+    option_env!("CREATEMOD_DOWNLOAD_SECRET").unwrap_or(CREATEMOD_DOWNLOAD_SECRET)
 }
 
 pub const INTEGRATION_SCHEMATICS: &str = "createmod_schematics";
@@ -52,6 +68,23 @@ pub struct SchematicMaterial {
     pub block_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchematicRequiredMod {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub image_url: Option<String>,
+    #[serde(default)]
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchematicVersionHistory {
+    pub version: String,
+    pub date: String,
+    pub changes: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SchematicDimensions {
     #[serde(default)]
@@ -72,6 +105,8 @@ pub struct SchematicDetail {
     #[serde(default)]
     pub author: Option<String>,
     #[serde(default)]
+    pub uploaded_at: String,
+    #[serde(default)]
     pub description_html: String,
     #[serde(default)]
     pub excerpt: String,
@@ -88,9 +123,13 @@ pub struct SchematicDetail {
     #[serde(default)]
     pub required_mods: Vec<String>,
     #[serde(default)]
+    pub required_mod_details: Vec<SchematicRequiredMod>,
+    #[serde(default)]
     pub dependencies_html: String,
     #[serde(default)]
     pub materials: Vec<SchematicMaterial>,
+    #[serde(default)]
+    pub version_history: Vec<SchematicVersionHistory>,
     #[serde(default)]
     pub minecraft_version: String,
     #[serde(default)]
@@ -190,6 +229,149 @@ pub struct SchematicStat {
     pub comment_count: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledSchematic {
+    pub filename: String,
+    pub path: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub image_url: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct InstalledSchematicMetadata {
+    project_id: String,
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    image_url: Option<String>,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    web_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct InstalledSchematicsIndex {
+    #[serde(default)]
+    entries: std::collections::BTreeMap<String, InstalledSchematicMetadata>,
+}
+
+fn read_installed_index(path: &std::path::Path) -> InstalledSchematicsIndex {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn write_installed_index(
+    path: &std::path::Path,
+    index: &InstalledSchematicsIndex,
+) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| CoreError::io(parent, e))?;
+    }
+    let bytes = serde_json::to_vec_pretty(index)
+        .map_err(|e| CoreError::serde("schematics metadata", e))?;
+    std::fs::write(path, bytes).map_err(|e| CoreError::io(path, e))
+}
+
+fn local_schematic_title(filename: &str) -> String {
+    std::path::Path::new(filename)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().replace(['_', '-'], " "))
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| filename.to_string())
+}
+
+pub fn list_installed_schematics(
+    schematics_dir: &std::path::Path,
+    index_path: &std::path::Path,
+) -> Result<Vec<InstalledSchematic>> {
+    let read = match std::fs::read_dir(schematics_dir) {
+        Ok(read) => read,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(CoreError::io(schematics_dir, e)),
+    };
+    let index = read_installed_index(index_path);
+    let mut installed = Vec::new();
+    for entry in read.flatten() {
+        let path = entry.path();
+        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
+            || !path
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("nbt"))
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        let filename = entry.file_name().to_string_lossy().to_string();
+        let metadata = index.entries.get(&filename);
+        installed.push(InstalledSchematic {
+            title: metadata
+                .map(|entry| entry.title.clone())
+                .filter(|title| !title.trim().is_empty())
+                .unwrap_or_else(|| local_schematic_title(&filename)),
+            description: metadata.and_then(|entry| entry.description.clone()),
+            image_url: metadata.and_then(|entry| entry.image_url.clone()),
+            author: metadata.and_then(|entry| entry.author.clone()),
+            source: metadata.map(|_| "createmod".to_string()),
+            project_id: metadata.map(|entry| entry.project_id.clone()),
+            web_url: metadata.and_then(|entry| entry.web_url.clone()),
+            path: path.to_string_lossy().to_string(),
+            filename,
+        });
+    }
+    installed.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    Ok(installed)
+}
+
+pub fn record_installed_schematic(
+    index_path: &std::path::Path,
+    filename: &str,
+    project_id: &str,
+    detail: Option<&SchematicDetail>,
+) -> Result<()> {
+    let mut index = read_installed_index(index_path);
+    let metadata = InstalledSchematicMetadata {
+        project_id: project_id.to_string(),
+        title: detail
+            .map(|item| item.title.clone())
+            .filter(|title| !title.trim().is_empty())
+            .unwrap_or_else(|| local_schematic_title(filename)),
+        description: detail
+            .map(|item| item.excerpt.trim().to_string())
+            .filter(|text| !text.is_empty()),
+        image_url: detail.and_then(|item| item.featured_image.clone()),
+        author: detail.and_then(|item| item.author.clone()),
+        web_url: detail.and_then(|item| item.web_url.clone()),
+    };
+    index.entries.insert(filename.to_string(), metadata);
+    write_installed_index(index_path, &index)
+}
+
+pub fn forget_installed_schematic(
+    index_path: &std::path::Path,
+    filename: &str,
+) -> Result<()> {
+    let mut index = read_installed_index(index_path);
+    if index.entries.remove(filename).is_some() {
+        write_installed_index(index_path, &index)?;
+    }
+    Ok(())
+}
+
 fn sort_to_order(sort: &str) -> i32 {
     match sort {
         "newest" => 2,
@@ -210,21 +392,80 @@ fn client() -> Result<reqwest::blocking::Client> {
         .map_err(|e| CoreError::Remote(e.to_string()))
 }
 
-fn get_json<T: serde::de::DeserializeOwned>(path: &str, params: &[(&str, String)]) -> Result<T> {
-    let url = format!("{CREATEMOD_API_BASE}{path}");
-    let resp = client()?
-        .get(&url)
-        .query(params)
-        .header("Accept", "application/json")
-        .header("X-API-Key", api_key())
-        .send()
-        .map_err(|e| CoreError::Remote(e.to_string()))?;
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(CoreError::Remote(format!("{path} -> {status}")));
+// The cache proxy mirrors the createmod paths and is much faster (tiered cache
+// + image CDN). We prefer it when it is up and fall back to createmod.com
+// directly otherwise. Overridable at runtime with CREATEMOD_CACHE_BASE (set to
+// an empty string to disable the cache entirely).
+fn cache_base() -> Option<String> {
+    let raw = std::env::var("CREATEMOD_CACHE_BASE")
+        .ok()
+        .or_else(|| option_env!("CREATEMOD_CACHE_BASE").map(|s| s.to_string()))
+        .unwrap_or_else(|| "https://api.opnsoc.org/createmodschem".to_string());
+    let raw = raw.trim().trim_end_matches('/');
+    if raw.is_empty() {
+        None
+    } else {
+        Some(raw.to_string())
     }
-    resp.json::<T>()
-        .map_err(|e| CoreError::Remote(format!("decode {path}: {e}")))
+}
+
+// Whether the cache proxy answered a health check. Probed once per process so a
+// down cache doesn't cost a timeout on every request.
+fn cache_healthy() -> bool {
+    static HEALTHY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *HEALTHY.get_or_init(|| {
+        let Some(base) = cache_base() else {
+            return false;
+        };
+        reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .ok()
+            .and_then(|c| c.get(format!("{base}/health")).send().ok())
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+    })
+}
+
+// Bases to try in order for browsing requests: the cache first when healthy,
+// then createmod.com directly as a fallback.
+fn browse_bases() -> Vec<String> {
+    match cache_base().filter(|_| cache_healthy()) {
+        Some(cache) => vec![cache, CREATEMOD_API_BASE.to_string()],
+        None => vec![CREATEMOD_API_BASE.to_string()],
+    }
+}
+
+// Base for image/file URLs baked into cards and details: the cache CDN when
+// healthy, else createmod.com directly.
+fn image_base() -> String {
+    cache_base()
+        .filter(|_| cache_healthy())
+        .unwrap_or_else(|| CREATEMOD_API_BASE.to_string())
+}
+
+fn get_json<T: serde::de::DeserializeOwned>(path: &str, params: &[(&str, String)]) -> Result<T> {
+    let client = client()?;
+    let mut last_err = CoreError::Remote(format!("{path}: no upstream"));
+    for base in browse_bases() {
+        let url = format!("{base}{path}");
+        match client
+            .get(&url)
+            .query(params)
+            .header("Accept", "application/json")
+            .header("X-API-Key", api_key())
+            .send()
+        {
+            Ok(resp) if resp.status().is_success() => {
+                return resp
+                    .json::<T>()
+                    .map_err(|e| CoreError::Remote(format!("decode {path}: {e}")));
+            }
+            Ok(resp) => last_err = CoreError::Remote(format!("{path} -> {}", resp.status())),
+            Err(e) => last_err = CoreError::Remote(e.to_string()),
+        }
+    }
+    Err(last_err)
 }
 
 #[derive(Deserialize, Default)]
@@ -237,6 +478,8 @@ struct RawSchematic {
     title: String,
     #[serde(default)]
     author: Option<serde_json::Value>,
+    #[serde(default)]
+    created: String,
     #[serde(default, rename = "htmlContent")]
     html_content: String,
     #[serde(default)]
@@ -314,7 +557,7 @@ fn image_url(id: Option<&str>, file: &str) -> Option<String> {
         return Some(file.to_string());
     }
     let id = id?;
-    Some(format!("{CREATEMOD_API_BASE}/api/files/schematics/{id}/{file}"))
+    Some(format!("{}/api/files/schematics/{id}/{file}", image_base()))
 }
 
 fn parse_rating(v: &serde_json::Value) -> Option<f64> {
@@ -455,11 +698,21 @@ impl RawSchematic {
             .iter()
             .filter_map(|g| image_url(self.id.as_deref(), g))
             .collect();
-        let description = if !self.html_content.is_empty() {
-            self.html_content.clone()
+        let description = if !self.html_content.trim().is_empty() {
+            self.html_content.trim().to_string()
         } else {
-            self.content.clone()
+            self.content.trim().to_string()
         };
+        let required_mod_details = self
+            .mods
+            .iter()
+            .map(|id| SchematicRequiredMod {
+                id: id.clone(),
+                name: friendly_block_name(id),
+                image_url: None,
+                web_url: Some(format!("{CREATEMOD_API_BASE}/mods/{id}")),
+            })
+            .collect();
         SchematicDetail {
             web_url: if self.name.is_empty() {
                 None
@@ -470,11 +723,14 @@ impl RawSchematic {
                 .author
                 .as_ref()
                 .and_then(|a| json_str(a, &["username", "Username", "name"])),
+            uploaded_at: self.created,
             rating: parse_rating(&self.rating),
             categories: name_list(&self.categories),
             tags: name_list(&self.tags),
             required_mods: self.mods,
+            required_mod_details,
             materials: parse_materials(&self.materials),
+            version_history: Vec::new(),
             featured_image: image,
             gallery,
             title: if self.title.is_empty() {
@@ -502,6 +758,59 @@ impl RawSchematic {
             name: self.name,
         }
     }
+}
+
+fn decode_html_text(value: &str) -> String {
+    value
+        .trim()
+        .replace("&amp;", "&")
+        .replace("&#39;", "'")
+        .replace("&#43;", "+")
+        .replace("&quot;", "\"")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
+fn enrich_detail_from_page(detail: &mut SchematicDetail, html: &str) {
+    static MOD_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static VERSION_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let mod_re = MOD_RE.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?s)<a href="/mods/([^"]+)" class="cm-modchip[^"]*">\s*<img src="([^"]+)"[^>]*>\s*([^<]+?)\s*</a>"#,
+        )
+        .expect("valid required-mod regex")
+    });
+    let version_re = VERSION_RE.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?s)<div class="cm-vtable__row">\s*<span class="v">([^<]*)</span>\s*<span class="d">([^<]*)</span>\s*<span class="c">([^<]*)</span>\s*</div>"#,
+        )
+        .expect("valid version-history regex")
+    });
+
+    let mods: Vec<SchematicRequiredMod> = mod_re
+        .captures_iter(html)
+        .map(|capture| {
+            let id = decode_html_text(&capture[1]);
+            SchematicRequiredMod {
+                name: decode_html_text(&capture[3]),
+                image_url: Some(decode_html_text(&capture[2])),
+                web_url: Some(format!("{CREATEMOD_API_BASE}/mods/{id}")),
+                id,
+            }
+        })
+        .collect();
+    if !mods.is_empty() {
+        detail.required_mod_details = mods;
+    }
+
+    detail.version_history = version_re
+        .captures_iter(html)
+        .map(|capture| SchematicVersionHistory {
+            version: decode_html_text(&capture[1]),
+            date: decode_html_text(&capture[2]),
+            changes: decode_html_text(&capture[3]),
+        })
+        .collect();
 }
 
 #[derive(Deserialize, Default)]
@@ -581,7 +890,86 @@ pub fn home() -> Result<SchematicHome> {
 
 pub fn detail(name: &str) -> Result<SchematicDetail> {
     let raw: RawSchematic = get_json(&format!("/api/schematics/{name}"), &[])?;
-    Ok(raw.into_detail())
+    let mut detail = raw.into_detail();
+    let page_url = format!("{CREATEMOD_DOWNLOAD_BASE}/schematics/{name}");
+    if let Ok(response) = client()?
+        .get(page_url)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+    {
+        if response.status().is_success() {
+            if let Ok(html) = response.text() {
+                enrich_detail_from_page(&mut detail, &html);
+            }
+        }
+    }
+    Ok(detail)
+}
+
+// sign_download builds the HMAC message the download endpoint expects
+// ("timestamp:modversion:mcusername:identifier") and its hex signature.
+fn sign_download(username: &str, identifier: &str) -> Result<(String, String)> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let user = if username.trim().is_empty() {
+        "player"
+    } else {
+        username.trim()
+    };
+    let message = format!(
+        "{ts}:brassworks-{}:{user}:{identifier}",
+        env!("CARGO_PKG_VERSION")
+    );
+    let mut mac = Hmac::<Sha256>::new_from_slice(download_secret().as_bytes())
+        .map_err(|e| CoreError::Remote(e.to_string()))?;
+    mac.update(message.as_bytes());
+    let signature = hex::encode(mac.finalize().into_bytes());
+    Ok((message, signature))
+}
+
+fn filename_from_disposition(resp: &reqwest::blocking::Response) -> Option<String> {
+    let raw = resp
+        .headers()
+        .get(reqwest::header::CONTENT_DISPOSITION)?
+        .to_str()
+        .ok()?;
+    let idx = raw.to_ascii_lowercase().find("filename=")?;
+    let val = raw[idx + "filename=".len()..]
+        .trim()
+        .trim_matches('"')
+        .trim();
+    let val = val.rsplit(['/', '\\']).next().unwrap_or(val);
+    if val.is_empty() {
+        None
+    } else {
+        Some(val.to_string())
+    }
+}
+
+// download_schematic_bytes fetches the raw .nbt for a schematic straight from
+// createmod.com using the shared HMAC secret. Returns the suggested filename
+// and the file bytes.
+pub fn download_schematic_bytes(name: &str, username: &str) -> Result<(String, Vec<u8>)> {
+    let (message, signature) = sign_download(username, name)?;
+    let url = format!("{CREATEMOD_DOWNLOAD_BASE}/api/schematics/{name}/download");
+    let resp = client()?
+        .get(&url)
+        .header("X-Mod-Message", message)
+        .header("X-Mod-Signature", signature)
+        .send()
+        .map_err(|e| CoreError::Remote(e.to_string()))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(CoreError::Remote(format!("download {name} -> {status}")));
+    }
+    let filename = filename_from_disposition(&resp).unwrap_or_else(|| format!("{name}.nbt"));
+    let bytes = resp
+        .bytes()
+        .map_err(|e| CoreError::Remote(e.to_string()))?
+        .to_vec();
+    Ok((filename, bytes))
 }
 
 pub fn stats(names: &[String]) -> Result<Vec<SchematicStat>> {
@@ -765,5 +1153,80 @@ mod tests {
         inst.integrations
             .insert(INTEGRATION_SCHEMATICS.to_string(), true);
         assert_eq!(schematics_status(&inst, &no_mods).enabled, true);
+    }
+
+    #[test]
+    fn installed_metadata_only_marks_launcher_downloads() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("brassworks-schematics-{nonce}"));
+        let dir = root.join("schematics");
+        let index = root.join("schematics.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("local-build.nbt"), b"local").unwrap();
+        std::fs::write(dir.join("launcher-build.nbt"), b"managed").unwrap();
+
+        record_installed_schematic(
+            &index,
+            "launcher-build.nbt",
+            "steam-engine",
+            None,
+        )
+        .unwrap();
+        let installed = list_installed_schematics(&dir, &index).unwrap();
+        let local = installed
+            .iter()
+            .find(|item| item.filename == "local-build.nbt")
+            .unwrap();
+        let managed = installed
+            .iter()
+            .find(|item| item.filename == "launcher-build.nbt")
+            .unwrap();
+        assert_eq!(local.source, None);
+        assert_eq!(local.project_id, None);
+        assert_eq!(managed.source.as_deref(), Some("createmod"));
+        assert_eq!(managed.project_id.as_deref(), Some("steam-engine"));
+
+        forget_installed_schematic(&index, "launcher-build.nbt").unwrap();
+        let installed = list_installed_schematics(&dir, &index).unwrap();
+        assert!(installed.iter().all(|item| item.source.is_none()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trims_indented_html_descriptions() {
+        let detail = RawSchematic {
+            name: "hovercraft".to_string(),
+            html_content: "        <p>Rendered HTML</p>\r\n    ".to_string(),
+            ..Default::default()
+        }
+        .into_detail();
+        assert_eq!(detail.description_html, "<p>Rendered HTML</p>");
+    }
+
+    #[test]
+    fn enriches_mods_and_version_history_from_detail_page() {
+        let mut detail = RawSchematic {
+            name: "hovercraft".to_string(),
+            mods: vec!["create_connected".to_string()],
+            ..Default::default()
+        }
+        .into_detail();
+        let html = r#"
+          <a href="/mods/create_connected" class="cm-modchip text-decoration-none">
+            <img src="https://cdn.test/create.png" alt="" loading="lazy">
+            Create: Connected
+          </a>
+          <div class="cm-vtable__row"><span class="v">v2</span><span class="d">2026-07-17 19:10 UTC</span><span class="c">Fields changed: content</span></div>
+        "#;
+        enrich_detail_from_page(&mut detail, html);
+        assert_eq!(detail.required_mod_details[0].name, "Create: Connected");
+        assert_eq!(
+            detail.required_mod_details[0].image_url.as_deref(),
+            Some("https://cdn.test/create.png")
+        );
+        assert_eq!(detail.version_history[0].version, "v2");
     }
 }

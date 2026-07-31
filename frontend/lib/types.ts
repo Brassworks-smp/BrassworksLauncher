@@ -66,10 +66,35 @@ export interface SchematicCard {
   web_url: string | null;
 }
 
+export interface InstalledSchematic {
+  filename: string;
+  path: string;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  author: string | null;
+  source: "createmod" | null;
+  project_id: string | null;
+  web_url: string | null;
+}
+
 export interface SchematicMaterial {
   name: string;
   count: number;
   block_id: string | null;
+}
+
+export interface SchematicRequiredMod {
+  id: string;
+  name: string;
+  image_url: string | null;
+  web_url: string | null;
+}
+
+export interface SchematicVersionHistory {
+  version: string;
+  date: string;
+  changes: string;
 }
 
 export interface SchematicDimensions {
@@ -83,6 +108,7 @@ export interface SchematicDetail {
   name: string;
   title: string;
   author: string | null;
+  uploaded_at: string;
   description_html: string;
   excerpt: string;
   featured_image: string | null;
@@ -91,8 +117,10 @@ export interface SchematicDetail {
   categories: string[];
   tags: string[];
   required_mods: string[];
+  required_mod_details: SchematicRequiredMod[];
   dependencies_html: string;
   materials: SchematicMaterial[];
+  version_history: SchematicVersionHistory[];
   minecraft_version: string;
   createmod_version: string;
   block_count: number;

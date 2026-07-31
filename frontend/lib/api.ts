@@ -18,6 +18,7 @@ import type {
   ExitInfo,
   InstallResult,
   InstalledMod,
+  InstalledSchematic,
   Instance,
   JavaInstall,
   FeaturedPack,
@@ -900,6 +901,8 @@ export const sourceLabel = (source: string): string =>
 
 export const schematicsHome = (): Promise<SchematicHome> =>
   invoke("schematics_home");
+export const listSchematics = (instanceId: string): Promise<InstalledSchematic[]> =>
+  invoke("list_schematics", { instanceId });
 export const schematicsSearch = (
   params: SchematicSearchParams,
 ): Promise<SchematicSearch> => invoke("schematics_search", { params });
@@ -921,6 +924,16 @@ export const importSchematic = (
   instanceId: string,
   path: string,
 ): Promise<string> => invoke("import_schematic", { instanceId, path });
+export const downloadSchematic = (
+  instanceId: string,
+  name: string,
+  username?: string,
+): Promise<string> =>
+  invoke("download_schematic", { instanceId, name, username });
+export const removeSchematic = (
+  instanceId: string,
+  filename: string,
+): Promise<void> => invoke("remove_schematic", { instanceId, filename });
 export const scanSchematicDownloads = (
   folders: string[],
 ): Promise<[string, string][]> =>

@@ -77,7 +77,7 @@ const EN = CATALOGS.en;
 
 const PROGRESS = progress as Record<string, number>;
 const SHOW_ABOVE = 40;
-const COMPLETE_AT = 95;
+const COMPLETE_AT = 85;
 
 const localeModules = import.meta.glob<Record<string, unknown>>(
   "./locales/*.json",

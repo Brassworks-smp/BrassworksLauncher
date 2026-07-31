@@ -81,6 +81,7 @@ import {
   inputCls,
   CardColumns,
   NumberField,
+  SegmentedTabs,
 } from "@/components/ui";
 
 const JVM_PRESETS: { id: string; tkey: string; args: string[] }[] = [
@@ -1792,21 +1793,15 @@ function IntegrationsCard({
                   </div>
                 )}
               </div>
-              <div className="flex shrink-0 overflow-hidden rounded-md border border-edge">
-                {["auto", "on", "off"].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(intg.id, m)}
-                    className={`px-2.5 py-1 text-[11px] transition ${
-                      mode === m
-                        ? "bg-brass-500/20 text-brass-300"
-                        : "text-ink-600 hover:text-brass-300/80"
-                    }`}
-                  >
-                    {t(`instanceSettings.integrations.mode.${m}`)}
-                  </button>
-                ))}
-              </div>
+              <SegmentedTabs
+                size="sm"
+                value={mode}
+                onChange={(nextMode) => setMode(intg.id, nextMode)}
+                options={["auto", "on", "off"].map((item) => ({
+                  id: item,
+                  label: t(`instanceSettings.integrations.mode.${item}`),
+                }))}
+              />
             </div>
           );
         })}

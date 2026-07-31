@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use brassworks_core::{
     AccountStore, ContentVersion, DatapackInfo, FilterOptions, InstallResult, InstalledMod,
+    InstalledSchematic,
     Instance, LaunchProgress, LauncherSettings, LoaderKind, LoaderVersion, LoaderVersionInfo,
     LogUpload, McVersion, MicrosoftCode, ModInfo, ModpackStatus, NewsItem, PackSource, PlayerCount,
     ProjectDetail, SavedSkin, SchematicDetail, SchematicFilters, SchematicHome, SchematicSearch,
@@ -443,6 +444,19 @@ pub(crate) async fn schematics_home() -> CmdResult<SchematicHome> {
 }
 
 #[tauri::command]
+pub(crate) async fn list_schematics(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<InstalledSchematic>> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.list_schematics(&instance_id).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
 pub(crate) async fn schematics_search(
     params: SchematicSearchParams,
 ) -> CmdResult<SchematicSearch> {
@@ -515,6 +529,39 @@ pub(crate) async fn import_schematic(
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher.import_schematic(&instance_id, &path).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn download_schematic(
+    state: State<'_, AppState>,
+    instance_id: String,
+    name: String,
+    username: Option<String>,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .download_schematic(&instance_id, &name, username.as_deref().unwrap_or(""))
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn remove_schematic(
+    state: State<'_, AppState>,
+    instance_id: String,
+    filename: String,
+) -> CmdResult<()> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher
+            .remove_schematic(&instance_id, &filename)
+            .map_err(err)
     })
     .await
     .map_err(err)?

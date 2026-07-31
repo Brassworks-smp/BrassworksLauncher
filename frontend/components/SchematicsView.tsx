@@ -1,706 +1,399 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Search,
-  Star,
-  Eye,
-  Download,
-  ArrowLeft,
-  ExternalLink,
-  Loader2,
   Boxes,
-  Ruler,
-  Play as PlayIcon,
-  MessageSquare,
+  ExternalLink,
+  FolderOpen,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Dropdown } from "./ui";
-import { Markdown } from "./Markdown";
 import { toast } from "@/lib/toast";
+import type { InstalledSchematic } from "@/lib/types";
 import type {
-  SchematicCard,
-  SchematicDetail,
-  SchematicHome,
-  SchematicFilters,
-  SchematicSearchParams,
-  SchematicStat,
+  InstalledMod,
+  Instance,
+  SchematicRequiredMod,
+  SearchHit,
 } from "@/lib/types";
+import { EMPTY_FILTERS } from "@/lib/types";
+import { AddSchematicModal } from "./AddSchematicModal";
+import { AddContentModal } from "./AddContentModal";
+import { CachedImage } from "./CachedImage";
+import { SegmentedTabs, Skeleton } from "./ui";
 
-const SORTS = [
-  "best_match",
-  "trending",
-  "newest",
-  "oldest",
-  "highest_rated",
-  "lowest_rated",
-  "most_viewed",
-  "least_viewed",
-];
+const schematicsCache = new Map<string, InstalledSchematic[]>();
 
-const homeCache: Record<string, SchematicHome> = {};
-let filtersCache: SchematicFilters | null = null;
-const statsCache: Record<string, SchematicStat> = {};
+type RequiredContentTarget = {
+  hit: SearchHit;
+  instance: Instance;
+  installed: Record<string, string | null>;
+};
 
-async function loadStats(names: string[], done: () => void) {
-  const missing = names.filter((n) => !statsCache[n]);
-  if (missing.length === 0) return;
-  try {
-    const stats = await api.schematicStats(missing);
-    for (const s of stats) statsCache[s.name] = s;
-    done();
-  } catch {
-    // stats are best-effort; cached content still renders
-  }
-}
+const normalizedModName = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-const fmt = (n: number) =>
-  n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
-
-function Pill({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+function SchematicSkeleton() {
   return (
-    <span className="flex items-center gap-1.5 rounded-full border border-edge bg-ink-950/40 px-2.5 py-1 text-[11px] text-ink-600">
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-function Card({
-  card,
-  onOpen,
-}: {
-  card: SchematicCard;
-  onOpen: (name: string) => void;
-}) {
-  const st = statsCache[card.name];
-  const views = st ? st.views : card.views;
-  const downloads = st ? st.downloads : card.downloads;
-  const rating = st && st.rating > 0 ? st.rating : card.rating;
-  return (
-    <button
-      onClick={() => onOpen(card.name)}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-edge bg-ink-900/50 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brass-500/50 hover:shadow-lg hover:shadow-brass-500/5"
-    >
-      <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-ink-800/60 to-ink-950/80">
-        {card.featured_image ? (
-          <img
-            src={card.featured_image}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-ink-700">
-            <Boxes size={30} />
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex items-center gap-3 rounded-lg border border-edge bg-ink-900/50 p-2.5"
+        >
+          <Skeleton className="h-11 w-11 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-2.5 w-1/2" />
           </div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ink-950/90 to-transparent" />
-        {rating != null && (
-          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-ink-950/80 px-2 py-0.5 text-[11px] font-medium text-brass-300 backdrop-blur">
-            <Star size={11} className="fill-brass-400 text-brass-400" />
-            {rating.toFixed(1)}
-          </span>
-        )}
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-2.5">
-          <span className="truncate font-mc text-[12px] text-gray-50 drop-shadow">
-            {card.title || card.name}
-          </span>
+          <Skeleton className="h-8 w-8 rounded-md" />
         </div>
-      </div>
-      <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-        <div className="flex items-center gap-3 text-[11px] text-ink-600">
-          <span className="flex items-center gap-1">
-            <Eye size={11} /> {fmt(views)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Download size={11} /> {fmt(downloads)}
-          </span>
-        </div>
-        {card.author && (
-          <span className="truncate text-[10px] text-ink-700">{card.author}</span>
-        )}
-      </div>
-    </button>
+      ))}
+    </div>
   );
 }
 
-function Segment({
-  title,
-  cards,
+function SchematicRow({
+  schematic,
   onOpen,
+  onRemove,
 }: {
-  title: string;
-  cards: SchematicCard[];
-  onOpen: (name: string) => void;
-}) {
-  if (cards.length === 0) return null;
-  return (
-    <section className="mb-7">
-      <div className="mb-3 flex items-center gap-2.5">
-        <span className="h-4 w-1 rounded-full bg-gradient-to-b from-brass-300 to-brass-600" />
-        <h3 className="font-mc text-[14px] tracking-wide text-gray-100">{title}</h3>
-      </div>
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {cards.map((card) => (
-          <Card key={card.name} card={card} onOpen={onOpen} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function Detail({
-  instanceId,
-  name,
-  downloadFolders,
-  onBack,
-}: {
-  instanceId: string;
-  name: string;
-  downloadFolders: string[];
-  onBack: () => void;
+  schematic: InstalledSchematic;
+  onOpen: () => void;
+  onRemove: () => void;
 }) {
   const t = useT();
-  const [detail, setDetail] = useState<SchematicDetail | null>(null);
-  const [err, setErr] = useState(false);
-  const [hero, setHero] = useState<string | null>(null);
-  const [stat, setStat] = useState<SchematicStat | null>(statsCache[name] ?? null);
-  const [watching, setWatching] = useState(false);
-  const [found, setFound] = useState<[string, string][]>([]);
-  const baseline = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    let alive = true;
-    setDetail(null);
-    setErr(false);
-    setHero(null);
-    setStat(statsCache[name] ?? null);
-    api
-      .schematicDetail(name)
-      .then((d) => {
-        if (!alive) return;
-        setDetail(d);
-        setHero(d.featured_image);
-      })
-      .catch(() => alive && setErr(true));
-    void loadStats([name], () => {
-      if (alive && statsCache[name]) setStat(statsCache[name]);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [name]);
-
-  const poll = useCallback(async () => {
-    if (downloadFolders.length === 0) return;
-    const hits = await api.scanSchematicDownloads(downloadFolders).catch(() => []);
-    const fresh = hits.filter(([, path]) => !baseline.current.has(path));
-    if (fresh.length > 0) setFound(fresh);
-  }, [downloadFolders]);
-
-  useEffect(() => {
-    if (!watching) return;
-    const id = setInterval(poll, 1500);
-    return () => clearInterval(id);
-  }, [watching, poll]);
-
-  const startDownload = async () => {
-    if (!detail?.web_url) return;
-    const hits = await api.scanSchematicDownloads(downloadFolders).catch(() => []);
-    baseline.current = new Set(hits.map(([, path]) => path));
-    setFound([]);
-    setWatching(true);
-    api.openExternal(detail.web_url).catch(() => {});
-  };
-
-  const doImport = async (path: string) => {
-    try {
-      await api.importSchematic(instanceId, path);
-      toast(t("schematics.imported"), "success");
-      setWatching(false);
-      setFound([]);
-    } catch {
-      toast(t("schematics.importFailed"), "error");
-    }
-  };
-
-  const gallery = detail
-    ? [detail.featured_image, ...detail.gallery].filter(Boolean)
-    : [];
-
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasMetadata = schematic.source === "createmod" && !!schematic.project_id;
   return (
-    <div className="mx-auto max-w-5xl">
-      <button
-        onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-[12px] text-ink-600 transition hover:text-brass-300"
-      >
-        <ArrowLeft size={14} /> {t("schematics.back")}
-      </button>
-
-      {err && (
-        <div className="rounded-xl border border-edge bg-ink-900/50 p-8 text-center text-ink-600">
-          {t("schematics.detailError")}
-        </div>
-      )}
-
-      {!detail && !err && (
-        <div className="flex justify-center p-16 text-ink-600">
-          <Loader2 className="animate-spin" />
-        </div>
-      )}
-
-      {detail && (
-        <div className="flex flex-col gap-5">
-          <div className="relative overflow-hidden rounded-2xl border border-edge bg-ink-900/60">
-            <div className="relative aspect-[21/9] w-full bg-gradient-to-br from-ink-800/60 to-ink-950">
-              {hero ? (
-                <img src={hero} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-ink-700">
-                  <Boxes size={48} />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5">
-                <div className="min-w-0">
-                  <h2 className="truncate font-mc text-[22px] text-gray-50 drop-shadow">
-                    {detail.title}
-                  </h2>
-                  {detail.author && (
-                    <div className="mt-1 text-[12px] text-gray-300">
-                      {t("schematics.by")} {detail.author}
-                    </div>
-                  )}
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  {detail.web_url && (
-                    <button
-                      onClick={() => api.openExternal(detail.web_url!)}
-                      className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-ink-950/60 px-3 py-2 text-[12px] text-gray-200 backdrop-blur transition hover:border-brass-500/50 hover:text-brass-300"
-                    >
-                      <ExternalLink size={13} /> {t("schematics.viewOnSite")}
-                    </button>
-                  )}
-                  <button
-                    onClick={startDownload}
-                    className="brass-btn flex items-center gap-1.5 rounded-lg bg-brass-500 px-4 py-2 text-[12px] font-semibold text-ink-950 transition hover:bg-brass-400"
-                  >
-                    <Download size={13} /> {t("schematics.download")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {gallery.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {gallery.map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setHero(g!)}
-                  className={`h-16 w-28 shrink-0 overflow-hidden rounded-lg border transition ${
-                    hero === g
-                      ? "border-brass-500"
-                      : "border-edge opacity-70 hover:opacity-100"
-                  }`}
-                >
-                  <img src={g!} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
+    <div
+      role={hasMetadata ? "button" : undefined}
+      tabIndex={hasMetadata ? 0 : undefined}
+      onClick={() => hasMetadata && onOpen()}
+      onKeyDown={(event) => {
+        if (hasMetadata && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`group/row cv-auto rounded-lg border border-edge bg-ink-900/50 transition-colors ${
+        hasMetadata
+          ? "cursor-pointer hover:border-brass-500/45 hover:bg-brass-500/[0.04]"
+          : ""
+      }`}
+    >
+      <div className="flex items-center gap-3 p-2.5">
+        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900 text-ink-600">
+          {schematic.image_url && !imageFailed ? (
+            <CachedImage
+              src={schematic.image_url}
+              alt={schematic.title}
+              className="h-full w-full object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <Boxes size={17} />
           )}
-
-          <div className="flex flex-wrap gap-2">
-            {(stat && stat.rating > 0 ? stat.rating : detail.rating) != null && (
-              <Pill icon={<Star size={12} className="fill-brass-400 text-brass-400" />}>
-                {(stat && stat.rating > 0 ? stat.rating : detail.rating!).toFixed(1)}
-                <span className="text-ink-700">
-                  {" "}
-                  ({stat ? stat.ratingCount : detail.rating_count})
-                </span>
-              </Pill>
-            )}
-            <Pill icon={<Eye size={12} />}>{fmt(stat ? stat.views : detail.views)}</Pill>
-            <Pill icon={<Download size={12} />}>{fmt(stat ? stat.downloads : detail.downloads)}</Pill>
-            {(detail.dimensions.x > 0 || detail.dimensions.y > 0) && (
-              <Pill icon={<Ruler size={12} />}>
-                {detail.dimensions.x}×{detail.dimensions.y}×{detail.dimensions.z}
-              </Pill>
-            )}
-            {detail.block_count > 0 && (
-              <Pill icon={<Boxes size={12} />}>{fmt(detail.block_count)}</Pill>
-            )}
-            {detail.minecraft_version && (
-              <Pill icon={null}>MC {detail.minecraft_version}</Pill>
-            )}
-            {detail.createmod_version && (
-              <Pill icon={null}>Create {detail.createmod_version}</Pill>
-            )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`truncate text-sm font-medium text-gray-100 ${
+                hasMetadata ? "group-hover/row:text-brass-300" : ""
+              }`}
+            >
+              {schematic.title}
+            </span>
+            {hasMetadata && <ExternalLink size={10} className="shrink-0 text-ink-600" />}
           </div>
-
-          {watching && (
-            <div className="rounded-xl border border-brass-600/40 bg-brass-500/5 p-4">
-              <div className="mb-2 text-[12px] text-brass-300">
-                {t("schematics.watchHint")}
-              </div>
-              {found.length === 0 ? (
-                <div className="flex items-center gap-2 text-[12px] text-ink-600">
-                  <Loader2 size={13} className="animate-spin" />
-                  {t("schematics.watching")}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {found.map(([fname, path]) => (
-                    <div
-                      key={path}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-edge bg-ink-900/50 px-3 py-2"
-                    >
-                      <span className="truncate text-[12px] text-gray-200">{fname}</span>
-                      <button
-                        onClick={() => doImport(path)}
-                        className="brass-btn rounded-md bg-brass-500 px-3 py-1 text-[11px] font-semibold text-ink-950 transition hover:bg-brass-400"
-                      >
-                        {t("schematics.import")}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            <div className="flex flex-col gap-5 lg:col-span-2">
-              {detail.video && (
-                <button
-                  onClick={() =>
-                    api.openExternal(`https://www.youtube.com/watch?v=${detail.video}`)
-                  }
-                  className="flex items-center gap-2 self-start rounded-lg border border-edge px-3 py-2 text-[12px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-                >
-                  <PlayIcon size={13} /> {t("schematics.watchVideo")}
-                </button>
-              )}
-
-              {detail.description_html && (
-                <div>
-                  <h3 className="mb-2 font-mc text-[13px] text-brass-300">
-                    {t("schematics.description")}
-                  </h3>
-                  <Markdown>{detail.description_html}</Markdown>
-                </div>
-              )}
-
-              {(stat ? stat.commentCount : detail.comment_count) > 0 &&
-                detail.web_url && (
-                  <button
-                    onClick={() => api.openExternal(detail.web_url!)}
-                    className="flex items-center gap-1.5 self-start text-[12px] text-ink-600 transition hover:text-brass-300"
-                  >
-                    <MessageSquare size={13} /> {t("schematics.viewComments")} (
-                    {stat ? stat.commentCount : detail.comment_count})
-                  </button>
-                )}
-            </div>
-
-            <div className="flex flex-col gap-5">
-              {detail.required_mods.length > 0 && (
-                <div className="rounded-xl border border-edge bg-ink-900/40 p-3.5">
-                  <h3 className="mb-2 font-mc text-[12px] text-brass-300">
-                    {t("schematics.requiredMods")}
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detail.required_mods.map((mod) => (
-                      <span
-                        key={mod}
-                        className="rounded-md border border-edge bg-ink-950/40 px-2 py-1 text-[11px] text-gray-200"
-                      >
-                        {mod}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {detail.materials.length > 0 && (
-                <div className="rounded-xl border border-edge bg-ink-900/40 p-3.5">
-                  <h3 className="mb-2 font-mc text-[12px] text-brass-300">
-                    {t("schematics.materials")}
-                  </h3>
-                  <div className="max-h-80 overflow-y-auto">
-                    {detail.materials.map((m, i) => (
-                      <div
-                        key={`${m.name}-${i}`}
-                        className="flex items-center justify-between gap-2 border-b border-edge/40 py-1.5 text-[12px] last:border-0"
-                      >
-                        <span className="truncate text-gray-200">{m.name}</span>
-                        <span className="shrink-0 tabular-nums text-ink-600">
-                          {m.count > 0 ? `×${m.count}` : ""}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-600">
+            {hasMetadata && (
+              <span className="shrink-0 rounded bg-brass-500/15 px-1.5 text-[9px] font-medium text-brass-300">
+                CreateMod.com
+              </span>
+            )}
+            <span className="truncate">
+              {schematic.description || schematic.filename}
+            </span>
+            {schematic.author && (
+              <span className="shrink-0">· {t("schematics.by")} {schematic.author}</span>
+            )}
           </div>
         </div>
-      )}
+        {!hasMetadata && (
+          <span className="rounded-md border border-edge bg-ink-900/60 px-2 py-1 text-[10px] uppercase tracking-wide text-ink-600">
+            {t("schematics.local")}
+          </span>
+        )}
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+          title={t("common.remove")}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-600 transition-[color,background-color,transform] duration-150 hover:bg-red-500/10 hover:text-red-300 active:scale-[.97]"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }
 
 export function SchematicsView({ instanceId }: { instanceId: string }) {
   const t = useT();
-  const [home, setHome] = useState<SchematicHome | null>(homeCache[instanceId] ?? null);
-  const [loadErr, setLoadErr] = useState(false);
+  const [schematics, setSchematics] = useState<InstalledSchematic[] | null>(
+    () => schematicsCache.get(instanceId) ?? null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState("");
-  const [sort, setSort] = useState("best_match");
-  const [category, setCategory] = useState("all");
-  const [mcVersion, setMcVersion] = useState("all");
-  const [createVersion, setCreateVersion] = useState("all");
-  const [filters, setFilters] = useState<SchematicFilters | null>(filtersCache);
-  const [results, setResults] = useState<SchematicCard[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [openName, setOpenName] = useState<string | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
-  const [, bumpStats] = useState(0);
-  const refreshStats = useCallback(
-    (names: string[]) => void loadStats(names, () => bumpStats((v) => v + 1)),
-    [],
-  );
+  const [source, setSource] = useState<"all" | "createmod" | "local">("all");
+  const [adding, setAdding] = useState(false);
+  const [detailProject, setDetailProject] = useState<InstalledSchematic | null>(null);
+  const [requiredContent, setRequiredContent] = useState<RequiredContentTarget | null>(null);
 
-  const isSearch =
-    active.trim().length > 0 ||
-    sort !== "best_match" ||
-    category !== "all" ||
-    mcVersion !== "all" ||
-    createVersion !== "all";
-
-  useEffect(() => {
-    api
-      .getSettings()
-      .then((s) => setFolders(s.manual_download_folders))
-      .catch(() => {});
-    if (!filtersCache) {
-      api
-        .schematicsFilters()
-        .then((f) => {
-          filtersCache = f;
-          setFilters(f);
-        })
-        .catch(() => {});
+  const load = useCallback(() => {
+    if (!api.isTauri()) {
+      setSchematics([]);
+      return;
     }
-  }, []);
-
-  useEffect(() => {
-    if (homeCache[instanceId]) return;
-    setLoadErr(false);
+    setLoading(true);
     api
-      .schematicsHome()
-      .then((h) => {
-        homeCache[instanceId] = h;
-        setHome(h);
-        const names = [...h.trending, ...h.latest, ...h.highest].map((c) => c.name);
-        refreshStats(names);
+      .listSchematics(instanceId)
+      .then((items) => {
+        schematicsCache.set(instanceId, items);
+        setSchematics(items);
+        setError(null);
       })
-      .catch(() => setLoadErr(true));
-  }, [instanceId, refreshStats]);
-
-  const runSearch = useCallback(
-    async (nextPage: number) => {
-      setSearching(true);
-      const params: SchematicSearchParams = {
-        query: active.trim(),
-        sort,
-        category,
-        mc_version: mcVersion,
-        create_version: createVersion,
-        page: nextPage,
-      };
-      try {
-        const res = await api.schematicsSearch(params);
-        setResults((prev) =>
-          nextPage === 1 ? res.items : [...prev, ...res.items],
-        );
-        setHasNext(res.has_next);
-        setPage(res.page);
-        refreshStats(res.items.map((c) => c.name));
-      } catch {
-        if (nextPage === 1) setResults([]);
-      } finally {
-        setSearching(false);
-      }
-    },
-    [active, sort, category, mcVersion, createVersion, refreshStats],
-  );
+      .catch((reason) => setError(String(reason)))
+      .finally(() => setLoading(false));
+  }, [instanceId]);
 
   useEffect(() => {
-    if (!isSearch) return;
-    void runSearch(1);
-  }, [isSearch, runSearch]);
+    load();
+  }, [load]);
 
-  if (openName) {
-    return (
-      <div className="h-full overflow-y-auto p-5">
-        <Detail
-          instanceId={instanceId}
-          name={openName}
-          downloadFolders={folders}
-          onBack={() => setOpenName(null)}
-        />
-      </div>
+  const counts = useMemo(() => {
+    const all = schematics?.length ?? 0;
+    const createmod = schematics?.filter((item) => item.source === "createmod").length ?? 0;
+    return { all, createmod, local: all - createmod };
+  }, [schematics]);
+
+  const filtered = useMemo(() => {
+    let items = schematics ?? [];
+    if (source !== "all") {
+      items = items.filter((item) =>
+        source === "createmod" ? item.source === "createmod" : item.source == null,
+      );
+    }
+    const needle = query.trim().toLowerCase();
+    if (needle) {
+      items = items.filter(
+        (item) =>
+          item.title.toLowerCase().includes(needle) ||
+          item.filename.toLowerCase().includes(needle) ||
+          item.author?.toLowerCase().includes(needle),
+      );
+    }
+    return items;
+  }, [query, schematics, source]);
+
+  const remove = (schematic: InstalledSchematic) => {
+    setSchematics((items) => items?.filter((item) => item.filename !== schematic.filename) ?? []);
+    api.removeSchematic(instanceId, schematic.filename).then(() => {
+      toast(t("schematics.removed", { name: schematic.title }), "success");
+      load();
+    }).catch((reason) => {
+      setError(String(reason));
+      load();
+    });
+  };
+
+  const openRequiredMod = async (mod: SchematicRequiredMod) => {
+    const preferred: "modrinth" | "curseforge" | null = mod.image_url?.includes("cdn.modrinth.com")
+      ? "modrinth"
+      : mod.image_url?.includes("forgecdn.net")
+        ? "curseforge"
+        : null;
+    const sources: Array<"modrinth" | "curseforge"> = preferred
+      ? [preferred, preferred === "modrinth" ? "curseforge" : "modrinth"]
+      : ["modrinth", "curseforge"];
+    const wanted = normalizedModName(mod.name);
+    let hit: SearchHit | null = null;
+
+    for (const candidateSource of sources) {
+      const results = await api
+        .searchContent(
+          instanceId,
+          mod.name,
+          "mod",
+          candidateSource,
+          0,
+          EMPTY_FILTERS,
+        )
+        .catch(() => []);
+      hit =
+        results.find(
+          (item) =>
+            normalizedModName(item.title) === wanted ||
+            normalizedModName(item.slug) === normalizedModName(mod.id),
+        ) ?? results[0] ?? null;
+      if (hit) break;
+    }
+
+    if (!hit) {
+      toast(t("schematics.modProviderNotFound", { name: mod.name }), "error");
+      return;
+    }
+
+    const [instance, mods] = await Promise.all([
+      api.getInstance(instanceId),
+      api.listMods(instanceId),
+    ]);
+    const installed = Object.fromEntries(
+      mods.flatMap((item: InstalledMod) =>
+        item.project_id
+          ? [[`${item.source}:${item.project_id}`, item.version_id] as const]
+          : [],
+      ),
     );
-  }
-
-  const sortOptions = SORTS.map((s) => ({
-    value: s,
-    label: t(`schematics.sort.${s}`),
-  }));
+    setRequiredContent({ hit, instance, installed });
+  };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-20 px-5 pb-2 pt-5">
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-edge bg-gradient-to-b from-ink-900/85 to-ink-900/55 p-2.5 shadow-lg shadow-ink-950/40 backdrop-blur-xl">
-          <div className="relative min-w-[220px] flex-1">
-            <Search
-              size={15}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-600"
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setActive(query);
-              }}
-              placeholder={t("schematics.searchPlaceholder")}
-              className="w-full rounded-xl border border-edge bg-ink-950/60 py-2 pl-10 pr-4 text-[13px] text-gray-100 outline-none transition focus:border-brass-500/50 focus:bg-ink-950/80"
-            />
-          </div>
-          <div className="w-40">
-            <Dropdown value={sort} onChange={setSort} options={sortOptions} />
-          </div>
-          {filters && filters.categories.length > 0 && (
-            <div className="w-40">
-              <Dropdown
-                value={category}
-                onChange={setCategory}
-                options={[
-                  { value: "all", label: t("schematics.allCategories") },
-                  ...filters.categories,
-                ]}
-              />
-            </div>
-          )}
-          {filters && filters.mc_versions.length > 0 && (
-            <div className="w-36">
-              <Dropdown
-                value={mcVersion}
-                onChange={setMcVersion}
-                options={[
-                  { value: "all", label: t("schematics.allMcVersions") },
-                  ...filters.mc_versions,
-                ]}
-              />
-            </div>
-          )}
-          {filters && filters.create_versions.length > 0 && (
-            <div className="w-36">
-              <Dropdown
-                value={createVersion}
-                onChange={setCreateVersion}
-                options={[
-                  { value: "all", label: t("schematics.allCreateVersions") },
-                  ...filters.create_versions,
-                ]}
-              />
-            </div>
-          )}
+    <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
+      <div className="flex items-center justify-between pb-4">
+        <div>
+          <h1 className="font-mc text-2xl tracking-wide text-gray-100">
+            {t("schematics.heroTitle")}
+          </h1>
+          <p className="text-sm text-ink-600">
+            {schematics
+              ? t("schematics.installed", { count: schematics.length })
+              : t("common.loading")}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAdding(true)}
+            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-3.5 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
+          >
+            <Plus size={16} /> {t("schematics.addSchematics")}
+          </button>
+          <button
+            onClick={() => api.openDir(instanceId, "schematics").catch((reason) => setError(String(reason)))}
+            className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <FolderOpen size={15} /> {t("schematics.folder")}
+          </button>
+          <button
+            onClick={load}
+            title={t("common.refresh")}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5">
-        {!isSearch && (
-          <>
-            <div className="mb-6 overflow-hidden rounded-2xl border border-brass-600/25 bg-gradient-to-r from-brass-500/10 via-ink-900/40 to-ink-900/20 px-6 py-5">
-              <h2 className="font-mc text-[20px] tracking-wide text-gray-50">
-                {t("schematics.heroTitle")}
-              </h2>
-              <p className="mt-1 text-[12px] text-ink-600">{t("schematics.heroSub")}</p>
-            </div>
-            {loadErr && (
-              <div className="rounded-xl border border-edge bg-ink-900/50 p-8 text-center text-ink-600">
-                {t("schematics.loadError")}
-              </div>
-            )}
-            {!home && !loadErr && (
-              <div className="flex justify-center p-16 text-ink-600">
-                <Loader2 className="animate-spin" />
-              </div>
-            )}
-            {home && (
-              <>
-                <Segment
-                  title={t("schematics.trending")}
-                  cards={home.trending}
-                  onOpen={setOpenName}
-                />
-                <Segment
-                  title={t("schematics.latest")}
-                  cards={home.latest}
-                  onOpen={setOpenName}
-                />
-                <Segment
-                  title={t("schematics.highest")}
-                  cards={home.highest}
-                  onOpen={setOpenName}
-                />
-                {home.trending.length === 0 &&
-                  home.latest.length === 0 &&
-                  home.highest.length === 0 &&
-                  !loadErr && (
-                    <div className="rounded-xl border border-edge bg-ink-900/50 p-8 text-center text-ink-600">
-                      {t("schematics.empty")}
-                    </div>
-                  )}
-              </>
-            )}
-          </>
-        )}
+      <div className="mb-3 flex items-center gap-2">
+        <SegmentedTabs
+          value={source}
+          onChange={(value) => setSource(value as typeof source)}
+          options={[
+            { id: "all", label: <>{t("mods.all")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.all}</span></> },
+            { id: "createmod", label: <>CreateMod.com <span className="ml-1.5 tabular-nums text-ink-600">{counts.createmod}</span></> },
+            { id: "local", label: <>{t("schematics.local")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.local}</span></> },
+          ]}
+        />
+        <div className="relative flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-600" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("schematics.searchInstalled")}
+            className="w-full rounded-lg bg-ink-900/50 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
+          />
+        </div>
+      </div>
 
-        {isSearch && (
-          <>
-            <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {results.map((card) => (
-                <Card key={card.name} card={card} onOpen={setOpenName} />
-              ))}
-            </div>
-            {!searching && results.length === 0 && (
-              <div className="rounded-xl border border-edge bg-ink-900/50 p-8 text-center text-ink-600">
-                {t("schematics.noResults")}
+      {error && (
+        <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-1 flex-col overflow-y-auto pr-1">
+        {schematics === null ? (
+          <SchematicSkeleton />
+        ) : (
+          <div key={`${source}:${query}`} className="reveal-down flex flex-1 flex-col gap-2">
+            {filtered.map((schematic) => (
+              <SchematicRow
+                key={schematic.path}
+                schematic={schematic}
+                onOpen={() => setDetailProject(schematic)}
+                onRemove={() => remove(schematic)}
+              />
+            ))}
+            {filtered.length === 0 && (
+              <div className="grid flex-1 place-items-center py-16 text-center text-ink-600">
+                <div>
+                  <Boxes size={28} className="mx-auto mb-2 opacity-50" />
+                  {schematics.length === 0
+                    ? t("schematics.emptyInstalled")
+                    : t("schematics.noInstalledResults")}
+                </div>
               </div>
             )}
-            {searching && (
-              <div className="flex justify-center p-8 text-ink-600">
-                <Loader2 className="animate-spin" />
-              </div>
-            )}
-            {hasNext && !searching && (
-              <div className="mt-5 flex justify-center">
-                <button
-                  onClick={() => runSearch(page + 1)}
-                  className="rounded-lg border border-edge px-5 py-2 text-[12px] text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-                >
-                  {t("schematics.loadMore")}
-                </button>
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
+
+      {(adding || detailProject) && schematics && (
+        <AddSchematicModal
+          instanceId={instanceId}
+          installed={schematics}
+          initialProject={detailProject}
+          onClose={() => {
+            setAdding(false);
+            setDetailProject(null);
+          }}
+          onInstalled={load}
+          onOpenRequiredMod={openRequiredMod}
+          suspended={!!requiredContent}
+        />
+      )}
+
+      {requiredContent && (
+        <AddContentModal
+          instanceId={instanceId}
+          mc={requiredContent.instance.minecraft_version}
+          loader={requiredContent.instance.loader}
+          installed={requiredContent.installed}
+          initial={requiredContent.hit}
+          initialType="mod"
+          initialSource={requiredContent.hit.source === "curseforge" ? "curseforge" : "modrinth"}
+          onClose={() => setRequiredContent(null)}
+          onInstalled={(mod) => {
+            setRequiredContent((current) =>
+              current
+                ? {
+                    ...current,
+                    installed: {
+                      ...current.installed,
+                      [`${mod.source}:${mod.project_id}`]: mod.version_id,
+                    },
+                  }
+                : null,
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

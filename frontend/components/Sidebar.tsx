@@ -125,49 +125,59 @@ export function Sidebar({
         </button>
       )}
 
-      <nav className="no-drag mt-2 flex flex-col gap-1">
+      <nav className="no-drag mt-2 flex flex-col">
         {NAV.map(({ id, tkey, icon: Icon }) => {
+          const visible = id !== "schematics" || schematicsAvailable;
           const active =
             view === id || (id === "instances" && view === "instance-settings");
           const noInstance = !hasInstance && INSTANCE_VIEWS.includes(id);
           const noSkins = id === "skin" && !skinsAvailable;
-          const noSchematics = id === "schematics" && !schematicsAvailable;
-          const disabled = noInstance || noSkins || noSchematics;
+          const disabled = !visible || noInstance || noSkins;
           return (
-            <button
+            <div
               key={id}
-              disabled={disabled}
-              onClick={() => !disabled && onChange(id)}
-              title={
-                noSkins
-                  ? t("sidebar.skinsNeedAccount")
-                  : noSchematics
-                    ? t("sidebar.schematicsNeedIntegration")
-                    : noInstance
-                      ? t("sidebar.selectInstanceFirst")
-                      : undefined
-              }
-              className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
-                disabled
-                  ? "cursor-not-allowed text-ink-800 opacity-40"
-                  : active
-                    ? "bg-brass-500/15 text-brass-300 glow"
-                    : "text-ink-600 hover:translate-x-0.5 hover:bg-ink-800/60 hover:text-brass-300/80"
+              aria-hidden={!visible}
+              className={`grid transition-[grid-template-rows,opacity,transform] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                visible
+                  ? "grid-rows-[1fr] opacity-100 translate-x-0"
+                  : "pointer-events-none grid-rows-[0fr] -translate-x-1 opacity-0"
               }`}
             >
-              <span
-                className={`pointer-events-none absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brass-400 transition-all duration-200 ${
-                  active ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0"
-                }`}
-              />
-              <Icon
-                size={17}
-                className={`transition-transform duration-200 group-hover:scale-110 group-active:scale-95 ${
-                  active ? "text-brass-400" : "opacity-80"
-                }`}
-              />
-              <span className="font-mc text-[13px] tracking-wide">{t(tkey)}</span>
-            </button>
+              <div className="min-h-0 overflow-hidden">
+                <button
+                  disabled={disabled}
+                  tabIndex={visible ? undefined : -1}
+                  onClick={() => !disabled && onChange(id)}
+                  title={
+                    noSkins
+                      ? t("sidebar.skinsNeedAccount")
+                      : noInstance
+                        ? t("sidebar.selectInstanceFirst")
+                        : undefined
+                  }
+                  className={`group relative my-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
+                    disabled
+                      ? "cursor-not-allowed text-ink-800 opacity-40"
+                      : active
+                        ? "bg-brass-500/15 text-brass-300 glow"
+                        : "text-ink-600 hover:translate-x-0.5 hover:bg-ink-800/60 hover:text-brass-300/80"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brass-400 transition-all duration-200 ${
+                      active ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0"
+                    }`}
+                  />
+                  <Icon
+                    size={17}
+                    className={`transition-transform duration-200 group-hover:scale-110 group-active:scale-95 ${
+                      active ? "text-brass-400" : "opacity-80"
+                    }`}
+                  />
+                  <span className="font-mc text-[13px] tracking-wide">{t(tkey)}</span>
+                </button>
+              </div>
+            </div>
           );
         })}
       </nav>
