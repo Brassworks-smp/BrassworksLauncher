@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   Star,
   Tag,
+  Trash2,
   X,
 } from "lucide-react";
 import * as api from "@/lib/api";
@@ -465,7 +466,7 @@ function SchematicDetailView({
 }: {
   instanceId: string;
   hit: SearchHit;
-  installed: boolean;
+  installed: InstalledSchematic | null;
   onInstalled: () => void;
   onOpenRequiredMod: (mod: SchematicRequiredMod) => Promise<void>;
 }) {
@@ -474,9 +475,12 @@ function SchematicDetailView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copiedMaterials, setCopiedMaterials] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const effectiveInstalled = removed ? null : installed;
 
   useEffect(() => {
     let alive = true;
+    setRemoved(false);
     setDetail(null);
     setError(null);
     api
@@ -494,10 +498,26 @@ function SchematicDetailView({
     try {
       await api.downloadSchematic(instanceId, hit.project_id);
       toast(t("schematics.imported"), "success");
+      setRemoved(false);
       onInstalled();
     } catch (reason) {
       setError(String(reason));
       toast(t("schematics.downloadFailed"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const uninstall = async () => {
+    if (busy || !effectiveInstalled) return;
+    setBusy(true);
+    try {
+      await api.removeSchematic(instanceId, effectiveInstalled.filename);
+      setRemoved(true);
+      toast(t("schematics.removed", { name: effectiveInstalled.title }), "success");
+      onInstalled();
+    } catch (reason) {
+      setError(String(reason));
     } finally {
       setBusy(false);
     }
@@ -564,11 +584,15 @@ function SchematicDetailView({
       actions={
         <button
           disabled={busy}
-          onClick={install}
-          className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-60"
+          onClick={effectiveInstalled ? uninstall : install}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold transition-[color,background-color,transform,opacity] duration-150 active:scale-[.97] disabled:opacity-60 ${
+            effectiveInstalled
+              ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+              : "bg-brass-500 text-ink-950 hover:bg-brass-400"
+          }`}
         >
-          {busy ? <Loader2 size={15} className="animate-spin" /> : installed ? <Check size={15} /> : <Download size={15} />}
-          {installed ? t("schematics.reinstall") : t("common.add")}
+          {busy ? <Loader2 size={15} className="animate-spin" /> : effectiveInstalled ? <Trash2 size={15} /> : <Download size={15} />}
+          {effectiveInstalled ? t("schematics.uninstall") : t("common.add")}
         </button>
       }
       error={error}
@@ -735,6 +759,15 @@ export function AddSchematicModal({
   const accent = isLight ? CREATE_MOD_ACCENT_LIGHT : CREATE_MOD_ACCENT_DARK;
   const installedIds = useMemo(
     () => new Set(installed.flatMap((item) => (item.project_id ? [item.project_id] : []))),
+    [installed],
+  );
+  const installedById = useMemo(
+    () =>
+      new Map(
+        installed.flatMap((item) =>
+          item.project_id ? [[item.project_id, item] as const] : [],
+        ),
+      ),
     [installed],
   );
   const filtering = useFilters(
@@ -907,7 +940,7 @@ export function AddSchematicModal({
               <SchematicDetailView
                 instanceId={instanceId}
                 hit={selected}
-                installed={installedIds.has(selected.project_id)}
+                installed={installedById.get(selected.project_id) ?? null}
                 onInstalled={onInstalled}
                 onOpenRequiredMod={onOpenRequiredMod}
               />

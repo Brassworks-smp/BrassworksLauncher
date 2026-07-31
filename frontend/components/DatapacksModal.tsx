@@ -285,10 +285,15 @@ export function DatapacksModal({
                 instanceId={instanceId}
                 world={world.folder}
                 hit={selected}
-                installedVersionId={selectedInstalled?.version_id ?? null}
+                installed={selectedInstalled ?? null}
                 onInstalled={() => {
                   refresh();
                   toast(t("datapacks.updatedIn", { world: world.name }), "success");
+                  back();
+                }}
+                onUninstalled={() => {
+                  refresh();
+                  toast(t("datapacks.removedFrom", { world: world.name }), "success");
                   back();
                 }}
               />
@@ -417,19 +422,22 @@ function DatapackDetail({
   instanceId,
   world,
   hit,
-  installedVersionId,
+  installed,
   onInstalled,
+  onUninstalled,
 }: {
   instanceId: string;
   world: string;
   hit: SearchHit;
-  installedVersionId: string | null;
+  installed: DatapackInfo | null;
   onInstalled: () => void;
+  onUninstalled: () => void;
 }) {
   const t = useT();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const installedVersionId = installed?.version_id ?? null;
 
   useEffect(() => {
     let alive = true;
@@ -456,6 +464,16 @@ function DatapackDetail({
       .installDatapack(instanceId, world, hit.source, hit.project_id, versionId)
       .then(() => onInstalled())
       .catch((e) => toast(String(e), "error"))
+      .finally(() => setBusy(null));
+  };
+
+  const uninstall = () => {
+    if (!installed) return;
+    setBusy("uninstall");
+    api
+      .removeDatapack(instanceId, world, installed.filename)
+      .then(onUninstalled)
+      .catch((reason) => toast(String(reason), "error"))
       .finally(() => setBusy(null));
   };
 
@@ -498,6 +516,22 @@ function DatapackDetail({
       }
       externalTitle={t("mods.viewOn", { source: api.sourceLabel(hit.source) })}
       subtitle={subtitle}
+      actions={
+        installed ? (
+          <button
+            disabled={!!busy}
+            onClick={uninstall}
+            className="flex items-center justify-center gap-1.5 rounded-md bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-300 transition-[color,background-color,transform,opacity] duration-150 hover:bg-red-500/25 active:scale-[.97] disabled:opacity-60"
+          >
+            {busy === "uninstall" ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Trash2 size={15} />
+            )}
+            {t("datapacks.uninstall")}
+          </button>
+        ) : undefined
+      }
       showVersions={false}
       versionsNode={null}
       bodyNode={

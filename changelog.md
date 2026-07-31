@@ -20,5 +20,5 @@
 * **Description rendering** - HTML descriptions, including complex pages such as Ryujin All Terrain Hovercraft, now render correctly instead of exposing broken markup.
 * **Schematic detail polish** - fullscreen gallery previews now cover the whole launcher window, required-mod actions have proper spacing and hover feedback, and missing modal transitions and list animations have been restored.
 * **Linux Snap versioning** - corrected the Snap build scriptlet so release versions are assigned properly during packaging.
-* **Installed content actions** - opening an already-installed mod now offers **Uninstall** and removes the installed file instead of offering to reinstall it. Modpack-managed files remain protected.
+* **Installed content actions** - opening an already-installed mod, schematic, or datapack now offers **Uninstall** and removes the installed file instead of offering to reinstall it. Modpack-managed files remain protected, while datapack version switching stays available separately.
 * **Pre-launch errors stay visible** - authentication and other failures that happen before Minecraft starts no longer open the game log as if the game crashed, so the real launcher error remains visible. Actual game crashes still follow the console-on-crash setting.

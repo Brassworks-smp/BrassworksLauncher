@@ -59,6 +59,7 @@
     "providerFooter": "Browsing CreateMod.com · downloads are added directly to this instance",
     "anyVersion": "Any version",
     "reinstall": "Reinstall",
+    "uninstall": "Uninstall",
     "removed": "Removed {name}",
     "gallery": "Gallery",
     "closeImage": "Close image",
@@ -1300,6 +1301,7 @@
     "installed": "Installed",
     "browse": "Browse",
     "updatedIn": "Updated in {world}",
+    "removedFrom": "Removed from {world}",
     "searchPlaceholder": "Search {source} datapacks…",
     "noResults": "No datapacks found - try a different search.",
     "empty": "No datapacks in this world yet.",
@@ -1310,7 +1312,8 @@
     "installedBadge": "Installed",
     "updateAvailable": "Update available",
     "noVersions": "No compatible datapack versions.",
-    "switch": "Switch"
+    "switch": "Switch",
+    "uninstall": "Uninstall"
   },
   "addServer": {
     "editServer": "Edit server",
