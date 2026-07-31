@@ -63,6 +63,9 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub instance_folders: Vec<InstanceFolder>,
 
+    #[serde(default)]
+    pub folders_above_instances: bool,
+
     pub auto_update: bool,
     pub last_version: Option<String>,
 
@@ -129,6 +132,7 @@ impl Default for LauncherSettings {
             close_to_tray: false,
             show_featured: true,
             instance_folders: Vec::new(),
+            folders_above_instances: false,
 
             auto_update: true,
             last_version: None,

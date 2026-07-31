@@ -746,6 +746,133 @@ impl<'a> Modpack<'a> {
             .collect())
     }
 
+    pub fn list_versions_with_filters(
+        &self,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+    ) -> Result<Vec<ContentVersion>> {
+        let compatibility_is_default = filters.game_versions.is_empty()
+            && filters.loaders.is_empty()
+            && !filters.allow_any_version
+            && !filters.allow_any_loader;
+        if compatibility_is_default {
+            return self.list_versions(project_id, project_type, source);
+        }
+
+        let mut versions = if source == "curseforge" {
+            let requested_games = if filters.allow_any_version {
+                vec![String::new()]
+            } else if filters.game_versions.is_empty() {
+                vec![self.game_version()]
+            } else {
+                filters.game_versions.clone()
+            };
+            let requested_loaders: Vec<Option<String>> =
+                if self.loader_for(project_type).is_none() || filters.allow_any_loader {
+                    vec![None]
+                } else if filters.loaders.is_empty() {
+                    vec![self.loader_for(project_type).map(str::to_string)]
+                } else {
+                    filters.loaders.iter().cloned().map(Some).collect()
+                };
+            let curseforge = self.curseforge()?;
+            let mut found = Vec::new();
+            let mut seen = HashSet::new();
+            for game in &requested_games {
+                for loader in &requested_loaders {
+                    for version in curseforge.list_versions(
+                        project_id,
+                        game,
+                        loader.as_deref(),
+                    )? {
+                        if seen.insert(version.version_id.clone()) {
+                            found.push(version);
+                        }
+                    }
+                }
+            }
+            found
+        } else {
+            let installer = self.installer();
+            installer
+                .modrinth(self.paths.modrinth_cache_dir())
+                .project_versions(project_id)?
+        };
+
+        let game_versions = if filters.allow_any_version {
+            None
+        } else if filters.game_versions.is_empty() {
+            Some(vec![self.game_version()])
+        } else {
+            Some(filters.game_versions.clone())
+        };
+        let loaders = if self.loader_for(project_type).is_none() || filters.allow_any_loader {
+            None
+        } else if filters.loaders.is_empty() {
+            Some(
+                self.loader_for(project_type)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            Some(filters.loaders.clone())
+        };
+
+        versions.retain(|version| {
+            let game_matches = game_versions.as_ref().is_none_or(|wanted| {
+                version
+                    .game_versions
+                    .iter()
+                    .any(|actual| wanted.iter().any(|item| item.eq_ignore_ascii_case(actual)))
+            });
+            let loader_matches = loaders.as_ref().is_none_or(|wanted| {
+                version
+                    .loaders
+                    .iter()
+                    .any(|actual| wanted.iter().any(|item| item.eq_ignore_ascii_case(actual)))
+            });
+            game_matches && loader_matches
+        });
+
+        Ok(versions
+            .into_iter()
+            .map(|version| ContentVersion {
+                version_id: version.version_id,
+                version_number: version.version_number,
+                game_versions: version.game_versions,
+                loaders: version.loaders,
+            })
+            .collect())
+    }
+
+    fn best_one_with_filters(
+        &self,
+        source: &str,
+        project_id: &str,
+        project_type: &str,
+        filters: &SearchFilters,
+    ) -> Result<Option<ResolvedVersion>> {
+        let compatibility_is_default = filters.game_versions.is_empty()
+            && filters.loaders.is_empty()
+            && !filters.allow_any_version
+            && !filters.allow_any_loader;
+        if compatibility_is_default {
+            return self.best_one(source, project_id, project_type);
+        }
+
+        let Some(version) = self
+            .list_versions_with_filters(project_id, project_type, source, filters)?
+            .into_iter()
+            .next()
+        else {
+            return Ok(None);
+        };
+        self.resolve_one(source, project_id, &version.version_id)
+    }
+
     fn best_one(
         &self,
         source: &str,
@@ -807,16 +934,32 @@ impl<'a> Modpack<'a> {
         project_type: &str,
         source: &str,
     ) -> Result<InstallResult> {
-        let version = self.best_one(source, project_id, project_type)?.ok_or_else(|| {
+        self.install_from_source_with_filters(
+            project_id,
+            project_type,
+            source,
+            &SearchFilters::default(),
+        )
+    }
+
+    pub fn install_from_source_with_filters(
+        &self,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+    ) -> Result<InstallResult> {
+        let version = self
+            .best_one_with_filters(source, project_id, project_type, filters)?
+            .ok_or_else(|| {
             let loader = self.loader_for(project_type);
             CoreError::Modpack(format!(
-                "No {project_type} version for Minecraft {}{}",
-                self.game_version(),
+                "No {project_type} version matches the selected Minecraft version{}",
                 loader.map(|l| format!(" / {l}")).unwrap_or_default()
             ))
         })?;
         let item = self.place_version(source, project_id, project_type, version.clone(), true)?;
-        let dependencies = self.install_dependencies(source, &version);
+        let dependencies = self.install_dependencies(source, &version, filters);
         Ok(InstallResult { item, dependencies })
     }
 
@@ -827,6 +970,25 @@ impl<'a> Modpack<'a> {
         project_type: &str,
         source: &str,
         unlocked: bool,
+    ) -> Result<InstallResult> {
+        self.install_version_with_filters(
+            project_id,
+            version_id,
+            project_type,
+            source,
+            unlocked,
+            &SearchFilters::default(),
+        )
+    }
+
+    pub fn install_version_with_filters(
+        &self,
+        project_id: &str,
+        version_id: &str,
+        project_type: &str,
+        source: &str,
+        unlocked: bool,
+        filters: &SearchFilters,
     ) -> Result<InstallResult> {
         let managed = self
             .manifest()
@@ -842,7 +1004,7 @@ impl<'a> Modpack<'a> {
             .resolve_one(source, project_id, version_id)?
             .ok_or_else(|| CoreError::Modpack("Version not found".to_string()))?;
         let item = self.place_version(source, project_id, project_type, version.clone(), unlocked)?;
-        let dependencies = self.install_dependencies(source, &version);
+        let dependencies = self.install_dependencies(source, &version, filters);
         Ok(InstallResult { item, dependencies })
     }
 
@@ -892,10 +1054,15 @@ impl<'a> Modpack<'a> {
         })
     }
 
-    fn install_dependencies(&self, source: &str, version: &ResolvedVersion) -> Vec<String> {
+    fn install_dependencies(
+        &self,
+        source: &str,
+        version: &ResolvedVersion,
+        filters: &SearchFilters,
+    ) -> Vec<String> {
         let mut visited: HashSet<String> = HashSet::new();
         let mut installed: Vec<String> = Vec::new();
-        self.install_deps_inner(source, version, &mut visited, &mut installed, 0);
+        self.install_deps_inner(source, version, filters, &mut visited, &mut installed, 0);
         installed
     }
 
@@ -903,6 +1070,7 @@ impl<'a> Modpack<'a> {
         &self,
         source: &str,
         version: &ResolvedVersion,
+        filters: &SearchFilters,
         visited: &mut HashSet<String>,
         installed: &mut Vec<String>,
         depth: u32,
@@ -922,12 +1090,22 @@ impl<'a> Modpack<'a> {
             }
             let resolved = match &dep.version_id {
                 Some(vid) => self.resolve_one(source, &pid, vid).ok().flatten(),
-                None => self.best_one(source, &pid, "mod").ok().flatten(),
+                None => self
+                    .best_one_with_filters(source, &pid, "mod", filters)
+                    .ok()
+                    .flatten(),
             };
             if let Some(rv) = resolved {
                 if let Ok(m) = self.place_version(source, &pid, "mod", rv.clone(), false) {
                     installed.push(m.name);
-                    self.install_deps_inner(source, &rv, visited, installed, depth + 1);
+                    self.install_deps_inner(
+                        source,
+                        &rv,
+                        filters,
+                        visited,
+                        installed,
+                        depth + 1,
+                    );
                 }
             }
         }

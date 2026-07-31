@@ -357,6 +357,11 @@
       "toggle": "Featured packs & servers",
       "toggleDesc": "Show featured packs in the Instances tab, featured servers in server lists, and the live player count and news tiles on the Play screen. Turn off for a clean, self-curated launcher."
     },
+    "instances": {
+      "title": "Instance layout",
+      "foldersFirst": "Show folders first",
+      "foldersFirstDesc": "Place instance folders above the Your instances section."
+    },
     "curseforge": {
       "title": "CurseForge",
       "key": "CurseForge API key",
@@ -1324,8 +1329,12 @@
     "startTyping": "Start typing to search {source}.",
     "endOfResults": "End of results",
     "compatNote": "Only versions compatible with Minecraft {mc}{loader} are shown.",
+    "filteredCompatNote": "Results and installs use the compatibility filters selected above.",
     "installedToast": "Installed {name}",
     "installedDeps": "Installed {name} (+{n} dependencies)",
+    "uninstalledToast": "Uninstalled {name}",
+    "uninstallPathMissing": "The installed file could not be found. Refresh the Content page and try again.",
+    "uninstall": "Uninstall",
     "downloads": "{count} downloads",
     "latestVersion": "latest {version}",
     "unlockTitle": "Unlock the modpack to add or change content",

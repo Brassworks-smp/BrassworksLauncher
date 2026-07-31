@@ -419,10 +419,10 @@ impl Curseforge {
         game_version: &str,
         loader: Option<&str>,
     ) -> Result<Vec<ResolvedVersion>> {
-        let mut q: Vec<(&str, String)> = vec![
-            ("gameVersion", game_version.to_string()),
-            ("pageSize", "50".to_string()),
-        ];
+        let mut q: Vec<(&str, String)> = vec![("pageSize", "50".to_string())];
+        if !game_version.is_empty() {
+            q.push(("gameVersion", game_version.to_string()));
+        }
         if let Some(id) = loader.and_then(loader_type) {
             q.push(("modLoaderType", id.to_string()));
         }

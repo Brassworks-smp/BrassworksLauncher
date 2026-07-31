@@ -284,6 +284,7 @@ pub(crate) fn launch(
                     error: None,
                     needs_relogin: false,
                     cancelled: false,
+                    started: true,
                 }
             }
             Err(e) if e.is_cancelled() => ExitInfo {
@@ -292,6 +293,7 @@ pub(crate) fn launch(
                 error: None,
                 needs_relogin: false,
                 cancelled: true,
+                started: false,
             },
             Err(e) => ExitInfo {
                 instance_id: id.clone(),
@@ -299,6 +301,7 @@ pub(crate) fn launch(
                 needs_relogin: e.needs_relogin(),
                 error: Some(e.to_string()),
                 cancelled: false,
+                started: false,
             },
         };
 
@@ -674,11 +677,18 @@ pub(crate) async fn install_content(
     project_id: String,
     project_type: String,
     source: String,
+    filters: SearchFilters,
 ) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .install_content(&instance_id, &project_id, &project_type, &source)
+            .install_content_with_filters(
+                &instance_id,
+                &project_id,
+                &project_type,
+                &source,
+                &filters,
+            )
             .map_err(err)
     })
     .await
@@ -709,11 +719,18 @@ pub(crate) async fn content_versions(
     project_id: String,
     project_type: String,
     source: String,
+    filters: SearchFilters,
 ) -> CmdResult<Vec<ContentVersion>> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .content_versions(&instance_id, &project_id, &project_type, &source)
+            .content_versions_with_filters(
+                &instance_id,
+                &project_id,
+                &project_type,
+                &source,
+                &filters,
+            )
             .map_err(err)
     })
     .await
@@ -728,16 +745,18 @@ pub(crate) async fn install_content_version(
     version_id: String,
     project_type: String,
     source: String,
+    filters: SearchFilters,
 ) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .install_content_version(
+            .install_content_version_with_filters(
                 &instance_id,
                 &project_id,
                 &version_id,
                 &project_type,
                 &source,
+                &filters,
             )
             .map_err(err)
     })

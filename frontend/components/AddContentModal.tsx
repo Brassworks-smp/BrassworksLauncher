@@ -16,6 +16,7 @@ import {
   ListChecks,
   Unlock,
   Users,
+  Trash2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -30,6 +31,7 @@ import type {
   InstalledMod,
   LoaderKind,
   ProjectDetail,
+  SearchFilters,
   SearchHit,
 } from "@/lib/types";
 
@@ -99,12 +101,14 @@ export function AddContentModal({
   mc,
   loader,
   installed,
+  installedPaths,
   lockedIds,
   initial,
   initialType,
   initialSource,
   onClose,
   onInstalled,
+  onUninstalled,
   onUnlock,
 }: {
   instanceId: string;
@@ -112,12 +116,14 @@ export function AddContentModal({
   mc: string;
   loader: LoaderKind;
   installed: Record<string, string | null>;
+  installedPaths?: Record<string, string>;
   lockedIds?: string[];
   initial?: SearchHit | null;
   initialType?: ProjectType;
   initialSource?: Source;
   onClose: () => void;
   onInstalled: (mod: InstalledMod) => void;
+  onUninstalled?: (path: string) => void;
 
   onUnlock?: () => void;
 }) {
@@ -156,6 +162,11 @@ export function AddContentModal({
     `${instanceId}:${type}:${source}`,
   );
   const filtersOpen = filtering.open;
+  const customCompatibility =
+    filtering.filters.allowAnyVersion ||
+    filtering.filters.allowAnyLoader ||
+    filtering.filters.gameVersions.length > 0 ||
+    filtering.filters.loaders.length > 0;
 
   const fetchPage = useCallback(
     (q: string, offset: number) =>
@@ -274,6 +285,7 @@ export function AddContentModal({
                         hit.project_id,
                         type,
                         hit.source,
+                        filtering.filters,
                       );
                       const n = res.dependencies.length;
                       toast(
@@ -290,13 +302,17 @@ export function AddContentModal({
                   }}
                 />
               )}
-              footer={t("addContent.compatNote", {
-                mc,
-                loader:
-                  type === "mod" && loader !== "vanilla"
-                    ? ` · ${t(LOADER_TKEY[loader])}`
-                    : "",
-              })}
+              footer={
+                customCompatibility
+                  ? t("addContent.filteredCompatNote")
+                  : t("addContent.compatNote", {
+                      mc,
+                      loader:
+                        type === "mod" && loader !== "vanilla"
+                          ? ` · ${t(LOADER_TKEY[loader])}`
+                          : "",
+                    })
+              }
             />
           )}
           {selected && (
@@ -306,9 +322,12 @@ export function AddContentModal({
                 hit={selected}
                 type={type}
                 installedVersion={installed[keyOf(selected)]}
+                installedPath={installedPaths?.[keyOf(selected)]}
                 isInstalled={keyOf(selected) in installed}
+                filters={filtering.filters}
                 locked={lockedSet.has(keyOf(selected))}
                 onInstalled={onInstalled}
+                onUninstalled={onUninstalled}
                 onUnlock={onUnlock}
               />
             </div>
@@ -324,18 +343,24 @@ function DetailView({
   hit,
   type,
   installedVersion,
+  installedPath,
   isInstalled,
+  filters,
   locked,
   onInstalled,
+  onUninstalled,
   onUnlock,
 }: {
   instanceId: string;
   hit: SearchHit;
   type: ProjectType;
   installedVersion: string | null | undefined;
+  installedPath?: string;
   isInstalled: boolean;
+  filters: SearchFilters;
   locked: boolean;
   onInstalled: (mod: InstalledMod) => void;
+  onUninstalled?: (path: string) => void;
   onUnlock?: () => void;
 }) {
   const t = useT();
@@ -344,6 +369,9 @@ function DetailView({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showVersions, setShowVersions] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const effectivelyInstalled = isInstalled && !removed;
+  const canUninstall = effectivelyInstalled && !!installedPath;
 
   useEffect(() => {
     let alive = true;
@@ -352,17 +380,15 @@ function DetailView({
       .then((d) => alive && setDetail(d))
       .catch((e) => alive && setError(String(e)));
     api
-      .contentVersions(instanceId, hit.project_id, type, hit.source)
+      .contentVersions(instanceId, hit.project_id, type, hit.source, filters)
       .then((v) => alive && setVersions(v))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [instanceId, hit.project_id, hit.source, type]);
+  }, [instanceId, hit.project_id, hit.source, type, filters]);
 
   const latest = versions?.[0];
-  const updateAvailable =
-    isInstalled && latest && installedVersion !== latest.version_id;
 
   const install = (versionId?: string) => {
     setBusy(versionId ?? "latest");
@@ -374,8 +400,9 @@ function DetailView({
           versionId,
           type,
           hit.source,
+          filters,
         )
-      : api.installContent(instanceId, hit.project_id, type, hit.source);
+      : api.installContent(instanceId, hit.project_id, type, hit.source, filters);
     p.then((res) => {
       const n = res.dependencies.length;
       toast(
@@ -385,8 +412,27 @@ function DetailView({
         "success",
       );
       onInstalled(res.item);
+      setRemoved(false);
     })
       .catch((e) => setError(String(e)))
+      .finally(() => setBusy(null));
+  };
+
+  const uninstall = () => {
+    if (!installedPath) {
+      setError(t("addContent.uninstallPathMissing"));
+      return;
+    }
+    setBusy("uninstall");
+    setError(null);
+    api
+      .removeContent(instanceId, installedPath)
+      .then(() => {
+        setRemoved(true);
+        toast(t("addContent.uninstalledToast", { name: detail?.title ?? hit.title }), "success");
+        onUninstalled?.(installedPath);
+      })
+      .catch((reason) => setError(String(reason)))
       .finally(() => setBusy(null));
   };
 
@@ -428,19 +474,25 @@ function DetailView({
         )
       ) : (
         <button
-          disabled={!!busy}
-          onClick={() => install()}
-          className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400 disabled:opacity-60"
+          disabled={!!busy || (effectivelyInstalled && !canUninstall)}
+          onClick={() => (canUninstall ? uninstall() : install())}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold transition-[color,background-color,transform,opacity] duration-150 active:scale-[.97] disabled:opacity-60 ${
+            canUninstall
+              ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+              : effectivelyInstalled
+                ? "border border-edge bg-ink-850/60 text-ink-600"
+              : "bg-brass-500 text-ink-950 hover:bg-brass-400"
+          }`}
         >
-          {busy === "latest" ? (
+          {busy === "latest" || busy === "uninstall" ? (
             <Loader2 size={15} className="animate-spin" />
-          ) : updateAvailable ? (
+          ) : canUninstall ? (
             <>
-              <Download size={15} /> {t("addContent.update")}
+              <Trash2 size={15} /> {t("addContent.uninstall")}
             </>
-          ) : isInstalled ? (
+          ) : effectivelyInstalled ? (
             <>
-              <Check size={15} /> {t("addContent.reinstall")}
+              <Check size={15} /> {t("addContent.installedBadge")}
             </>
           ) : (
             <>

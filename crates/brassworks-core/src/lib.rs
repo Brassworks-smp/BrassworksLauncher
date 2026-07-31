@@ -332,6 +332,11 @@ pub struct Launcher {
     session_forge_tokens:
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
     msa_lock: std::sync::Arc<std::sync::Mutex<()>>,
+    msa_cache: std::sync::Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<uuid::Uuid, (std::time::Instant, msa::Account)>,
+        >,
+    >,
 }
 
 impl Launcher {
@@ -342,6 +347,7 @@ impl Launcher {
             paths,
             session_forge_tokens: Default::default(),
             msa_lock: Default::default(),
+            msa_cache: Default::default(),
         })
     }
 
@@ -352,6 +358,7 @@ impl Launcher {
             paths,
             session_forge_tokens: Default::default(),
             msa_lock: Default::default(),
+            msa_cache: Default::default(),
         })
     }
 
@@ -411,8 +418,12 @@ impl Launcher {
         if let Some(account) = store.accounts.iter().find(|a| a.id == id) {
             if account.is_microsoft() {
                 if let Ok(uuid) = uuid::Uuid::parse_str(&account.uuid) {
+                    let _guard = self.msa_guard();
                     let db = msa::Database::new(self.paths.msa_db_file());
                     let _ = db.remove_from_uuid(uuid);
+                    if let Ok(mut cache) = self.msa_cache.lock() {
+                        cache.remove(&uuid);
+                    }
                 }
             }
         }
@@ -427,6 +438,15 @@ impl Launcher {
 
     fn load_refreshed_msa(&self, uuid: uuid::Uuid) -> Result<msa::Account> {
         let _guard = self.msa_guard();
+        const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+        if let Ok(cache) = self.msa_cache.lock() {
+            if let Some((refreshed_at, account)) = cache.get(&uuid) {
+                if refreshed_at.elapsed() < CACHE_TTL {
+                    return Ok(account.clone());
+                }
+            }
+        }
+
         let db = msa::Database::new(self.paths.msa_db_file());
         let mut acc = match db.load_from_uuid(uuid) {
             Ok(Some(acc)) => acc,
@@ -442,18 +462,43 @@ impl Launcher {
                 ))
             }
         };
-        match acc.request_refresh() {
-            Ok(()) => {
-                let _ = db.store(acc.clone());
-                Ok(acc)
+        const ATTEMPTS: usize = 3;
+        for attempt in 0..ATTEMPTS {
+            match acc.request_refresh() {
+                Ok(()) => {
+                    db.store(acc.clone()).map_err(|e| {
+                        CoreError::Auth(format!("Couldn't save the refreshed Microsoft session ({e:?})"))
+                    })?;
+                    if let Ok(mut cache) = self.msa_cache.lock() {
+                        cache.insert(uuid, (std::time::Instant::now(), acc.clone()));
+                    }
+                    return Ok(acc);
+                }
+                Err(e) if matches!(e, msa::AuthError::RefreshRejected(_)) => {
+                    return Err(CoreError::AuthExpired(
+                        "Your Microsoft session has expired — please sign in again.".to_string(),
+                    ));
+                }
+                Err(e) if attempt + 1 < ATTEMPTS => {
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        250 * (attempt as u64 + 1),
+                    ));
+                    let _ = e;
+                }
+                Err(e) if e.requires_relogin() => {
+                    return Err(CoreError::AuthExpired(
+                        "Microsoft rejected the refreshed game session — please sign in again."
+                            .to_string(),
+                    ));
+                }
+                Err(e) => {
+                    return Err(CoreError::Auth(format!(
+                        "Couldn't reach Microsoft to refresh your session after {ATTEMPTS} attempts ({e}). Check your connection and try again."
+                    )));
+                }
             }
-            Err(e) if e.requires_relogin() => Err(CoreError::AuthExpired(
-                "Your Microsoft session has expired — please sign in again.".to_string(),
-            )),
-            Err(e) => Err(CoreError::Auth(format!(
-                "Couldn't reach Microsoft to refresh your session ({e}). Check your connection and try again."
-            ))),
         }
+        unreachable!("Microsoft refresh attempts always return")
     }
 
     pub fn account_status(&self, account_id: &str) -> AccountStatus {
@@ -496,9 +541,16 @@ impl Launcher {
             .map_err(|e| CoreError::Auth(format!("{e:?}")))?;
         let _ = mc_account.request_profile();
 
+        let _guard = self.msa_guard();
         let db = msa::Database::new(self.paths.msa_db_file());
         db.store(mc_account.clone())
             .map_err(|e| CoreError::Auth(format!("{e:?}")))?;
+        if let Ok(mut cache) = self.msa_cache.lock() {
+            cache.insert(
+                mc_account.uuid(),
+                (std::time::Instant::now(), mc_account.clone()),
+            );
+        }
 
         let account = Account::microsoft(
             mc_account.uuid().to_string(),
@@ -1388,6 +1440,7 @@ impl Launcher {
                 "Skins require a Microsoft account".to_string(),
             ));
         }
+        let _guard = self.msa_guard();
         let db = msa::Database::new(self.paths.msa_db_file());
         let uuid =
             uuid::Uuid::parse_str(&account.uuid).map_err(|e| CoreError::Auth(e.to_string()))?;
@@ -1824,6 +1877,18 @@ impl Launcher {
             .list_versions(project_id, project_type, source)
     }
 
+    pub fn content_versions_with_filters(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+    ) -> Result<Vec<modpack::ContentVersion>> {
+        self.modpack_for(instance_id)
+            .list_versions_with_filters(project_id, project_type, source, filters)
+    }
+
     pub fn install_content(
         &self,
         instance_id: &str,
@@ -1833,6 +1898,18 @@ impl Launcher {
     ) -> Result<InstallResult> {
         self.modpack_for(instance_id)
             .install_from_source(project_id, project_type, source)
+    }
+
+    pub fn install_content_with_filters(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+    ) -> Result<InstallResult> {
+        self.modpack_for(instance_id)
+            .install_from_source_with_filters(project_id, project_type, source, filters)
     }
 
     pub fn install_content_version(
@@ -1846,6 +1923,26 @@ impl Launcher {
         let unlocked = !self.modpack_locked(instance_id);
         self.modpack_for(instance_id)
             .install_version(project_id, version_id, project_type, source, unlocked)
+    }
+
+    pub fn install_content_version_with_filters(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        version_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+    ) -> Result<InstallResult> {
+        let unlocked = !self.modpack_locked(instance_id);
+        self.modpack_for(instance_id).install_version_with_filters(
+            project_id,
+            version_id,
+            project_type,
+            source,
+            unlocked,
+            filters,
+        )
     }
 
     pub fn update_all_content(&self, instance_id: &str) -> Result<Vec<String>> {

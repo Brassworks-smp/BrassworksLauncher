@@ -31,6 +31,7 @@ type RequiredContentTarget = {
   hit: SearchHit;
   instance: Instance;
   installed: Record<string, string | null>;
+  installedPaths: Record<string, string>;
 };
 
 const normalizedModName = (value: string) =>
@@ -261,7 +262,14 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
           : [],
       ),
     );
-    setRequiredContent({ hit, instance, installed });
+    const installedPaths = Object.fromEntries(
+      mods.flatMap((item: InstalledMod) =>
+        item.project_id && !item.managed
+          ? [[`${item.source}:${item.project_id}`, item.path] as const]
+          : [],
+      ),
+    );
+    setRequiredContent({ hit, instance, installed, installedPaths });
   };
 
   return (
@@ -375,6 +383,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
           mc={requiredContent.instance.minecraft_version}
           loader={requiredContent.instance.loader}
           installed={requiredContent.installed}
+          installedPaths={requiredContent.installedPaths}
           initial={requiredContent.hit}
           initialType="mod"
           initialSource={requiredContent.hit.source === "curseforge" ? "curseforge" : "modrinth"}
@@ -388,9 +397,27 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
                       ...current.installed,
                       [`${mod.source}:${mod.project_id}`]: mod.version_id,
                     },
+                    installedPaths: {
+                      ...current.installedPaths,
+                      [`${mod.source}:${mod.project_id}`]: mod.path,
+                    },
                   }
                 : null,
             );
+          }}
+          onUninstalled={(path) => {
+            setRequiredContent((current) => {
+              if (!current) return null;
+              const key = Object.entries(current.installedPaths).find(
+                ([, installedPath]) => installedPath === path,
+              )?.[0];
+              if (!key) return current;
+              const installed = { ...current.installed };
+              const installedPaths = { ...current.installedPaths };
+              delete installed[key];
+              delete installedPaths[key];
+              return { ...current, installed, installedPaths };
+            });
           }}
         />
       )}

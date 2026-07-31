@@ -268,6 +268,14 @@ export function ModsView({
     return r;
   }, [mods]);
 
+  const installedPaths = useMemo(() => {
+    const paths: Record<string, string> = {};
+    for (const mod of mods ?? [])
+      if (mod.project_id && !mod.managed)
+        paths[`${mod.source}:${mod.project_id}`] = mod.path;
+    return paths;
+  }, [mods]);
+
   const lockedIds = useMemo(
     () =>
       locked
@@ -648,6 +656,7 @@ export function ModsView({
           mc={mc}
           loader={loader}
           installed={installedMap}
+          installedPaths={installedPaths}
           lockedIds={lockedIds}
           initial={detail}
           initialType={projectTypeOf(cat)}
@@ -663,6 +672,7 @@ export function ModsView({
             setDetail(null);
           }}
           onInstalled={() => load()}
+          onUninstalled={() => load()}
           onUnlock={
             locked
               ? () => {

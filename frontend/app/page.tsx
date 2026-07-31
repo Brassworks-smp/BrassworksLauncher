@@ -563,6 +563,9 @@ export default function Home() {
           delete next[id];
           return next;
         });
+        if (id === selectedRef.current && info.error) {
+          setError(info.error);
+        }
         if (info.needs_relogin) {
           toast(tr("account.sessionExpiredToast"), "error");
           setMsAuth({ status: "starting" });
@@ -570,8 +573,6 @@ export default function Home() {
             setMsAuth({ status: "error", message: String(e) });
           });
           setAccountsRecheck((n) => n + 1);
-        } else if (id === selectedRef.current && info.error) {
-          setError(info.error);
         }
         if (id === selectedRef.current) {
           api.modpackStatus(id).then(setModStatus).catch(() => {});
@@ -585,7 +586,10 @@ export default function Home() {
           win.setFocus().catch(() => {});
         }
         const crashed = !!info.error || (info.code !== null && info.code !== 0);
-        if ((crashed && s?.console_on_crash) || (!crashed && s?.console_on_quit))
+        if (
+          info.started &&
+          ((crashed && s?.console_on_crash) || (!crashed && s?.console_on_quit))
+        )
           setLogView(false);
       }),
     ];
@@ -1165,6 +1169,7 @@ export default function Home() {
             <InstancesView
               instances={instances}
               showFeatured={featuredEnabled}
+              foldersAboveInstances={settings?.folders_above_instances ?? false}
               folders={settings?.instance_folders ?? []}
               settingsAccent={settings?.accent_color ?? null}
               onSaveFolders={(f) => {

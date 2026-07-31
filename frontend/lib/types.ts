@@ -342,6 +342,7 @@ export interface LauncherSettings {
   close_to_tray: boolean;
   show_featured: boolean;
   instance_folders: InstanceFolder[];
+  folders_above_instances: boolean;
 
   auto_update: boolean;
   last_version: string | null;
@@ -456,6 +457,7 @@ export interface ExitInfo {
   error: string | null;
   needs_relogin: boolean;
   cancelled: boolean;
+  started: boolean;
 }
 
 

@@ -37,6 +37,7 @@ pub(crate) struct ExitInfo {
     pub(crate) error: Option<String>,
     pub(crate) needs_relogin: bool,
     pub(crate) cancelled: bool,
+    pub(crate) started: bool,
 }
 
 pub(crate) type CmdResult<T> = Result<T, String>;

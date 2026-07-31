@@ -490,6 +490,19 @@ export function SettingsView({
             </Card>
 
             <Card
+              title={t("settings.instances.title")}
+              icon={<FolderOpen size={14} />}
+              onReset={cardReset(["folders_above_instances"])}
+            >
+              <Toggle
+                label={t("settings.instances.foldersFirst")}
+                description={t("settings.instances.foldersFirstDesc")}
+                checked={settings.folders_above_instances}
+                onChange={(v) => patch({ folders_above_instances: v })}
+              />
+            </Card>
+
+            <Card
               title={t("settings.curseforge.title")}
               icon={<FlaskConical size={14} />}
               onReset={

@@ -214,8 +214,9 @@ export const installContent = (
   projectId: string,
   projectType: string,
   source: string,
+  filters: SearchFilters = EMPTY_FILTERS,
 ): Promise<InstallResult> =>
-  invoke("install_content", { instanceId, projectId, projectType, source });
+  invoke("install_content", { instanceId, projectId, projectType, source, filters });
 export const updateAllContent = (instanceId: string): Promise<string[]> =>
   invoke("update_all_content", { instanceId });
 export const updateSelectedContent = (
@@ -342,14 +343,16 @@ export const contentVersions = (
   projectId: string,
   projectType: string,
   source: string,
+  filters: SearchFilters = EMPTY_FILTERS,
 ): Promise<ContentVersion[]> =>
-  invoke("content_versions", { instanceId, projectId, projectType, source });
+  invoke("content_versions", { instanceId, projectId, projectType, source, filters });
 export const installContentVersion = (
   instanceId: string,
   projectId: string,
   versionId: string,
   projectType: string,
   source: string,
+  filters: SearchFilters = EMPTY_FILTERS,
 ): Promise<InstallResult> =>
   invoke("install_content_version", {
     instanceId,
@@ -357,6 +360,7 @@ export const installContentVersion = (
     versionId,
     projectType,
     source,
+    filters,
   });
 export const setModpackLocked = (
   instanceId: string,

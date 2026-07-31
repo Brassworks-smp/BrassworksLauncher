@@ -132,6 +132,7 @@ const uid = () =>
 export function InstancesView({
   instances,
   showFeatured = true,
+  foldersAboveInstances = false,
   folders,
   settingsAccent,
   selectedId,
@@ -151,6 +152,7 @@ export function InstancesView({
 }: {
   instances: Instance[];
   showFeatured?: boolean;
+  foldersAboveInstances?: boolean;
   folders: InstanceFolder[];
   settingsAccent?: string | null;
   selectedId: string | null;
@@ -271,6 +273,31 @@ export function InstancesView({
     />
   );
 
+  const folderGroups = folders.map((folder) => (
+    <FolderGroup
+      key={folder.id}
+      folder={folder}
+      compact={compact}
+      draggingFrom={draggingFrom}
+      settingsAccent={settingsAccent}
+      count={inFolder(folder.id).length}
+      dropIndex={dropIndexFor(inFolder(folder.id), draggedInstance)}
+      onToggle={() => updateFolder(folder.id, { collapsed: !folder.collapsed })}
+      onRename={(name) => updateFolder(folder.id, { name })}
+      onColor={(color) => updateFolder(folder.id, { color })}
+      onDelete={() => deleteFolder(folder.id)}
+      onDropInstance={(id) => assignById(id, folder.id)}
+    >
+      {inFolder(folder.id).length > 0 ? (
+        inFolder(folder.id).map((instance) => card(instance, folder.color ?? undefined))
+      ) : (
+        <div className="col-span-full rounded-lg border border-dashed border-edge px-3 py-5 text-center text-xs text-ink-600">
+          {tr("instances.emptyFolder")}
+        </div>
+      )}
+    </FolderGroup>
+  ));
+
   return (
     <div
       className="relative flex flex-1 flex-col overflow-hidden"
@@ -374,6 +401,8 @@ export function InstancesView({
           </Section>
         )}
 
+        {foldersAboveInstances && folderGroups}
+
         <Section
           title={tr("instances.yourInstances")}
           icon={<Box size={13} />}
@@ -395,30 +424,7 @@ export function InstancesView({
           </button>
         </Section>
 
-        {folders.map((f) => (
-          <FolderGroup
-            key={f.id}
-            folder={f}
-            compact={compact}
-            draggingFrom={draggingFrom}
-            settingsAccent={settingsAccent}
-            count={inFolder(f.id).length}
-            dropIndex={dropIndexFor(inFolder(f.id), draggedInstance)}
-            onToggle={() => updateFolder(f.id, { collapsed: !f.collapsed })}
-            onRename={(name) => updateFolder(f.id, { name })}
-            onColor={(color) => updateFolder(f.id, { color })}
-            onDelete={() => deleteFolder(f.id)}
-            onDropInstance={(id) => assignById(id, f.id)}
-          >
-            {inFolder(f.id).length > 0 ? (
-              inFolder(f.id).map((i) => card(i, f.color ?? undefined))
-            ) : (
-              <div className="col-span-full rounded-lg border border-dashed border-edge px-3 py-5 text-center text-xs text-ink-600">
-                {tr("instances.emptyFolder")}
-              </div>
-            )}
-          </FolderGroup>
-        ))}
+        {!foldersAboveInstances && folderGroups}
       </div>
 
       {exportTarget && (
