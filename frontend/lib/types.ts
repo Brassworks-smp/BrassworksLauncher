@@ -51,6 +51,8 @@ export interface Instance {
   share: PackShare | null;
   shared_by: string | null;
   shared_origin: boolean;
+  global_files_enabled: boolean;
+  global_files_profile: string | null;
   integrations: Record<string, boolean>;
   schematic_folders?: Record<string, string>;
 }
@@ -562,6 +564,22 @@ export interface ExportNode {
   size: number;
   default_selected: boolean;
   children: ExportNode[];
+}
+
+export interface GlobalFileProfile {
+  id: string;
+  name: string;
+  paths: string[];
+}
+
+export interface GlobalFilesConfig {
+  profiles: GlobalFileProfile[];
+}
+
+export interface GlobalFilesApplyReport {
+  linked: number;
+  detached: number;
+  backups: string[];
 }
 
 export interface ExportTree {

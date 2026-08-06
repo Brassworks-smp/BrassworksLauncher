@@ -4,6 +4,7 @@ import type { View } from "@/components/Sidebar";
 const VIEWS: { view: View; label: string; keywords?: string }[] = [
   { view: "play", label: "Play", keywords: "home launch" },
   { view: "instances", label: "Instances", keywords: "packs list" },
+  { view: "global-files", label: "Global Files", keywords: "sync shared configs schematics symlinks profiles" },
   { view: "mods", label: "Content", keywords: "mods resourcepacks shaders" },
   { view: "worlds", label: "Worlds", keywords: "saves singleplayer" },
   { view: "servers", label: "Servers", keywords: "multiplayer" },

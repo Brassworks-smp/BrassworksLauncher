@@ -198,7 +198,11 @@ pub struct Instance {
     /// This instance was installed from a Brassworks share link/config. Kept
     /// separately from `shared_by` because anonymous shares have no author.
     #[serde(default)]
-    pub shared_origin: bool;
+    pub shared_origin: bool,
+    #[serde(default = "default_true")]
+    pub global_files_enabled: bool,
+    #[serde(default)]
+    pub global_files_profile: Option<String>,
     #[serde(default)]
     pub integrations: std::collections::BTreeMap<String, bool>,
     #[serde(default)]
@@ -337,6 +341,8 @@ impl Instance {
             share: None,
             shared_by: None,
             shared_origin: false,
+            global_files_enabled: true,
+            global_files_profile: None,
             integrations: std::collections::BTreeMap::new(),
             schematic_folders: std::collections::BTreeMap::new(),
         }
@@ -396,6 +402,8 @@ impl Instance {
             share: None,
             shared_by: None,
             shared_origin: false,
+            global_files_enabled: true,
+            global_files_profile: None,
             integrations: std::collections::BTreeMap::new(),
             schematic_folders: std::collections::BTreeMap::new(),
         }

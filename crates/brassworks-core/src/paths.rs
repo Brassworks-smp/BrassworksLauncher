@@ -125,6 +125,22 @@ impl Paths {
         self.skins_dir().join("skins.json")
     }
 
+    pub fn global_files_dir(&self) -> PathBuf {
+        self.shared_dir().join("global-files")
+    }
+
+    pub fn global_files_profile_dir(&self, profile_id: &str) -> PathBuf {
+        self.global_files_dir().join(profile_id)
+    }
+
+    pub fn global_files_config(&self) -> PathBuf {
+        self.root.join("global-files.json")
+    }
+
+    pub fn global_files_backups(&self, instance_id: &str) -> PathBuf {
+        self.instance_dir(instance_id).join("global-files-backups")
+    }
+
     pub fn settings_file(&self) -> PathBuf {
         self.root.join("settings.json")
     }
@@ -210,6 +226,8 @@ mod paths_tests {
         assert_eq!(p.jvm_dir(), shared.join("jvm"));
         assert_eq!(p.skins_dir(), shared.join("skins"));
         assert_eq!(p.skins_index(), shared.join("skins").join("skins.json"));
+        assert_eq!(p.global_files_dir(), shared.join("global-files"));
+        assert_eq!(p.global_files_profile_dir("default"), shared.join("global-files/default"));
     }
 
     #[test]
@@ -219,6 +237,7 @@ mod paths_tests {
         assert_eq!(p.settings_file(), root.join("settings.json"));
         assert_eq!(p.accounts_file(), root.join("accounts.json"));
         assert_eq!(p.msa_db_file(), root.join("msa_accounts.json"));
+        assert_eq!(p.global_files_config(), root.join("global-files.json"));
     }
 
     #[test]

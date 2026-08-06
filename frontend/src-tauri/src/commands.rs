@@ -78,6 +78,85 @@ pub(crate) fn default_settings() -> LauncherSettings {
 }
 
 #[tauri::command]
+pub(crate) fn global_files_config(
+    state: State<AppState>,
+) -> CmdResult<brassworks_core::GlobalFilesConfig> {
+    state.launcher.global_files_config().map_err(err)
+}
+
+#[tauri::command]
+pub(crate) fn global_files_tree(
+    state: State<AppState>,
+    instance_id: String,
+) -> CmdResult<Vec<brassworks_core::export::ExportNode>> {
+    state.launcher.global_files_tree(&instance_id).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) async fn save_global_files_profile(
+    state: State<'_, AppState>,
+    profile: brassworks_core::GlobalFileProfile,
+    source_instance_id: String,
+) -> CmdResult<brassworks_core::GlobalFilesApplyReport> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.save_global_files_profile(profile, &source_instance_id).map_err(err)
+    }).await.map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn delete_global_files_profile(
+    state: State<'_, AppState>,
+    profile_id: String,
+) -> CmdResult<brassworks_core::GlobalFilesApplyReport> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.delete_global_files_profile(&profile_id).map_err(err))
+        .await.map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn set_instance_global_files(
+    state: State<'_, AppState>,
+    instance_id: String,
+    enabled: bool,
+    profile_id: Option<String>,
+) -> CmdResult<brassworks_core::GlobalFilesApplyReport> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        launcher.set_instance_global_files(&instance_id, enabled, profile_id.as_deref()).map_err(err)
+    }).await.map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn sync_global_files(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<brassworks_core::GlobalFilesApplyReport> {
+    let launcher = state.launcher.clone();
+    tauri::async_runtime::spawn_blocking(move || launcher.sync_global_files(&instance_id).map_err(err))
+        .await.map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn open_global_files_folder(state: State<AppState>) -> CmdResult<()> {
+    let path = state.launcher.paths().global_files_dir();
+    std::fs::create_dir_all(&path).map_err(err)?;
+    open_in_file_manager(&path).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) fn reveal_global_files_config(state: State<AppState>) -> CmdResult<()> {
+    let path = state.launcher.paths().global_files_config();
+    if !path.exists() {
+        brassworks_core::global_files::save(
+            state.launcher.paths(),
+            &state.launcher.global_files_config().map_err(err)?,
+        ).map_err(err)?;
+    }
+    open_in_file_manager(&path).map_err(err)
+}
+
+#[tauri::command]
 pub(crate) fn featured_packs() -> Vec<brassworks_core::FeaturedPack> {
     brassworks_core::featured_packs()
 }

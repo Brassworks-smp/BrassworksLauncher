@@ -11,6 +11,7 @@ import {
   Server,
   Search,
   Blocks,
+  Link2,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useT } from "@/lib/i18n";
@@ -28,6 +29,7 @@ export type View =
   | "schematics"
   | "screenshots"
   | "skin"
+  | "global-files"
   | "settings"
   | "instance-settings";
 
@@ -40,6 +42,7 @@ const NAV: { id: View; tkey: string; icon: typeof Play }[] = [
   { id: "schematics", tkey: "sidebar.schematics", icon: Blocks },
   { id: "skin", tkey: "sidebar.skins", icon: Shirt },
   { id: "screenshots", tkey: "sidebar.screenshots", icon: ImageIcon },
+  { id: "global-files", tkey: "sidebar.globalFiles", icon: Link2 },
   { id: "settings", tkey: "sidebar.settings", icon: Settings },
 ];
 

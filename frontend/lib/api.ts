@@ -37,6 +37,10 @@ import type {
   ExportMeta,
   ExportConfig,
   ExportFormat,
+  ExportNode,
+  GlobalFileProfile,
+  GlobalFilesConfig,
+  GlobalFilesApplyReport,
   GitProvider,
   PublishResult,
   PackShare,
@@ -93,6 +97,27 @@ export const saveSettings = (settings: LauncherSettings): Promise<void> =>
   invoke("save_settings", { settings });
 export const defaultSettings = (): Promise<LauncherSettings> =>
   invoke("default_settings");
+export const globalFilesConfig = (): Promise<GlobalFilesConfig> =>
+  invoke("global_files_config");
+export const globalFilesTree = (instanceId: string): Promise<ExportNode[]> =>
+  invoke("global_files_tree", { instanceId });
+export const saveGlobalFilesProfile = (
+  profile: GlobalFileProfile,
+  sourceInstanceId: string,
+): Promise<GlobalFilesApplyReport> =>
+  invoke("save_global_files_profile", { profile, sourceInstanceId });
+export const deleteGlobalFilesProfile = (profileId: string): Promise<GlobalFilesApplyReport> =>
+  invoke("delete_global_files_profile", { profileId });
+export const setInstanceGlobalFiles = (
+  instanceId: string,
+  enabled: boolean,
+  profileId?: string,
+): Promise<GlobalFilesApplyReport> =>
+  invoke("set_instance_global_files", { instanceId, enabled, profileId: profileId ?? null });
+export const syncGlobalFiles = (instanceId: string): Promise<GlobalFilesApplyReport> =>
+  invoke("sync_global_files", { instanceId });
+export const openGlobalFilesFolder = (): Promise<void> => invoke("open_global_files_folder");
+export const revealGlobalFilesConfig = (): Promise<void> => invoke("reveal_global_files_config");
 export const featuredPacks = (): Promise<FeaturedPack[]> =>
   invoke("featured_packs");
 

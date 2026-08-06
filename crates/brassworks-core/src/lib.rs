@@ -17,6 +17,7 @@ pub mod error;
 pub mod export;
 pub mod featured;
 pub mod forge;
+pub mod global_files;
 pub mod image_cache;
 pub mod import;
 pub mod instance;
@@ -46,6 +47,7 @@ pub use createmod::{
     InstalledSchematic, SchematicCard, SchematicDetail, SchematicFilters, SchematicHome,
     SchematicSearch, SchematicSearchParams, SchematicStat,
 };
+pub use global_files::{GlobalFileProfile, GlobalFilesApplyReport, GlobalFilesConfig};
 pub use schematics::{SchematicProviderStatus, SchematicsStatus};
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
@@ -385,6 +387,132 @@ impl Launcher {
 
     pub fn save_settings(&self, settings: &LauncherSettings) -> Result<()> {
         write_json(&self.paths.settings_file(), settings, "settings")
+    }
+
+    pub fn global_files_config(&self) -> Result<GlobalFilesConfig> {
+        let config = global_files::load(&self.paths)?;
+        if !self.paths.global_files_config().exists() {
+            global_files::save(&self.paths, &config)?;
+        }
+        Ok(config)
+    }
+
+    pub fn global_files_tree(&self, instance_id: &str) -> Result<Vec<export::ExportNode>> {
+        self.instances().get(instance_id)?;
+        Ok(global_files::selectable_tree(&self.paths, instance_id))
+    }
+
+    pub fn save_global_files_profile(
+        &self,
+        mut profile: GlobalFileProfile,
+        source_instance_id: &str,
+    ) -> Result<GlobalFilesApplyReport> {
+        self.instances().get(source_instance_id)?;
+        profile.id = global_files::profile_id(&profile.id);
+        profile.name = profile.name.trim().to_string();
+        if profile.name.is_empty() {
+            return Err(CoreError::Modpack("profile name cannot be empty".to_string()));
+        }
+        profile.paths = global_files::normalize_paths(&profile.paths)?;
+        let mut config = global_files::load(&self.paths)?;
+        let old = config.profiles.iter().find(|item| item.id == profile.id).cloned();
+        if config.profiles.iter().any(|item| {
+            item.id != profile.id && item.name.eq_ignore_ascii_case(&profile.name)
+        }) {
+            return Err(CoreError::Modpack("a global-files profile with that name already exists".to_string()));
+        }
+        let installed_content = self.modpack_for(source_instance_id).list_mods()?;
+        global_files::seed_profile(
+            &self.paths,
+            &profile,
+            source_instance_id,
+            &installed_content,
+        )?;
+        if let Some(position) = config.profiles.iter().position(|item| item.id == profile.id) {
+            config.profiles[position] = profile.clone();
+        } else {
+            config.profiles.push(profile.clone());
+        }
+        global_files::save(&self.paths, &config)?;
+
+        let old_paths = old.map(|item| item.paths).unwrap_or_default();
+        let removed: Vec<String> = old_paths
+            .into_iter()
+            .filter(|path| !profile.paths.iter().any(|selected| selected == path))
+            .collect();
+        let mut report = GlobalFilesApplyReport::default();
+        for instance in self.instances().list()? {
+            let selected = instance.global_files_profile.as_deref().unwrap_or(global_files::DEFAULT_PROFILE_ID);
+            if !instance.global_files_enabled || selected != profile.id {
+                continue;
+            }
+            merge_global_report(&mut report, global_files::detach_profile(&self.paths, &instance, &removed)?);
+            merge_global_report(&mut report, global_files::apply_profile(&self.paths, &instance, &profile)?);
+        }
+        Ok(report)
+    }
+
+    pub fn delete_global_files_profile(&self, profile_id: &str) -> Result<GlobalFilesApplyReport> {
+        if global_files::profile_id(profile_id) != profile_id {
+            return Err(CoreError::Modpack("invalid global-files profile id".to_string()));
+        }
+        if profile_id == global_files::DEFAULT_PROFILE_ID {
+            return Err(CoreError::Modpack("the default global-files profile cannot be deleted".to_string()));
+        }
+        let mut config = global_files::load(&self.paths)?;
+        let old = config.profiles.iter().find(|profile| profile.id == profile_id).cloned()
+            .ok_or_else(|| CoreError::Modpack("global-files profile not found".to_string()))?;
+        let default = config.profiles.iter().find(|profile| profile.id == global_files::DEFAULT_PROFILE_ID)
+            .cloned().unwrap_or_else(|| GlobalFilesConfig::default().profiles.into_iter().next().unwrap());
+        let mut report = GlobalFilesApplyReport::default();
+        let manager = self.instances();
+        for mut instance in manager.list()? {
+            if instance.global_files_profile.as_deref() != Some(profile_id) {
+                continue;
+            }
+            merge_global_report(&mut report, global_files::detach_profile(&self.paths, &instance, &old.paths)?);
+            instance.global_files_profile = None;
+            manager.update(&instance)?;
+            if instance.global_files_enabled {
+                merge_global_report(&mut report, global_files::apply_profile(&self.paths, &instance, &default)?);
+            }
+        }
+        config.profiles.retain(|profile| profile.id != profile_id);
+        global_files::save(&self.paths, &config)?;
+        let _ = global_files::archive_profile(&self.paths, profile_id)?;
+        Ok(report)
+    }
+
+    pub fn set_instance_global_files(
+        &self,
+        instance_id: &str,
+        enabled: bool,
+        profile_id: Option<&str>,
+    ) -> Result<GlobalFilesApplyReport> {
+        let manager = self.instances();
+        let mut instance = manager.get(instance_id)?;
+        let config = global_files::load(&self.paths)?;
+        let old_id = instance.global_files_profile.as_deref().unwrap_or(global_files::DEFAULT_PROFILE_ID);
+        let old = config.profiles.iter().find(|profile| profile.id == old_id).cloned();
+        let mut report = GlobalFilesApplyReport::default();
+        if let Some(old) = old {
+            merge_global_report(&mut report, global_files::detach_profile(&self.paths, &instance, &old.paths)?);
+        }
+        let new_id = profile_id.unwrap_or(global_files::DEFAULT_PROFILE_ID);
+        let profile = config.profiles.iter().find(|profile| profile.id == new_id).cloned()
+            .ok_or_else(|| CoreError::Modpack("global-files profile not found".to_string()))?;
+        instance.global_files_enabled = enabled;
+        instance.global_files_profile = (new_id != global_files::DEFAULT_PROFILE_ID).then(|| new_id.to_string());
+        manager.update(&instance)?;
+        if enabled {
+            merge_global_report(&mut report, global_files::apply_profile(&self.paths, &instance, &profile)?);
+        }
+        Ok(report)
+    }
+
+    pub fn sync_global_files(&self, instance_id: &str) -> Result<GlobalFilesApplyReport> {
+        let instance = self.instances().get(instance_id)?;
+        global_files::sync_instance(&self.paths, &instance)
     }
 
 
@@ -3601,6 +3729,12 @@ where
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
         Err(e) => Err(CoreError::io(path, e)),
     }
+}
+
+fn merge_global_report(target: &mut GlobalFilesApplyReport, incoming: GlobalFilesApplyReport) {
+    target.linked += incoming.linked;
+    target.detached += incoming.detached;
+    target.backups.extend(incoming.backups);
 }
 
 fn write_json<T: serde::Serialize>(

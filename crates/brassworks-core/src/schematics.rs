@@ -621,9 +621,7 @@ pub fn record(
         .file_name()
         .map(|v| v.to_string_lossy().to_string())
         .unwrap_or_else(|| format!("{id}.{format}"));
-    index.entries.insert(
-        path_key(path),
-        InstalledMetadata {
+    let metadata = InstalledMetadata {
             provider: provider.into(),
             project_id: id.into(),
             format: format.into(),
@@ -638,8 +636,11 @@ pub fn record(
             image_url: detail.and_then(|d| d.featured_image.clone()),
             author: detail.and_then(|d| d.author.clone()),
             web_url: detail.and_then(|d| d.web_url.clone()),
-        },
-    );
+        };
+    index.entries.insert(path_key(path), metadata.clone());
+    // Global schematic folders share this index between instances. Absolute
+    // paths differ per instance, while the filename remains portable.
+    index.entries.insert(filename, metadata);
     write_index(index_path, &index)
 }
 

@@ -36,6 +36,7 @@ import { TooltipLayer } from "@/components/Tooltip";
 import { SettingsView } from "@/components/SettingsView";
 import { InstancesView } from "@/components/InstancesView";
 import { InstanceSettingsView } from "@/components/InstanceSettingsView";
+import { GlobalFilesView } from "@/components/GlobalFilesView";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { MicrosoftModal, type MsAuthState } from "@/components/MicrosoftModal";
 import { LogUploadModal } from "@/components/LogUploadModal";
@@ -1385,6 +1386,13 @@ export default function Home() {
                 setOnboardingOpen(true);
               }}
               onError={(e) => setError(e)}
+            />
+          )}
+          {view === "global-files" && (
+            <GlobalFilesView
+              instances={instances}
+              selectedInstanceId={selectedId}
+              onInstancesChanged={refreshInstances}
             />
           )}
           </div>

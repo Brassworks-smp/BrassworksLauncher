@@ -311,6 +311,13 @@ pub fn launch_instance(
         PackSource::None => None,
     };
 
+    (on_progress)(LaunchProgress::new(
+        &instance_id,
+        LaunchStage::Resolving,
+        "Repairing global file links",
+    ));
+    crate::global_files::sync_instance(req.paths, req.instance)?;
+
     let mut handler = ProgressHandler {
         instance_id: instance_id.clone(),
         sink: on_progress,
