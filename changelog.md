@@ -1,30 +1,27 @@
 # 0.8.1
 
-## Additions
+## Schematic conversion
 
-- Added Abfielder and Minecraft Schematics as alternate schematic providers alongside CreateMod.com, with a provider-neutral backend that makes additional providers easier to add.
-- Added automatic provider availability detection for Create on Forge, NeoForge, Fabric, and Quilt; Litematica, Forgematica, Schematica-compatible forks; and WorldEdit projects from both Modrinth and CurseForge.
-- Added independent Auto, On, and Off integration controls for CreateMod.com, Abfielder, and Minecraft Schematics.
-- Added per-instance schematic folders with a separate path for `.nbt`, `.litematic`, `.schem`, `.schematic`, and `.mcstructure` files. WorldEdit-only instances default WorldEdit formats to `config/worldedit/schematics`.
-- Added native provider filters: Abfielder tags and Minecraft Schematics categories, themes, and build sizes.
-- Added provider-specific accents and provider-aware installed-schematic filters, metadata, links, and file-format compatibility.
+- Added built-in conversion between Create/Vanilla `.nbt`, Litematica `.litematic`, WorldEdit/Sponge `.schem`, and legacy `.schematic` files.
+- Added format selection when downloading schematics, automatic conversion for non-native formats, and a Convert action in both the installed list and schematic details.
+- Added cancellable download and conversion progress, including Minecraft Schematics browser-download imports.
+- Added conversion provenance to installed schematic cards and details, showing the original and converted formats alongside the actual filename.
+- Converted files now use explicit, collision-safe names such as `build-converted-from-nbt.schem`, preserving the original and numbering repeated conversions instead of overwriting files.
+- Removed the incorrect 48-block-per-axis restriction for Create `.nbt` files and matched Create's sparse structure output so large schematics remain compact.
+- Fixed sparse Create structures turning air into palette index zero after `.litematic`, `.schem`, or `.schematic` round trips.
+- Added compatibility guidance for Create/Vanilla, Litematica/Forgematica, and WorldEdit formats.
 
-## Improvements
+## Downloads and updates
 
-- Abfielder is shown before Minecraft Schematics and is available to both Litematica-compatible and WorldEdit instances. Its searches explicitly request free schematic products and its full tag catalog is cached when available.
-- Minecraft Schematics excludes paid and subscription-only creations. Downloads clearly explain the account requirement, open the correct provider page, watch the user's Downloads folders, and import the completed file using the existing manual-download workflow.
-- Download format selection is limited to formats compatible with the current instance and is skipped when only one format is available.
-- Provider descriptions, authors, images, downloads, categories, tags, supported formats, and other available metadata are cached and displayed without inventing unsupported view counts.
-- The shared cache now handles provider metadata, filters, images, and supported downloads. Rate-limited Abfielder and Minecraft Schematics requests fall back to bounded, locally cached client-side fetching.
-- CreateMod.com browsing now always uses the shared cache instead of permanently bypassing it after a transient health-check failure. The obsolete direct API-key fallback was removed.
-- Schematic imports, removals, folder opening, metadata tracking, and installed-file discovery now support every configured schematic format and custom folder.
+- Added progress toasts and cancellation for mod, resource-pack, shader-pack, datapack, schematic, and launcher-update downloads.
+- Added separate conversion progress when a downloaded schematic requires conversion.
+- Made Minecraft Schematics download watching wait for files to finish changing before import and retry transient import failures.
+- Refreshed instance capabilities after content installs, removals, updates, enable/disable changes, and manual refreshes so the Schematics sidebar tab appears immediately.
 
-## Fixes
+## Content exports
 
-- Fixed CreateMod.com searches such as “iron farm” failing while decoding `/api/schematics` responses.
-- Fixed download cards showing a completed check mark before a download finished or after a failed download.
-- Fixed Minecraft Schematics cards opening unrelated CreateMod.com URLs when provider IDs overlap.
-- Fixed Minecraft Schematics pagination and infinite scrolling for native category, theme, size, and latest listings.
-- Fixed stale or incomplete provider metadata only appearing after opening a schematic detail page.
-- Fixed Minecraft Schematics manual-download actions using an ordinary download icon instead of clearly indicating the browser handoff.
-- Fixed transient cache failures being hidden behind a misleading `401 Unauthorized` response from CreateMod.com.
+- Fixed rich HTML exports displaying escaped Markdown and HTML instead of rendered project descriptions.
+- Fixed mixed Markdown/HTML and nested disclosure blocks breaking entries such as EMI add-ons.
+- Made exported cards, images, tables, filenames, code blocks, and long links responsive instead of overflowing the page.
+- Applied the launcher's active theme and accent color to HTML exports.
+- Sanitized rendered project descriptions before writing rich HTML or Markdown exports.
