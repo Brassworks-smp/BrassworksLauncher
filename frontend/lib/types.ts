@@ -377,6 +377,7 @@ export interface LauncherSettings {
   high_contrast: boolean;
   close_to_tray: boolean;
   show_featured: boolean;
+  global_files_enabled: boolean;
   instance_folders: InstanceFolder[];
   folders_above_instances: boolean;
 
@@ -384,6 +385,12 @@ export interface LauncherSettings {
   last_version: string | null;
   download_concurrency: number;
   manual_download_folders: string[];
+}
+
+export interface GlobalFilesSymlinkSupport {
+  windows: boolean;
+  supported: boolean;
+  error: string | null;
 }
 
 export interface BlockedMod {

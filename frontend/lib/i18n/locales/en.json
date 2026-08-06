@@ -72,7 +72,15 @@
     "off": "Off",
     "repairLinks": "Repair links",
     "saved": "Global files updated",
-    "savedWithBackups": "Global files updated; {count} replaced local item(s) were backed up"
+    "savedWithBackups": "Global files updated; {count} replaced local item(s) were backed up",
+    "windowsSetupTitle": "Windows needs permission for links",
+    "windowsSetupBody": "Global Files uses Windows symbolic links. Brassworks tested both file and folder links and Windows refused to create them.",
+    "windowsSetupStep1": "Open Developer settings.",
+    "windowsSetupStep2": "Turn on Developer Mode and accept the Windows confirmation.",
+    "windowsSetupStep3": "Return to Brassworks, select Check again, then retry your Global Files action.",
+    "windowsSetupAdminFallback": "If your PC is managed and Developer Mode is unavailable, an administrator must grant your account the Create symbolic links user right or run Brassworks with elevated permission.",
+    "openDeveloperSettings": "Open Developer settings",
+    "checkAgain": "Check again"
   },
   "schematics": {
     "heroTitle": "Schematics",
@@ -420,6 +428,15 @@
       "title": "Featured content",
       "toggle": "Featured packs & servers",
       "toggleDesc": "Show featured packs in the Instances tab, featured servers in server lists, and the live player count and news tiles on the Play screen. Turn off for a clean, self-curated launcher."
+    },
+    "globalFiles": {
+      "title": "Global Files",
+      "toggle": "Enable Global Files",
+      "toggleDesc": "Share files and folders across instances. Turning this off hides Global Files everywhere and replaces active links with normal local copies; turning it back on restores enabled instance profiles.",
+      "warningTitle": "Disable Global Files?",
+      "warningBody": "This disables Global Files throughout Brassworks and detaches every active symlink managed by it across all instances.",
+      "warningDetail": "Linked files and folders are copied back into each instance as normal local copies. Shared data and profiles are not deleted.",
+      "disable": "Disable Global Files"
     },
     "instances": {
       "title": "Instance layout",

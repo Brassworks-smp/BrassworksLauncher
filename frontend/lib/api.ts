@@ -41,6 +41,7 @@ import type {
   GlobalFileProfile,
   GlobalFilesConfig,
   GlobalFilesApplyReport,
+  GlobalFilesSymlinkSupport,
   GitProvider,
   PublishResult,
   PackShare,
@@ -99,6 +100,10 @@ export const defaultSettings = (): Promise<LauncherSettings> =>
   invoke("default_settings");
 export const globalFilesConfig = (): Promise<GlobalFilesConfig> =>
   invoke("global_files_config");
+export const globalFilesSymlinkSupport = (): Promise<GlobalFilesSymlinkSupport> =>
+  invoke("global_files_symlink_support");
+export const openWindowsDeveloperSettings = (): Promise<void> =>
+  invoke("open_windows_developer_settings");
 export const globalFilesTree = (instanceId: string): Promise<ExportNode[]> =>
   invoke("global_files_tree", { instanceId });
 export const saveGlobalFilesProfile = (

@@ -37,6 +37,7 @@ import { SettingsView } from "@/components/SettingsView";
 import { InstancesView } from "@/components/InstancesView";
 import { InstanceSettingsView } from "@/components/InstanceSettingsView";
 import { GlobalFilesView } from "@/components/GlobalFilesView";
+import { useGlobalFilesSymlinkSupport } from "@/components/GlobalFilesSymlinkSetup";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { MicrosoftModal, type MsAuthState } from "@/components/MicrosoftModal";
 import { LogUploadModal } from "@/components/LogUploadModal";
@@ -153,6 +154,15 @@ export default function Home() {
   
   const [importFromOnboarding, setImportFromOnboarding] = useState(false);
   const [tabIntro, setTabIntro] = useState<View | null>(null);
+  const { ensureSymlinkSupport, symlinkSetupModal } =
+    useGlobalFilesSymlinkSupport(settings?.global_files_enabled ?? false);
+
+  useEffect(() => {
+    if (view === "global-files" && settings && !settings.global_files_enabled) {
+      setTabIntro((current) => current === "global-files" ? null : current);
+      setView("settings");
+    }
+  }, [view, settings]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -488,6 +498,7 @@ export default function Home() {
   
   useEffect(() => {
     if (!settings || onboardingOpen) return;
+    if (view === "global-files" && !settings.global_files_enabled) return;
     if (!hasTabIntro(view) || tabIntroSeen(view)) return;
     if (INSTANCE_VIEWS.includes(view) && !selectedId) return;
     setTabIntro(view);
@@ -1116,6 +1127,7 @@ export default function Home() {
           hasInstance={!!selectedId}
           skinsAvailable={skinsAvailable}
           schematicsAvailable={schematicsAvailable}
+          globalFilesAvailable={settings?.global_files_enabled ?? true}
           activeName={instance?.name}
           onActiveClick={() => {
             if (selectedId) {
@@ -1336,6 +1348,7 @@ export default function Home() {
               modStatus={gearId === selectedId ? modStatus : null}
               maintaining={gearMaintaining}
               progress={gearProgress}
+              ensureSymlinkSupport={ensureSymlinkSupport}
               onBack={() => setView("instances")}
               onSaveInstance={onSaveInstance}
               onRefresh={() => void refreshInstances()}
@@ -1368,13 +1381,19 @@ export default function Home() {
               settings={settings}
               javaInstanceId={selectedId}
               appVersion={appVer}
+              ensureSymlinkSupport={ensureSymlinkSupport}
               onShowChangelog={() =>
                 setChangelog({ version: appVer, updated: false })
               }
               onUpdateInstalled={(v) => setRestartVersion(v)}
               onSaveSettings={(s) => {
                 setSettings(s);
-                api.saveSettings(s).catch((e) => setError(String(e)));
+                api.saveSettings(s).catch(async (e) => {
+                  setError(String(e));
+                  try {
+                    setSettings(await api.getSettings());
+                  } catch {}
+                });
               }}
               onReplayOnboarding={() => {
                 try {
@@ -1388,11 +1407,12 @@ export default function Home() {
               onError={(e) => setError(e)}
             />
           )}
-          {view === "global-files" && (
+          {view === "global-files" && settings?.global_files_enabled && (
             <GlobalFilesView
               instances={instances}
               selectedInstanceId={selectedId}
               onInstancesChanged={refreshInstances}
+              ensureSymlinkSupport={ensureSymlinkSupport}
             />
           )}
           </div>
@@ -1563,6 +1583,7 @@ export default function Home() {
       {paletteOpen && (
         <CommandPalette ctx={cmdCtx} onClose={() => setPaletteOpen(false)} />
       )}
+      {symlinkSetupModal}
       <ToastHost />
       <TooltipLayer />
     </div>

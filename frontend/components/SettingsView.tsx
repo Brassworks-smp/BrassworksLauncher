@@ -25,6 +25,8 @@ import {
   Languages,
   ExternalLink,
   ShieldCheck,
+  Link2,
+  AlertTriangle,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
@@ -68,6 +70,7 @@ export function SettingsView({
   settings,
   javaInstanceId,
   appVersion,
+  ensureSymlinkSupport,
   onSaveSettings,
   onError,
   onShowChangelog,
@@ -77,6 +80,7 @@ export function SettingsView({
   settings: LauncherSettings | null;
   javaInstanceId: string | null;
   appVersion: string | null;
+  ensureSymlinkSupport: () => Promise<boolean>;
   onSaveSettings: (s: LauncherSettings) => void;
   onError: (e: string) => void;
   onShowChangelog: () => void;
@@ -101,6 +105,7 @@ export function SettingsView({
   
   const [resetNonce, setResetNonce] = useState(0);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
+  const [confirmDisableGlobalFiles, setConfirmDisableGlobalFiles] = useState(false);
   useEffect(() => {
     if (api.isTauri()) api.defaultSettings().then(setDefaults).catch(() => {});
   }, []);
@@ -110,6 +115,14 @@ export function SettingsView({
       api.cliStatus().then(setCli).catch(() => {});
     }
   }, [tab]);
+  useEffect(() => {
+    if (!confirmDisableGlobalFiles) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmDisableGlobalFiles(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [confirmDisableGlobalFiles]);
 
   if (!settings) {
     return (
@@ -491,6 +504,27 @@ export function SettingsView({
             </Card>
 
             <Card
+              title={t("settings.globalFiles.title")}
+              icon={<Link2 size={14} />}
+              onReset={cardReset(["global_files_enabled"])}
+            >
+              <Toggle
+                label={t("settings.globalFiles.toggle")}
+                description={t("settings.globalFiles.toggleDesc")}
+                checked={settings.global_files_enabled}
+                onChange={(v) => {
+                  if (!v) {
+                    setConfirmDisableGlobalFiles(true);
+                    return;
+                  }
+                  void ensureSymlinkSupport().then((supported) => {
+                    if (supported) patch({ global_files_enabled: true });
+                  });
+                }}
+              />
+            </Card>
+
+            <Card
               title={t("settings.instances.title")}
               icon={<FolderOpen size={14} />}
               onReset={cardReset(["folders_above_instances"])}
@@ -776,6 +810,52 @@ export function SettingsView({
           </div>
         )}
       </div>
+
+      {confirmDisableGlobalFiles && (
+        <div
+          className="modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="disable-global-files-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setConfirmDisableGlobalFiles(false);
+          }}
+        >
+          <div className="rise w-[460px] max-w-full rounded-xl border border-amber-500/30 bg-ink-900 p-6 shadow-2xl">
+            <div className="mb-3 flex items-center gap-2 text-amber-300">
+              <AlertTriangle size={20} />
+              <h2 id="disable-global-files-title" className="font-mc text-lg tracking-wide">
+                {t("settings.globalFiles.warningTitle")}
+              </h2>
+            </div>
+            <div className="space-y-2 text-sm leading-relaxed text-ink-600">
+              <p>{t("settings.globalFiles.warningBody")}</p>
+              <p className="font-medium text-amber-300/90">
+                {t("settings.globalFiles.warningDetail")}
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                autoFocus
+                onClick={() => setConfirmDisableGlobalFiles(false)}
+                className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmDisableGlobalFiles(false);
+                  patch({ global_files_enabled: false });
+                }}
+                className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-500/20"
+              >
+                <AlertTriangle size={14} />
+                {t("settings.globalFiles.disable")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

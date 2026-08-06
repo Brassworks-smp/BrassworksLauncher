@@ -57,8 +57,11 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub close_to_tray: bool,
 
-                #[serde(default = "default_true", alias = "show_featured_servers")]
+    #[serde(default = "default_true", alias = "show_featured_servers")]
     pub show_featured: bool,
+
+    #[serde(default = "default_true")]
+    pub global_files_enabled: bool,
 
     #[serde(default)]
     pub instance_folders: Vec<InstanceFolder>,
@@ -131,6 +134,7 @@ impl Default for LauncherSettings {
             high_contrast: false,
             close_to_tray: false,
             show_featured: true,
+            global_files_enabled: true,
             instance_folders: Vec::new(),
             folders_above_instances: false,
 
@@ -139,5 +143,21 @@ impl Default for LauncherSettings {
             download_concurrency: packwiz::DEFAULT_CONCURRENCY,
             manual_download_folders: default_download_folders(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LauncherSettings;
+
+    #[test]
+    fn global_files_are_enabled_by_default() {
+        assert!(LauncherSettings::default().global_files_enabled);
+    }
+
+    #[test]
+    fn older_settings_enable_global_files_when_the_field_is_missing() {
+        let settings: LauncherSettings = serde_json::from_str("{}").unwrap();
+        assert!(settings.global_files_enabled);
     }
 }

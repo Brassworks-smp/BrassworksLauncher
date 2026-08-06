@@ -70,6 +70,7 @@ export function Sidebar({
   hasInstance = true,
   skinsAvailable = true,
   schematicsAvailable = true,
+  globalFilesAvailable = true,
   footer,
 }: {
   view: View;
@@ -85,6 +86,7 @@ export function Sidebar({
 
   skinsAvailable?: boolean;
   schematicsAvailable?: boolean;
+  globalFilesAvailable?: boolean;
   footer?: React.ReactNode;
 }) {
   const t = useT();
@@ -130,7 +132,9 @@ export function Sidebar({
 
       <nav className="no-drag mt-2 flex flex-col">
         {NAV.map(({ id, tkey, icon: Icon }) => {
-          const visible = id !== "schematics" || schematicsAvailable;
+          const visible =
+            (id !== "schematics" || schematicsAvailable) &&
+            (id !== "global-files" || globalFilesAvailable);
           const active =
             view === id || (id === "instances" && view === "instance-settings");
           const noInstance = !hasInstance && INSTANCE_VIEWS.includes(id);

@@ -478,6 +478,8 @@ pub fn run() {
             commands::save_settings,
             commands::default_settings,
             commands::global_files_config,
+            commands::global_files_symlink_support,
+            commands::open_windows_developer_settings,
             commands::global_files_tree,
             commands::save_global_files_profile,
             commands::delete_global_files_profile,

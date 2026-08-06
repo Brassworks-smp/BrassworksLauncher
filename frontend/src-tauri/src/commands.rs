@@ -85,6 +85,29 @@ pub(crate) fn global_files_config(
 }
 
 #[tauri::command]
+pub(crate) fn global_files_symlink_support(
+    state: State<AppState>,
+) -> brassworks_core::GlobalFilesSymlinkSupport {
+    brassworks_core::global_files::symlink_support(state.launcher.paths())
+}
+
+#[tauri::command]
+pub(crate) fn open_windows_developer_settings() -> CmdResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg("ms-settings:developers")
+            .spawn()
+            .map(|_| ())
+            .map_err(err)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Windows Developer settings are only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
 pub(crate) fn global_files_tree(
     state: State<AppState>,
     instance_id: String,
@@ -139,6 +162,7 @@ pub(crate) async fn sync_global_files(
 
 #[tauri::command]
 pub(crate) fn open_global_files_folder(state: State<AppState>) -> CmdResult<()> {
+    state.launcher.global_files_config().map_err(err)?;
     let path = state.launcher.paths().global_files_dir();
     std::fs::create_dir_all(&path).map_err(err)?;
     open_in_file_manager(&path).map_err(err)
@@ -146,13 +170,8 @@ pub(crate) fn open_global_files_folder(state: State<AppState>) -> CmdResult<()> 
 
 #[tauri::command]
 pub(crate) fn reveal_global_files_config(state: State<AppState>) -> CmdResult<()> {
+    state.launcher.global_files_config().map_err(err)?;
     let path = state.launcher.paths().global_files_config();
-    if !path.exists() {
-        brassworks_core::global_files::save(
-            state.launcher.paths(),
-            &state.launcher.global_files_config().map_err(err)?,
-        ).map_err(err)?;
-    }
     open_in_file_manager(&path).map_err(err)
 }
 

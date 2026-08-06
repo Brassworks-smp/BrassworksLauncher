@@ -160,6 +160,7 @@ export function InstanceSettingsView({
   modStatus,
   maintaining,
   progress,
+  ensureSymlinkSupport,
   onBack,
   onSaveInstance,
   onDeleted,
@@ -173,6 +174,7 @@ export function InstanceSettingsView({
   modStatus: ModpackStatus | null;
   maintaining: boolean;
   progress: LaunchProgress | null;
+  ensureSymlinkSupport: () => Promise<boolean>;
   onBack: () => void;
   onSaveInstance: (i: Instance) => void;
   onDeleted: (id: string) => void;
@@ -200,13 +202,18 @@ export function InstanceSettingsView({
     setGlobalFilesProfile(instance.global_files_profile ?? "default");
   }, [instance.global_files_enabled, instance.global_files_profile]);
   useEffect(() => {
+    if (!settings.global_files_enabled) {
+      setGlobalProfiles([]);
+      return;
+    }
     api
       .globalFilesConfig()
       .then((config) => setGlobalProfiles(config.profiles))
       .catch((error) => toast(String(error), "error"));
-  }, []);
+  }, [settings.global_files_enabled]);
 
   const updateGlobalFiles = async (enabled: boolean, profileId = globalFilesProfile) => {
+    if (enabled && !(await ensureSymlinkSupport())) return;
     setGlobalFilesBusy(true);
     try {
       await api.setInstanceGlobalFiles(instance.id, enabled, profileId);
@@ -425,35 +432,37 @@ export function InstanceSettingsView({
               )}
           </Card>
 
-          <Card title={t("instanceSettings.globalFiles.title")} icon={<Link2 size={14} />}>
-            <Toggle
-              label={t("instanceSettings.globalFiles.enabled")}
-              description={t("instanceSettings.globalFiles.enabledHint")}
-              checked={globalFilesEnabled}
-              onChange={(enabled) => void updateGlobalFiles(enabled)}
-            />
-            <Field
-              label={t("instanceSettings.globalFiles.profile")}
-              hint={t("instanceSettings.globalFiles.profileHint")}
-            >
-              <Dropdown
-                disabled={globalFilesBusy || !globalFilesEnabled}
-                value={globalFilesProfile}
-                onChange={(profileId) => void updateGlobalFiles(true, profileId)}
-                options={globalProfiles.map((profile) => ({
-                  value: profile.id,
-                  label: profile.name,
-                }))}
-                placeholder={t("instanceSettings.globalFiles.loading")}
+          {settings.global_files_enabled && (
+            <Card title={t("instanceSettings.globalFiles.title")} icon={<Link2 size={14} />}>
+              <Toggle
+                label={t("instanceSettings.globalFiles.enabled")}
+                description={t("instanceSettings.globalFiles.enabledHint")}
+                checked={globalFilesEnabled}
+                onChange={(enabled) => void updateGlobalFiles(enabled)}
               />
-            </Field>
-            {globalFilesBusy && (
-              <div className="flex items-center gap-2 text-xs text-ink-600">
-                <Loader2 size={12} className="animate-spin" />
-                {t("instanceSettings.globalFiles.applying")}
-              </div>
-            )}
-          </Card>
+              <Field
+                label={t("instanceSettings.globalFiles.profile")}
+                hint={t("instanceSettings.globalFiles.profileHint")}
+              >
+                <Dropdown
+                  disabled={globalFilesBusy || !globalFilesEnabled}
+                  value={globalFilesProfile}
+                  onChange={(profileId) => void updateGlobalFiles(true, profileId)}
+                  options={globalProfiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.name,
+                  }))}
+                  placeholder={t("instanceSettings.globalFiles.loading")}
+                />
+              </Field>
+              {globalFilesBusy && (
+                <div className="flex items-center gap-2 text-xs text-ink-600">
+                  <Loader2 size={12} className="animate-spin" />
+                  {t("instanceSettings.globalFiles.applying")}
+                </div>
+              )}
+            </Card>
+          )}
 
           <AutoJoinCard
             instanceId={instance.id}

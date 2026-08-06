@@ -47,7 +47,9 @@ pub use createmod::{
     InstalledSchematic, SchematicCard, SchematicDetail, SchematicFilters, SchematicHome,
     SchematicSearch, SchematicSearchParams, SchematicStat,
 };
-pub use global_files::{GlobalFileProfile, GlobalFilesApplyReport, GlobalFilesConfig};
+pub use global_files::{
+    GlobalFileProfile, GlobalFilesApplyReport, GlobalFilesConfig, GlobalFilesSymlinkSupport,
+};
 pub use schematics::{SchematicProviderStatus, SchematicsStatus};
 pub use error::{CoreError, Result};
 pub use featured::{featured_packs, FeaturedPack};
@@ -386,10 +388,50 @@ impl Launcher {
     }
 
     pub fn save_settings(&self, settings: &LauncherSettings) -> Result<()> {
+        let previous = self.settings().unwrap_or_default();
+        if previous.global_files_enabled != settings.global_files_enabled {
+            let config = global_files::load(&self.paths)?;
+            for instance in self.instances().list()? {
+                let profile_id = instance
+                    .global_files_profile
+                    .as_deref()
+                    .unwrap_or(global_files::DEFAULT_PROFILE_ID);
+                let profile = config
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.id == profile_id)
+                    .or_else(|| {
+                        config
+                            .profiles
+                            .iter()
+                            .find(|profile| profile.id == global_files::DEFAULT_PROFILE_ID)
+                    });
+                let Some(profile) = profile else { continue };
+
+                if settings.global_files_enabled {
+                    if instance.global_files_enabled {
+                        global_files::apply_profile(&self.paths, &instance, profile)?;
+                    }
+                } else {
+                    global_files::detach_profile(&self.paths, &instance, &profile.paths)?;
+                }
+            }
+        }
         write_json(&self.paths.settings_file(), settings, "settings")
     }
 
+    fn require_global_files_enabled(&self) -> Result<()> {
+        if self.settings()?.global_files_enabled {
+            Ok(())
+        } else {
+            Err(CoreError::Modpack(
+                "Global Files is disabled in launcher settings".to_string(),
+            ))
+        }
+    }
+
     pub fn global_files_config(&self) -> Result<GlobalFilesConfig> {
+        self.require_global_files_enabled()?;
         let config = global_files::load(&self.paths)?;
         if !self.paths.global_files_config().exists() {
             global_files::save(&self.paths, &config)?;
@@ -398,6 +440,7 @@ impl Launcher {
     }
 
     pub fn global_files_tree(&self, instance_id: &str) -> Result<Vec<export::ExportNode>> {
+        self.require_global_files_enabled()?;
         self.instances().get(instance_id)?;
         Ok(global_files::selectable_tree(&self.paths, instance_id))
     }
@@ -407,6 +450,7 @@ impl Launcher {
         mut profile: GlobalFileProfile,
         source_instance_id: &str,
     ) -> Result<GlobalFilesApplyReport> {
+        self.require_global_files_enabled()?;
         self.instances().get(source_instance_id)?;
         profile.id = global_files::profile_id(&profile.id);
         profile.name = profile.name.trim().to_string();
@@ -453,6 +497,7 @@ impl Launcher {
     }
 
     pub fn delete_global_files_profile(&self, profile_id: &str) -> Result<GlobalFilesApplyReport> {
+        self.require_global_files_enabled()?;
         if global_files::profile_id(profile_id) != profile_id {
             return Err(CoreError::Modpack("invalid global-files profile id".to_string()));
         }
@@ -489,6 +534,7 @@ impl Launcher {
         enabled: bool,
         profile_id: Option<&str>,
     ) -> Result<GlobalFilesApplyReport> {
+        self.require_global_files_enabled()?;
         let manager = self.instances();
         let mut instance = manager.get(instance_id)?;
         let config = global_files::load(&self.paths)?;
@@ -511,6 +557,7 @@ impl Launcher {
     }
 
     pub fn sync_global_files(&self, instance_id: &str) -> Result<GlobalFilesApplyReport> {
+        self.require_global_files_enabled()?;
         let instance = self.instances().get(instance_id)?;
         global_files::sync_instance(&self.paths, &instance)
     }

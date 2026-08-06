@@ -74,10 +74,12 @@ export function GlobalFilesView({
   instances,
   selectedInstanceId,
   onInstancesChanged,
+  ensureSymlinkSupport,
 }: {
   instances: Instance[];
   selectedInstanceId: string | null;
   onInstancesChanged: () => Promise<unknown>;
+  ensureSymlinkSupport: () => Promise<boolean>;
 }) {
   const t = useT();
   const [profiles, setProfiles] = useState<GlobalFileProfile[]>([]);
@@ -148,6 +150,7 @@ export function GlobalFilesView({
 
   const save = async () => {
     if (!sourceId || !name.trim()) return;
+    if (!(await ensureSymlinkSupport())) return;
     setBusy(true);
     try {
       let id = creating ? profileId(name) : activeId;
@@ -175,6 +178,7 @@ export function GlobalFilesView({
   };
 
   const removeProfile = async () => {
+    if (!(await ensureSymlinkSupport())) return;
     setBusy(true);
     try {
       const report = await api.deleteGlobalFilesProfile(activeId);
@@ -334,7 +338,7 @@ export function GlobalFilesView({
           <p className="mt-1 text-xs leading-relaxed text-ink-600">{t("globalFiles.instancesHint")}</p>
           <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2">
             {instances.map((instance) => (
-              <InstanceProfileCard key={instance.id} instance={instance} profiles={profiles} onChanged={onInstancesChanged} />
+              <InstanceProfileCard key={instance.id} instance={instance} profiles={profiles} onChanged={onInstancesChanged} ensureSymlinkSupport={ensureSymlinkSupport} />
             ))}
           </div>
         </section>
@@ -400,15 +404,18 @@ function InstanceProfileCard({
   instance,
   profiles,
   onChanged,
+  ensureSymlinkSupport,
 }: {
   instance: Instance;
   profiles: GlobalFileProfile[];
   onChanged: () => Promise<unknown>;
+  ensureSymlinkSupport: () => Promise<boolean>;
 }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const current = instance.global_files_profile ?? "default";
   const update = async (enabled: boolean, profileId = current) => {
+    if (enabled && !(await ensureSymlinkSupport())) return;
     setBusy(true);
     try {
       const report = await api.setInstanceGlobalFiles(instance.id, enabled, profileId);
@@ -443,6 +450,7 @@ function InstanceProfileCard({
       </div>
       {instance.global_files_enabled && (
         <button disabled={busy} onClick={async () => {
+          if (!(await ensureSymlinkSupport())) return;
           setBusy(true);
           try {
             const report = await api.syncGlobalFiles(instance.id);

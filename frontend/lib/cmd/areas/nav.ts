@@ -35,6 +35,8 @@ export const navCommands: CommandSpec[] = [
       const v = (args.get("view") ?? "").toLowerCase() as View;
       if (!VIEWS.some((x) => x.view === v))
         return { ok: false, message: `Unknown view "${args.get("view")}"` };
+      if (v === "global-files" && !ctx.state().settings?.global_files_enabled)
+        return { ok: false, message: "Global Files is disabled in Settings" };
       ctx.nav(v);
     },
   },
@@ -43,7 +45,11 @@ export const navCommands: CommandSpec[] = [
     group: GROUP,
     summary: `Open ${v.label}`,
     keywords: `${v.label} ${v.keywords ?? ""} go to tab`,
-    run: (_a, ctx) => ctx.nav(v.view),
+    run: (_a, ctx) => {
+      if (v.view === "global-files" && !ctx.state().settings?.global_files_enabled)
+        return { ok: false, message: "Global Files is disabled in Settings" };
+      ctx.nav(v.view);
+    },
   })),
 ];
 

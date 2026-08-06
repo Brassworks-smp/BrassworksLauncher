@@ -44,6 +44,59 @@ pub struct GlobalFilesApplyReport {
     pub backups: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalFilesSymlinkSupport {
+    pub windows: bool,
+    pub supported: bool,
+    pub error: Option<String>,
+}
+
+pub fn symlink_support(paths: &Paths) -> GlobalFilesSymlinkSupport {
+    #[cfg(not(windows))]
+    {
+        let _ = paths;
+        GlobalFilesSymlinkSupport {
+            windows: false,
+            supported: true,
+            error: None,
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let probe_root = paths
+            .global_files_dir()
+            .join(format!(".symlink-probe-{}-{}", std::process::id(), timestamp()));
+        let file_target = probe_root.join("target-file");
+        let directory_target = probe_root.join("target-directory");
+        let file_link = probe_root.join("file-link");
+        let directory_link = probe_root.join("directory-link");
+        let result = (|| -> Result<()> {
+            std::fs::create_dir_all(&directory_target)
+                .map_err(|error| CoreError::io(&directory_target, error))?;
+            std::fs::write(&file_target, b"brassworks symlink probe")
+                .map_err(|error| CoreError::io(&file_target, error))?;
+            create_symlink(&file_target, &file_link)?;
+            create_symlink(&directory_target, &directory_link)?;
+            Ok(())
+        })();
+
+        if std::fs::symlink_metadata(&file_link).is_ok() {
+            let _ = remove_symlink(&file_link);
+        }
+        if std::fs::symlink_metadata(&directory_link).is_ok() {
+            let _ = remove_symlink(&directory_link);
+        }
+        let _ = std::fs::remove_dir_all(&probe_root);
+
+        GlobalFilesSymlinkSupport {
+            windows: true,
+            supported: result.is_ok(),
+            error: result.err().map(|error| error.to_string()),
+        }
+    }
+}
+
 pub fn load(paths: &Paths) -> Result<GlobalFilesConfig> {
     let path = paths.global_files_config();
     let mut config = match std::fs::read(&path) {
@@ -263,7 +316,7 @@ pub fn detach_profile(
         if target.exists() {
             copy_path(&target, &temp)?;
         }
-        std::fs::remove_file(&destination).map_err(|error| CoreError::io(&destination, error))?;
+        remove_symlink(&destination).map_err(|error| CoreError::io(&destination, error))?;
         if temp.exists() {
             std::fs::rename(&temp, &destination).map_err(|error| CoreError::io(&destination, error))?;
         }
@@ -610,7 +663,7 @@ fn detach_metadata_link(
     if target.exists() {
         std::fs::copy(&target, &temp).map_err(|error| CoreError::io(&temp, error))?;
     }
-    std::fs::remove_file(&destination).map_err(|error| CoreError::io(&destination, error))?;
+    remove_symlink(&destination).map_err(|error| CoreError::io(&destination, error))?;
     if temp.exists() {
         std::fs::rename(&temp, &destination).map_err(|error| CoreError::io(&destination, error))?;
     }
@@ -656,6 +709,19 @@ fn symlink_points_to(link: &Path, target: &Path) -> bool {
         link.parent().unwrap_or(Path::new("")).join(existing)
     };
     existing == target
+}
+
+#[cfg(not(windows))]
+fn remove_symlink(path: &Path) -> std::io::Result<()> {
+    std::fs::remove_file(path)
+}
+
+#[cfg(windows)]
+fn remove_symlink(path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(_) => std::fs::remove_dir(path),
+    }
 }
 
 fn copy_path(source: &Path, destination: &Path) -> Result<()> {
