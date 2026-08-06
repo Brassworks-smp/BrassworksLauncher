@@ -1,5 +1,26 @@
 # 0.8.1
 
+## Global Files
+
+- Added symlink-based Global Files profiles for sharing individual files or complete folders across instances, with a visible JSON configuration and shared-storage folder for advanced users.
+- Added a dedicated Global Files page with profile creation and deletion, a searchable file tree, collapsed folders by default, styled Brassworks dropdowns, natural page scrolling, and a responsive two-column layout.
+- Added per-instance profile selection and opt-out controls both on the Global Files page and in Instance Settings. Opting out replaces links with normal local copies instead of deleting content.
+- Added safe profile switching, collision backups, archived deleted profiles, path traversal protection, and automatic repair of missing or replaced links after modpack synchronization and before Minecraft starts.
+- Made screenshots available in the sharing tree while continuing to hide generated runtime folders such as logs, libraries, assets, downloads, and natives.
+- Added launcher-metadata synchronization for mods, resource packs, shader packs, schematics, datapacks, servers, screenshots, worlds, and their relevant favorites.
+- Preserved content provider IDs, version IDs, titles, descriptions, icons, filenames, schematic authors, images, source formats, and conversion provenance across linked instances.
+- Added automatic migration of legacy absolute schematic metadata paths to portable filename keys so existing profiles retain their schematic cards and details in every instance.
+- Positioned Global Files immediately above Settings in the sidebar and added it to launcher navigation and the command palette.
+
+## Shared modpacks
+
+- Unlocking an installed shared modpack now presents an explicit irreversible fork warning before disconnecting it from the share.
+- Forking converts all installed managed mods, resource packs, and shader packs into ordinary user-owned content so each item can be disabled, updated, or removed independently.
+- Removed shared ownership, update configuration, optional selections, flavor selections, signing state, and pinned shared settings from a forked instance.
+- Fixed duplicate content cards and competing writes when older or malformed shared packs contain multiple entries for the same destination, preferring entries with provider and version metadata.
+- Deduplicated persisted user-content records and manifest listings while retaining provider metadata.
+- Refreshed the bundled CreateMod artwork.
+
 ## Schematic conversion
 
 - Added built-in conversion between Create/Vanilla `.nbt`, Litematica `.litematic`, WorldEdit/Sponge `.schem`, and legacy `.schematic` files.
