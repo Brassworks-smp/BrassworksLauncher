@@ -36,7 +36,9 @@ export function ServerCard({
           {data ? (online ? t("servers.online") : t("servers.statusOffline")) : error ? t("serverCard.unavailable") : "…"}
         </span>
       </div>
-      <div className="font-mono text-xs text-ink-600">{address}</div>
+      <div className="truncate font-mono text-xs text-ink-600" title={address}>
+        {address}
+      </div>
       <div className="mt-3 flex items-center gap-2 text-sm text-ink-600">
         <Users size={14} className="text-brass-400" />
         {online && data ? (

@@ -823,6 +823,10 @@ export interface FeaturedPack {
   id: string;
   name: string;
   icon: string | null;
+  server?: {
+    name: string;
+    ip: string;
+  } | null;
   modrinth_ids: string[];
   curseforge_ids: string[];
 }

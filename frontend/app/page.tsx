@@ -1250,6 +1250,13 @@ export default function Home() {
               featuredEnabled={featuredEnabled}
               players={players}
               playersError={playersError}
+              playerCountAddress={
+                instance?.auto_join?.kind === "server"
+                  ? instance.auto_join.ip
+                  : featuredPacks.find((pack) => pack.id === instance?.id)?.server?.ip ??
+                    instance?.playercount_url ??
+                    ""
+              }
               news={news}
               newsError={newsError}
               onRefreshPlayers={refreshPlayers}

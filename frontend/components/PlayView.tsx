@@ -141,6 +141,7 @@ export function PlayView({
   featuredEnabled,
   players,
   playersError,
+  playerCountAddress,
   news,
   newsError,
   onRefreshPlayers,
@@ -168,6 +169,7 @@ export function PlayView({
   featuredEnabled: boolean;
   players: PlayerCount | null;
   playersError: boolean;
+  playerCountAddress: string;
   news: NewsItem | null;
   newsError: boolean;
   onRefreshPlayers: () => Promise<void> | void;
@@ -466,7 +468,7 @@ export function PlayView({
         />
         {showPlayers && (
           <ServerCard
-            address="brassworks.opnsoc.org"
+            address={playerCountAddress}
             data={players}
             error={playersError}
             onRefresh={onRefreshPlayers}
