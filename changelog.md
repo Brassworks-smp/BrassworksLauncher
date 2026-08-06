@@ -1,7 +1,14 @@
 # 0.9.0
 
+## Developer tooling
+
+- Added `cargo bump-version <major|minor|patch|version>` to update Cargo, Tauri, frontend package metadata, the lockfile, and the changelog heading in one cross-platform command.
+
 ## Global Files
 
+- Added a launcher-wide Global Files toggle in Settings with a warning confirmation. Disabling it hides the feature, stops startup repairs, blocks profile operations, and safely detaches active links into local copies until it is enabled again.
+- Fixed detaching directory symlinks on Windows, including when globally disabling Global Files.
+- Added an explicit Windows symlink capability check and setup prompt that opens Developer settings, explains the required permission, and verifies file and folder links before Global Files can be enabled or applied.
 - Added symlink-based Global Files profiles for sharing individual files or complete folders across instances, with a visible JSON configuration and shared-storage folder for advanced users.
 - Added a dedicated Global Files page with profile creation and deletion, a searchable file tree, collapsed folders by default, styled Brassworks dropdowns, natural page scrolling, and a responsive two-column layout.
 - Added per-instance profile selection and opt-out controls both on the Global Files page and in Instance Settings. Opting out replaces links with normal local copies instead of deleting content.
@@ -38,6 +45,10 @@
 - Added separate conversion progress when a downloaded schematic requires conversion.
 - Made Minecraft Schematics download watching wait for files to finish changing before import and retry transient import failures.
 - Refreshed instance capabilities after content installs, removals, updates, enable/disable changes, and manual refreshes so the Schematics sidebar tab appears immediately.
+
+## Play screen
+
+- Fixed the player-count card hardcoding the Brassworks SMP address. It now shows the instance's auto-join server, its configured featured server, or its player-count endpoint as a fallback.
 
 ## Content exports
 
