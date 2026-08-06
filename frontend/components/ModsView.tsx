@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { operationWasCancelled, runContentDownload } from "@/lib/downloadOperations";
 import { useT } from "@/lib/i18n";
 import { SegmentedTabs, Collapse, Skeleton } from "./ui";
 import { VersionList } from "./VersionList";
@@ -124,6 +125,7 @@ export function ModsView({
   loader,
   locked,
   shared,
+  onContentChanged,
   onToggleLock,
 }: {
   instanceId: string;
@@ -132,6 +134,7 @@ export function ModsView({
   loader: LoaderKind;
   locked: boolean;
   shared?: boolean;
+  onContentChanged?: () => void;
   onToggleLock: () => void;
 }) {
   const t = useT();
@@ -254,6 +257,11 @@ export function ModsView({
   useEffect(() => {
     load();
   }, [load]);
+
+  const contentChanged = useCallback(() => {
+    load();
+    onContentChanged?.();
+  }, [load, onContentChanged]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -402,7 +410,7 @@ export function ModsView({
             }),
             "success",
           );
-        load();
+        contentChanged();
       })
       .catch((e) => {
         setError(String(e));
@@ -421,18 +429,24 @@ export function ModsView({
         ? prev.map((m) => (m.path === mod.path ? { ...m, enabled: next } : m))
         : prev,
     );
-    api.setContentEnabled(instanceId, mod.path, next).catch((e) => {
-      setError(String(e));
-      load();
-    });
+    api
+      .setContentEnabled(instanceId, mod.path, next)
+      .then(() => onContentChanged?.())
+      .catch((e) => {
+        setError(String(e));
+        load();
+      });
   };
 
   const remove = (mod: InstalledMod) => {
     setMods((prev) => (prev ? prev.filter((m) => m.path !== mod.path) : prev));
-    api.removeContent(instanceId, mod.path).catch((e) => {
-      setError(String(e));
-      load();
-    });
+    api
+      .removeContent(instanceId, mod.path)
+      .then(() => onContentChanged?.())
+      .catch((e) => {
+        setError(String(e));
+        load();
+      });
   };
 
   return (
@@ -507,7 +521,7 @@ export function ModsView({
             <FolderOpen size={15} /> {t("mods.folder")}
           </button>
           <button
-            onClick={load}
+            onClick={contentChanged}
             title={t("common.refresh")}
             className="grid h-9 w-9 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
@@ -626,7 +640,7 @@ export function ModsView({
             unlocked={!locked && !shared}
             onToggle={() => toggle(m)}
             onRemove={() => remove(m)}
-            onChanged={load}
+            onChanged={contentChanged}
             onError={setError}
             onOpenDetail={() => openDetail(m)}
           />
@@ -671,8 +685,8 @@ export function ModsView({
             setAdding(false);
             setDetail(null);
           }}
-          onInstalled={() => load()}
-          onUninstalled={() => load()}
+          onInstalled={contentChanged}
+          onUninstalled={contentChanged}
           onUnlock={
             locked
               ? () => {
@@ -1054,14 +1068,12 @@ function RowVersions({
 
   const pick = (versionId: string) => {
     setBusy(versionId);
-    api
-      .installContentVersion(
-        instanceId,
-        mod.project_id!,
-        versionId,
-        projectType,
-        mod.source,
-      )
+    runContentDownload(mod.title ?? mod.name, (operationId) =>
+      api.installContentVersion(
+        instanceId, mod.project_id!, versionId, projectType, mod.source,
+        undefined, operationId,
+      ),
+    )
       .then((res) => {
         const n = res.dependencies.length;
         const name = mod.title ?? mod.name;
@@ -1074,7 +1086,7 @@ function RowVersions({
         onPicked();
       })
       .catch((e) => {
-        onError(String(e));
+        if (!operationWasCancelled(e)) onError(String(e));
         setBusy(null);
       });
   };

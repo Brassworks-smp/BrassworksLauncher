@@ -54,6 +54,7 @@ import { RestartPrompt } from "@/components/RestartPrompt";
 import { AccountOverrideWarning } from "@/components/AccountOverrideWarning";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "@/lib/api";
+import { runLauncherUpdate } from "@/lib/downloadOperations";
 import { I18nProvider, translate } from "@/lib/i18n";
 import { applyAccent } from "@/lib/colors";
 import { isCacheableBranding } from "@/lib/instanceIcons";
@@ -138,6 +139,7 @@ export default function Home() {
   const [players, setPlayers] = useState<PlayerCount | null>(null);
   const [playersError, setPlayersError] = useState(false);
   const [modStatus, setModStatus] = useState<ModpackStatus | null>(null);
+  const [contentRevision, setContentRevision] = useState(0);
 
   const [appVer, setAppVer] = useState<string | null>(null);
   const [changelog, setChangelog] = useState<{
@@ -324,8 +326,7 @@ export default function Home() {
           try {
             const info = await api.checkForUpdate();
             if (info.available) {
-              toast(tr("page.updateFound", { version: info.version }), "info");
-              await api.installUpdate();
+              await runLauncherUpdate(info.version);
               toast(tr("settings.updates.installedToast", { version: info.version }), "success");
               setRestartVersion(info.version);
             }
@@ -480,7 +481,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [selectedId, instances]);
+  }, [selectedId, instances, contentRevision]);
 
   
   
@@ -1270,6 +1271,9 @@ export default function Home() {
               loader={instance?.loader ?? "vanilla"}
               locked={locked}
               shared={!!instance?.share}
+              onContentChanged={() =>
+                setContentRevision((revision) => revision + 1)
+              }
               onToggleLock={() => {
                 if (!instance) return;
                 api

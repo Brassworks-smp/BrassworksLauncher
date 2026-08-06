@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { operationWasCancelled, runContentDownload } from "@/lib/downloadOperations";
 import { ResultRow, BrowseResults, DetailShell } from "./Browse";
 import { useFilters } from "./FilterSidebar";
 import { VersionList } from "./VersionList";
@@ -280,12 +281,15 @@ export function AddContentModal({
                   onOpen={open}
                   onQuickInstall={async () => {
                     try {
-                      const res = await api.installContent(
-                        instanceId,
-                        hit.project_id,
-                        type,
-                        hit.source,
-                        filtering.filters,
+                      const res = await runContentDownload(hit.title, (operationId) =>
+                        api.installContent(
+                          instanceId,
+                          hit.project_id,
+                          type,
+                          hit.source,
+                          filtering.filters,
+                          operationId,
+                        ),
                       );
                       const n = res.dependencies.length;
                       toast(
@@ -296,8 +300,7 @@ export function AddContentModal({
                       );
                       onInstalled(res.item);
                     } catch (e) {
-                      toast(String(e), "error");
-                      throw e;
+                      if (!operationWasCancelled(e)) toast(String(e), "error");
                     }
                   }}
                 />
@@ -393,16 +396,21 @@ function DetailView({
   const install = (versionId?: string) => {
     setBusy(versionId ?? "latest");
     setError(null);
-    const p = versionId
-      ? api.installContentVersion(
-          instanceId,
-          hit.project_id,
-          versionId,
-          type,
-          hit.source,
-          filters,
-        )
-      : api.installContent(instanceId, hit.project_id, type, hit.source, filters);
+    const p = runContentDownload(detail?.title ?? hit.title, (operationId) =>
+      versionId
+        ? api.installContentVersion(
+            instanceId,
+            hit.project_id,
+            versionId,
+            type,
+            hit.source,
+            filters,
+            operationId,
+          )
+        : api.installContent(
+            instanceId, hit.project_id, type, hit.source, filters, operationId,
+          ),
+    );
     p.then((res) => {
       const n = res.dependencies.length;
       toast(
@@ -414,7 +422,9 @@ function DetailView({
       onInstalled(res.item);
       setRemoved(false);
     })
-      .catch((e) => setError(String(e)))
+      .catch((e) => {
+        if (!operationWasCancelled(e)) setError(String(e));
+      })
       .finally(() => setBusy(null));
   };
 

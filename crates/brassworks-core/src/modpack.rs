@@ -949,6 +949,20 @@ impl<'a> Modpack<'a> {
         source: &str,
         filters: &SearchFilters,
     ) -> Result<InstallResult> {
+        self.install_from_source_with_filters_progress(
+            project_id, project_type, source, filters, &|| false, &mut |_, _| {},
+        )
+    }
+
+    pub fn install_from_source_with_filters_progress(
+        &self,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<InstallResult> {
         let version = self
             .best_one_with_filters(source, project_id, project_type, filters)?
             .ok_or_else(|| {
@@ -958,8 +972,12 @@ impl<'a> Modpack<'a> {
                 loader.map(|l| format!(" / {l}")).unwrap_or_default()
             ))
         })?;
-        let item = self.place_version(source, project_id, project_type, version.clone(), true)?;
-        let dependencies = self.install_dependencies(source, &version, filters);
+        let item = self.place_version_with_progress(
+            source, project_id, project_type, version.clone(), true, cancel, progress,
+        )?;
+        let dependencies = self.install_dependencies_with_progress(
+            source, &version, filters, cancel, progress,
+        )?;
         Ok(InstallResult { item, dependencies })
     }
 
@@ -990,6 +1008,23 @@ impl<'a> Modpack<'a> {
         unlocked: bool,
         filters: &SearchFilters,
     ) -> Result<InstallResult> {
+        self.install_version_with_filters_progress(
+            project_id, version_id, project_type, source, unlocked, filters,
+            &|| false, &mut |_, _| {},
+        )
+    }
+
+    pub fn install_version_with_filters_progress(
+        &self,
+        project_id: &str,
+        version_id: &str,
+        project_type: &str,
+        source: &str,
+        unlocked: bool,
+        filters: &SearchFilters,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<InstallResult> {
         let managed = self
             .manifest()
             .map(|m| m.mods.iter().any(|x| managed_matches(x, source, project_id)))
@@ -1003,8 +1038,12 @@ impl<'a> Modpack<'a> {
         let version = self
             .resolve_one(source, project_id, version_id)?
             .ok_or_else(|| CoreError::Modpack("Version not found".to_string()))?;
-        let item = self.place_version(source, project_id, project_type, version.clone(), unlocked)?;
-        let dependencies = self.install_dependencies(source, &version, filters);
+        let item = self.place_version_with_progress(
+            source, project_id, project_type, version.clone(), unlocked, cancel, progress,
+        )?;
+        let dependencies = self.install_dependencies_with_progress(
+            source, &version, filters, cancel, progress,
+        )?;
         Ok(InstallResult { item, dependencies })
     }
 
@@ -1014,6 +1053,20 @@ impl<'a> Modpack<'a> {
         source: &str,
         project_id: &str,
         version_id: Option<&str>,
+    ) -> Result<(String, String)> {
+        self.install_datapack_with_progress(
+            world, source, project_id, version_id, &|| false, &mut |_, _| {},
+        )
+    }
+
+    pub fn install_datapack_with_progress(
+        &self,
+        world: &str,
+        source: &str,
+        project_id: &str,
+        version_id: Option<&str>,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
     ) -> Result<(String, String)> {
         let version = match version_id {
             Some(vid) => self.resolve_one(source, project_id, vid)?,
@@ -1028,7 +1081,7 @@ impl<'a> Modpack<'a> {
 
         let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
-        let bytes = http.download(&version.url)?;
+        let bytes = http.download_progress(&version.url, cancel, progress)?;
         version
             .verify_data(&bytes)
             .map_err(|_| CoreError::Modpack("Downloaded file failed hash verification".to_string()))?;
@@ -1054,19 +1107,23 @@ impl<'a> Modpack<'a> {
         })
     }
 
-    fn install_dependencies(
+    fn install_dependencies_with_progress(
         &self,
         source: &str,
         version: &ResolvedVersion,
         filters: &SearchFilters,
-    ) -> Vec<String> {
-        let mut visited: HashSet<String> = HashSet::new();
-        let mut installed: Vec<String> = Vec::new();
-        self.install_deps_inner(source, version, filters, &mut visited, &mut installed, 0);
-        installed
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<Vec<String>> {
+        let mut visited = HashSet::new();
+        let mut installed = Vec::new();
+        self.install_deps_inner_with_progress(
+            source, version, filters, &mut visited, &mut installed, 0, cancel, progress,
+        )?;
+        Ok(installed)
     }
 
-    fn install_deps_inner(
+    fn install_deps_inner_with_progress(
         &self,
         source: &str,
         version: &ResolvedVersion,
@@ -1074,41 +1131,35 @@ impl<'a> Modpack<'a> {
         visited: &mut HashSet<String>,
         installed: &mut Vec<String>,
         depth: u32,
-    ) {
-        if depth > 4 {
-            return;
-        }
-        for dep in version.dependencies.iter().filter(|d| d.required) {
-            let Some(pid) = dep.project_id.clone() else {
-                continue;
-            };
-            if !visited.insert(format!("{source}:{pid}")) {
-                continue;
-            }
-            if self.already_present(source, &pid) {
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<()> {
+        if cancel() { return Err(CoreError::Cancelled); }
+        if depth > 4 { return Ok(()); }
+        for dep in version.dependencies.iter().filter(|dep| dep.required) {
+            if cancel() { return Err(CoreError::Cancelled); }
+            let Some(project_id) = dep.project_id.clone() else { continue };
+            if !visited.insert(format!("{source}:{project_id}")) || self.already_present(source, &project_id) {
                 continue;
             }
             let resolved = match &dep.version_id {
-                Some(vid) => self.resolve_one(source, &pid, vid).ok().flatten(),
-                None => self
-                    .best_one_with_filters(source, &pid, "mod", filters)
-                    .ok()
-                    .flatten(),
+                Some(version_id) => self.resolve_one(source, &project_id, version_id).ok().flatten(),
+                None => self.best_one_with_filters(source, &project_id, "mod", filters).ok().flatten(),
             };
-            if let Some(rv) = resolved {
-                if let Ok(m) = self.place_version(source, &pid, "mod", rv.clone(), false) {
-                    installed.push(m.name);
-                    self.install_deps_inner(
-                        source,
-                        &rv,
-                        filters,
-                        visited,
-                        installed,
-                        depth + 1,
-                    );
+            if let Some(resolved) = resolved {
+                if let Ok(item) = self.place_version_with_progress(
+                    source, &project_id, "mod", resolved.clone(), false, cancel, progress,
+                ) {
+                    installed.push(item.name);
+                    self.install_deps_inner_with_progress(
+                        source, &resolved, filters, visited, installed, depth + 1, cancel, progress,
+                    )?;
+                } else if cancel() {
+                    return Err(CoreError::Cancelled);
                 }
             }
         }
+        Ok(())
     }
 
     pub fn update_all(&self) -> Result<Vec<String>> {
@@ -1155,11 +1206,28 @@ impl<'a> Modpack<'a> {
         version: ResolvedVersion,
         allow_disable_managed: bool,
     ) -> Result<InstalledMod> {
+        self.place_version_with_progress(
+            source, project_id, project_type, version, allow_disable_managed,
+            &|| false, &mut |_, _| {},
+        )
+    }
+
+    fn place_version_with_progress(
+        &self,
+        source: &str,
+        project_id: &str,
+        project_type: &str,
+        version: ResolvedVersion,
+        allow_disable_managed: bool,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<InstalledMod> {
         let installer = self.installer();
         let http = installer.modrinth(self.paths.modrinth_cache_dir());
         let folder = folder_for(project_type);
 
-        let bytes = http.download(&version.url)?;
+        let bytes = http.download_progress(&version.url, cancel, progress)?;
+        if cancel() { return Err(CoreError::Cancelled); }
         version
             .verify_data(&bytes)
             .map_err(|_| CoreError::Modpack("Downloaded file failed hash verification".to_string()))?;

@@ -215,8 +215,14 @@ export const installContent = (
   projectType: string,
   source: string,
   filters: SearchFilters = EMPTY_FILTERS,
+  operationId?: string,
 ): Promise<InstallResult> =>
-  invoke("install_content", { instanceId, projectId, projectType, source, filters });
+  invoke("install_content", { instanceId, projectId, projectType, source, filters, operationId: operationId ?? null });
+export const onContentProgress = (
+  cb: (event: import("./types").ContentOperationProgress) => void,
+): Promise<UnlistenFn> =>
+  listen("content://progress", (event) => cb(event.payload as import("./types").ContentOperationProgress));
+export const cancelTransfer = (operationId: string): Promise<void> => cancelOp(operationId);
 export const updateAllContent = (instanceId: string): Promise<string[]> =>
   invoke("update_all_content", { instanceId });
 export const updateSelectedContent = (
@@ -353,6 +359,7 @@ export const installContentVersion = (
   projectType: string,
   source: string,
   filters: SearchFilters = EMPTY_FILTERS,
+  operationId?: string,
 ): Promise<InstallResult> =>
   invoke("install_content_version", {
     instanceId,
@@ -361,6 +368,7 @@ export const installContentVersion = (
     projectType,
     source,
     filters,
+    operationId: operationId ?? null,
   });
 export const setModpackLocked = (
   instanceId: string,
@@ -451,8 +459,9 @@ export const installDatapack = (
   source: string,
   projectId: string,
   versionId: string | null,
+  operationId?: string,
 ): Promise<string> =>
-  invoke("install_datapack", { instanceId, world, source, projectId, versionId });
+  invoke("install_datapack", { instanceId, world, source, projectId, versionId, operationId: operationId ?? null });
 
 export const listServers = (instanceId: string): Promise<ServerEntry[]> =>
   invoke("list_servers", { instanceId });
@@ -835,7 +844,8 @@ export const releaseChangelog = (version: string | null): Promise<string> =>
   invoke("release_changelog", { version });
 export const checkForUpdate = (): Promise<UpdateInfo> =>
   invoke("check_for_update");
-export const installUpdate = (): Promise<void> => invoke("install_update");
+export const installUpdate = (operationId?: string): Promise<void> =>
+  invoke("install_update", { operationId: operationId ?? null });
 export const restartApp = (): Promise<void> => invoke("restart_app");
 
 export const updateBlockReason = (): Promise<string | null> =>

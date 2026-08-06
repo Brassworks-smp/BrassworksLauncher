@@ -30,6 +30,7 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
 import { CustomColorChip, swatchBg } from "@/components/ColorPicker";
 import { toast } from "@/lib/toast";
+import { operationWasCancelled, runLauncherUpdate } from "@/lib/downloadOperations";
 import { useT, LOCALES } from "@/lib/i18n";
 import { ACCENT_COLORS, DEFAULT_ACCENT, defaultAccentForTheme } from "@/lib/colors";
 import { PROVIDERS, providerInfo } from "@/lib/providers";
@@ -821,27 +822,17 @@ function UpdatesCard({
     if (!info?.available) return;
     setDownloading(true);
     setPct(0);
-    let total = 0;
-    let downloaded = 0;
-    const un = await api.onUpdaterProgress((p) => {
-      if (p.done) {
-        setPct(100);
-        return;
-      }
-      downloaded = p.downloaded;
-      if (p.total) total = p.total;
-      if (total > 0) setPct(Math.min(100, Math.round((downloaded / total) * 100)));
-    });
     try {
-      toast(t("settings.updates.downloadingToast", { version: info.version }), "info");
-      await api.installUpdate();
+      await runLauncherUpdate(info.version, (p) => {
+        if (p.done || p.installing) setPct(100);
+        else if (p.total) setPct(Math.min(100, Math.round((p.downloaded / p.total) * 100)));
+      });
       toast(t("settings.updates.installedToast", { version: info.version }), "success");
       onUpdateInstalled(info.version);
       setInfo(null);
     } catch (e) {
-      onError(String(e));
+      if (!operationWasCancelled(e)) onError(String(e));
     } finally {
-      un();
       setDownloading(false);
       setPct(null);
     }

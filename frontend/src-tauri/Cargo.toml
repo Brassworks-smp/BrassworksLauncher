@@ -26,6 +26,7 @@ tauri-plugin-deep-link = "2"
 
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 
 discord-rich-presence = "0.2"
 

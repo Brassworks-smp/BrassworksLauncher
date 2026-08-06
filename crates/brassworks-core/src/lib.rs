@@ -2060,6 +2060,21 @@ impl Launcher {
             .install_from_source_with_filters(project_id, project_type, source, filters)
     }
 
+    pub fn install_content_with_progress(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<InstallResult> {
+        self.modpack_for(instance_id).install_from_source_with_filters_progress(
+            project_id, project_type, source, filters, cancel, progress,
+        )
+    }
+
     pub fn install_content_version(
         &self,
         instance_id: &str,
@@ -2090,6 +2105,23 @@ impl Launcher {
             source,
             unlocked,
             filters,
+        )
+    }
+
+    pub fn install_content_version_with_progress(
+        &self,
+        instance_id: &str,
+        project_id: &str,
+        version_id: &str,
+        project_type: &str,
+        source: &str,
+        filters: &SearchFilters,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<InstallResult> {
+        let unlocked = !self.modpack_locked(instance_id);
+        self.modpack_for(instance_id).install_version_with_filters_progress(
+            project_id, version_id, project_type, source, unlocked, filters, cancel, progress,
         )
     }
 
@@ -3194,13 +3226,31 @@ impl Launcher {
         project_id: &str,
         version_id: Option<&str>,
     ) -> Result<String> {
+        self.install_datapack_with_progress(
+            instance_id, world, source, project_id, version_id,
+            &|| false, &mut |_, _| {},
+        )
+    }
+
+    pub fn install_datapack_with_progress(
+        &self,
+        instance_id: &str,
+        world: &str,
+        source: &str,
+        project_id: &str,
+        version_id: Option<&str>,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<String> {
         let saves_dir = self.paths.instance_saves_dir(instance_id);
         let index_file = self.paths.datapacks_index(instance_id);
         let previous = saves::tracked_filename(&index_file, world, project_id);
 
         let modpack = self.modpack_for(instance_id);
         let (filename, resolved_vid) =
-            modpack.install_datapack(world, source, project_id, version_id)?;
+            modpack.install_datapack_with_progress(
+                world, source, project_id, version_id, cancel, progress,
+            )?;
         if let Some(old) = previous {
             if old != filename {
                 let _ = saves::remove_datapack(&saves_dir, world, &old, &index_file);

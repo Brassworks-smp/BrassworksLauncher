@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { operationWasCancelled, runContentDownload } from "@/lib/downloadOperations";
 import { ResultRow, SourceBadge, BrowseResults, DetailShell } from "./Browse";
 import { useFilters } from "./FilterSidebar";
 import { VersionList } from "./VersionList";
@@ -460,10 +461,15 @@ function DatapackDetail({
 
   const install = (versionId: string) => {
     setBusy(versionId);
-    api
-      .installDatapack(instanceId, world, hit.source, hit.project_id, versionId)
+    runContentDownload(detail?.title ?? hit.title, (operationId) =>
+      api.installDatapack(
+        instanceId, world, hit.source, hit.project_id, versionId, operationId,
+      ),
+    )
       .then(() => onInstalled())
-      .catch((e) => toast(String(e), "error"))
+      .catch((e) => {
+        if (!operationWasCancelled(e)) toast(String(e), "error");
+      })
       .finally(() => setBusy(null));
   };
 

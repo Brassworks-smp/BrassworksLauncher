@@ -415,9 +415,17 @@ export interface UpdateInfo {
 }
 
 export interface UpdateProgress {
+  operation_id: string;
   downloaded: number;
   total: number | null;
   done: boolean;
+  installing: boolean;
+}
+
+export interface ContentOperationProgress {
+  operation_id: string;
+  current: number;
+  total: number;
 }
 
 export interface JavaInstall {

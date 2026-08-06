@@ -767,24 +767,38 @@ pub(crate) async fn content_filter_options(
 
 #[tauri::command]
 pub(crate) async fn install_content(
+    app: AppHandle,
     state: State<'_, AppState>,
     instance_id: String,
     project_id: String,
     project_type: String,
     source: String,
     filters: SearchFilters,
+    operation_id: Option<String>,
 ) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
+    let operation_id = operation_id.unwrap_or_else(|| format!("content-{instance_id}-{project_id}"));
+    let cancel_flag = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .install_content_with_filters(
+        let progress_app = app.clone();
+        let cancel = || cancel_flag.load(Ordering::Relaxed);
+        let mut progress = |current, total| {
+            let _ = progress_app.emit("content://progress", serde_json::json!({
+                "operation_id": operation_id, "current": current, "total": total,
+            }));
+        };
+        let result = launcher.install_content_with_progress(
                 &instance_id,
                 &project_id,
                 &project_type,
                 &source,
                 &filters,
-            )
-            .map_err(err)
+                &cancel,
+                &mut progress,
+            );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
     })
     .await
     .map_err(err)?
@@ -834,6 +848,7 @@ pub(crate) async fn content_versions(
 
 #[tauri::command]
 pub(crate) async fn install_content_version(
+    app: AppHandle,
     state: State<'_, AppState>,
     instance_id: String,
     project_id: String,
@@ -841,19 +856,32 @@ pub(crate) async fn install_content_version(
     project_type: String,
     source: String,
     filters: SearchFilters,
+    operation_id: Option<String>,
 ) -> CmdResult<InstallResult> {
     let launcher = state.launcher.clone();
+    let operation_id = operation_id.unwrap_or_else(|| format!("content-{instance_id}-{project_id}"));
+    let cancel_flag = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .install_content_version_with_filters(
+        let progress_app = app.clone();
+        let cancel = || cancel_flag.load(Ordering::Relaxed);
+        let mut progress = |current, total| {
+            let _ = progress_app.emit("content://progress", serde_json::json!({
+                "operation_id": operation_id, "current": current, "total": total,
+            }));
+        };
+        let result = launcher.install_content_version_with_progress(
                 &instance_id,
                 &project_id,
                 &version_id,
                 &project_type,
                 &source,
                 &filters,
-            )
-            .map_err(err)
+                &cancel,
+                &mut progress,
+            );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
     })
     .await
     .map_err(err)?
@@ -2051,9 +2079,11 @@ pub(crate) struct UpdateInfo {
 
 #[derive(Clone, Serialize)]
 struct UpdateProgress {
+    operation_id: String,
     downloaded: u64,
     total: Option<u64>,
     done: bool,
+    installing: bool,
 }
 
 #[tauri::command]
@@ -2127,48 +2157,83 @@ pub(crate) fn update_block_reason() -> CmdResult<Option<String>> {
 }
 
 #[tauri::command]
-pub(crate) async fn install_update(app: AppHandle) -> CmdResult<()> {
+pub(crate) async fn install_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    operation_id: Option<String>,
+) -> CmdResult<()> {
     use tauri_plugin_updater::UpdaterExt;
     if let Some(reason) = update_block_reason_impl() {
         return Err(reason);
     }
-    let updater = app.updater().map_err(err)?;
-    let update = updater
-        .check()
-        .await
-        .map_err(err)?
-        .ok_or_else(|| "No update available".to_string())?;
-
-    let mut downloaded: u64 = 0;
-    let progress_app = app.clone();
-    let done_app = app.clone();
-    update
-        .download_and_install(
+    let operation_id = operation_id.unwrap_or_else(|| "launcher-update".to_string());
+    let cancel = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
+    let result: CmdResult<()> = async {
+        let updater = app.updater().map_err(err)?;
+        let update = updater
+            .check()
+            .await
+            .map_err(err)?
+            .ok_or_else(|| "No update available".to_string())?;
+        let progress_app = app.clone();
+        let progress_id = operation_id.clone();
+        let mut downloaded = 0_u64;
+        let download = update.download(
             move |chunk, total| {
                 downloaded += chunk as u64;
                 let _ = progress_app.emit(
                     "updater://progress",
                     UpdateProgress {
+                        operation_id: progress_id.clone(),
                         downloaded,
                         total,
                         done: false,
+                        installing: false,
                     },
                 );
             },
-            move || {
-                let _ = done_app.emit(
-                    "updater://progress",
-                    UpdateProgress {
-                        downloaded: 0,
-                        total: None,
-                        done: true,
-                    },
-                );
+            || {},
+        );
+        tokio::pin!(download);
+        let bytes = loop {
+            tokio::select! {
+                result = &mut download => break result.map_err(err)?,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(75)) => {
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err("the operation was cancelled".to_string());
+                    }
+                }
+            }
+        };
+        if cancel.load(Ordering::Relaxed) {
+            return Err("the operation was cancelled".to_string());
+        }
+        let _ = app.emit(
+            "updater://progress",
+            UpdateProgress {
+                operation_id: operation_id.clone(),
+                downloaded: bytes.len() as u64,
+                total: Some(bytes.len() as u64),
+                done: false,
+                installing: true,
             },
-        )
-        .await
-        .map_err(err)?;
-    Ok(())
+        );
+        update.install(bytes).map_err(err)?;
+        let _ = app.emit(
+            "updater://progress",
+            UpdateProgress {
+                operation_id: operation_id.clone(),
+                downloaded: 0,
+                total: None,
+                done: true,
+                installing: false,
+            },
+        );
+        Ok(())
+    }.await;
+    if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+    result
 }
 
 #[tauri::command]
@@ -2248,18 +2313,33 @@ pub(crate) fn remove_datapack(
 
 #[tauri::command]
 pub(crate) async fn install_datapack(
+    app: AppHandle,
     state: State<'_, AppState>,
     instance_id: String,
     world: String,
     source: String,
     project_id: String,
     version_id: Option<String>,
+    operation_id: Option<String>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
+    let operation_id = operation_id.unwrap_or_else(|| format!("datapack-{instance_id}-{project_id}"));
+    let cancel_flag = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .install_datapack(&instance_id, &world, &source, &project_id, version_id.as_deref())
-            .map_err(err)
+        let progress_app = app.clone();
+        let cancel = || cancel_flag.load(Ordering::Relaxed);
+        let mut progress = |current, total| {
+            let _ = progress_app.emit("content://progress", serde_json::json!({
+                "operation_id": operation_id, "current": current, "total": total,
+            }));
+        };
+        let result = launcher.install_datapack_with_progress(
+            &instance_id, &world, &source, &project_id, version_id.as_deref(),
+            &cancel, &mut progress,
+        );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
     })
     .await
     .map_err(err)?

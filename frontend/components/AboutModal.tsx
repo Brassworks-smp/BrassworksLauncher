@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { operationWasCancelled, runLauncherUpdate } from "@/lib/downloadOperations";
 import { Logo } from "@/components/Logo";
 import { useClosable } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -59,28 +60,19 @@ export function AboutModal({
       }
       setDownloading(true);
       setPct(0);
-      let total = 0;
-      const un = await api.onUpdaterProgress((p) => {
-        if (p.done) {
-          setPct(100);
-          return;
-        }
-        if (p.total) total = p.total;
-        if (total > 0)
-          setPct(Math.min(100, Math.round((p.downloaded / total) * 100)));
-      });
       try {
-        toast(t("settings.updates.downloadingToast", { version: info.version }), "info");
-        await api.installUpdate();
+        await runLauncherUpdate(info.version, (p) => {
+          if (p.done || p.installing) setPct(100);
+          else if (p.total) setPct(Math.min(100, Math.round((p.downloaded / p.total) * 100)));
+        });
         toast(t("settings.updates.installedToast", { version: info.version }), "success");
         onUpdateInstalled(info.version);
       } finally {
-        un();
         setDownloading(false);
         setPct(null);
       }
     } catch (e) {
-      onError(String(e));
+      if (!operationWasCancelled(e)) onError(String(e));
     } finally {
       setChecking(false);
     }
