@@ -31,6 +31,7 @@ pub mod progress;
 pub mod remote;
 pub mod saves;
 pub mod schematics;
+pub mod schematic_convert;
 mod schematic_client_cache;
 pub mod settings;
 pub mod skins;
@@ -1747,22 +1748,52 @@ impl Launcher {
         provider: Option<&str>,
         project_id: Option<&str>,
     ) -> Result<String> {
+        self.import_schematic_as(instance_id, src_path, None, provider, project_id,
+            &std::sync::atomic::AtomicBool::new(false), &mut |_, _| {})
+    }
+
+    pub fn import_schematic_as(
+        &self,
+        instance_id: &str,
+        src_path: &str,
+        target_format: Option<&str>,
+        provider: Option<&str>,
+        project_id: Option<&str>,
+        cancel: &std::sync::atomic::AtomicBool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<String> {
         let src = std::path::Path::new(src_path);
-        let format = src.extension()
+        let source_format = src.extension()
             .map(|value| value.to_string_lossy().to_ascii_lowercase())
             .unwrap_or_else(|| "nbt".to_string());
+        let format = target_format.unwrap_or(&source_format).to_ascii_lowercase();
         let instance = self.instances().get(instance_id)?;
         let mods = self.list_mods(instance_id).unwrap_or_default();
         let dir = schematics::folder_for_format(
             &self.paths.instance_game_dir(instance_id), &instance, &mods, &format,
         );
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
-        let name = src
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "schematic.nbt".to_string());
-        let dest = dir.join(&name);
-        std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+        let converting = source_format != format;
+        let name = if converting {
+            schematics::converted_filename(src, &source_format, &format)
+        } else {
+            let mut name = std::path::PathBuf::from(src.file_name().unwrap_or_default());
+            name.set_extension(&format);
+            name
+        };
+        let requested_dest = dir.join(name);
+        let dest = if converting {
+            schematics::non_overwriting_path(&requested_dest)
+        } else {
+            requested_dest
+        };
+        if source_format == format {
+            std::fs::copy(src, &dest).map_err(|e| CoreError::io(&dest, e))?;
+        } else {
+            let bytes = std::fs::read(src).map_err(|e| CoreError::io(src, e))?;
+            let converted = schematic_convert::convert(&bytes, &source_format, &format, cancel, progress)?;
+            std::fs::write(&dest, converted).map_err(|e| CoreError::io(&dest, e))?;
+        }
         if let (Some(provider), Some(project_id)) = (provider, project_id) {
             let detail = schematics::detail(provider, project_id).ok();
             schematics::record(
@@ -1771,7 +1802,18 @@ impl Launcher {
                 provider,
                 project_id,
                 &format,
+                (source_format != format).then_some(source_format.as_str()),
                 detail.as_ref(),
+            )?;
+        } else if source_format != format {
+            schematics::record(
+                &self.paths.schematics_index(instance_id),
+                &dest,
+                "",
+                "",
+                &format,
+                Some(&source_format),
+                None,
             )?;
         } else {
             schematics::forget(&self.paths.schematics_index(instance_id), &dest)?;
@@ -1797,6 +1839,19 @@ impl Launcher {
         name: &str,
         format: &str,
     ) -> Result<String> {
+        self.download_schematic_with_progress(instance_id, provider, name, format,
+            &std::sync::atomic::AtomicBool::new(false), &mut |_, _, _| {})
+    }
+
+    pub fn download_schematic_with_progress(
+        &self,
+        instance_id: &str,
+        provider: &str,
+        name: &str,
+        format: &str,
+        cancel: &std::sync::atomic::AtomicBool,
+        progress: &mut dyn FnMut(&str, u64, u64),
+    ) -> Result<String> {
         let instance = self.instances().get(instance_id)?;
         let mods = self.list_mods(instance_id).unwrap_or_default();
         let provider_status = schematics::status(&instance, &mods)
@@ -1813,10 +1868,41 @@ impl Launcher {
         );
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
         let detail = schematics::detail(provider, name).ok();
-        let (filename, bytes) = schematics::download(provider, name, format)?;
+        let native_formats = detail.as_ref().map(|value| value.formats.as_slice())
+            .unwrap_or(provider_status.native_formats.as_slice());
+        let source_format = if native_formats.iter().any(|value| value == format) {
+            format
+        } else {
+            native_formats.iter().map(String::as_str)
+                .find(|value| schematic_convert::can_convert(value))
+                .ok_or_else(|| CoreError::Modpack(format!(
+                    "this schematic has no format that can be converted to .{format}"
+                )))?
+        };
+        let (filename, downloaded) = schematics::download_with_progress(
+            provider, name, source_format, cancel,
+            &mut |current, total| progress("downloading", current, total),
+        )?;
+        let bytes = if source_format == format { downloaded } else {
+            schematic_convert::convert(&downloaded, source_format, format, cancel,
+                &mut |current, total| progress("converting", current, total))?
+        };
         // Guard against a hostile filename escaping the schematics dir.
-        let safe = schematics::safe_download_filename(&filename, name, format);
-        let dest = dir.join(&safe);
+        let safe_native = std::path::PathBuf::from(
+            schematics::safe_download_filename(&filename, name, source_format));
+        let safe = if source_format == format {
+            let mut safe = safe_native;
+            safe.set_extension(format);
+            safe
+        } else {
+            schematics::converted_filename(&safe_native, source_format, format)
+        };
+        let requested_dest = dir.join(&safe);
+        let dest = if source_format == format {
+            requested_dest
+        } else {
+            schematics::non_overwriting_path(&requested_dest)
+        };
         std::fs::write(&dest, &bytes).map_err(|e| CoreError::io(&dest, e))?;
         schematics::record(
             &self.paths.schematics_index(instance_id),
@@ -1824,9 +1910,28 @@ impl Launcher {
             provider,
             name,
             format,
+            (source_format != format).then_some(source_format),
             detail.as_ref(),
         )?;
         Ok(dest.to_string_lossy().to_string())
+    }
+
+    pub fn convert_schematic(
+        &self,
+        instance_id: &str,
+        path: &str,
+        target_format: &str,
+        cancel: &std::sync::atomic::AtomicBool,
+        progress: &mut dyn FnMut(u64, u64),
+    ) -> Result<String> {
+        let metadata = self.list_schematics(instance_id)?.into_iter()
+            .find(|value| value.path == path);
+        self.import_schematic_as(
+            instance_id, path, Some(target_format),
+            metadata.as_ref().and_then(|value| value.source.as_deref()),
+            metadata.as_ref().and_then(|value| value.project_id.as_deref()),
+            cancel, progress,
+        )
     }
 
     pub fn remove_schematic(&self, instance_id: &str, schematic_path: &str) -> Result<()> {

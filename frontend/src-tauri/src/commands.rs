@@ -526,22 +526,38 @@ pub(crate) async fn set_integration(
 
 #[tauri::command]
 pub(crate) async fn import_schematic(
+    app: AppHandle,
     state: State<'_, AppState>,
     instance_id: String,
     path: String,
+    target_format: Option<String>,
     provider: Option<String>,
     project_id: Option<String>,
+    operation_id: Option<String>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
+    let operation_id = operation_id.unwrap_or_else(|| format!("schematic-import-{instance_id}"));
+    let cancel = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .import_schematic(
+        let progress_app = app.clone();
+        let mut progress = |current, total| {
+            let _ = progress_app.emit("schematic://progress", serde_json::json!({
+                "operation_id": operation_id, "phase": "converting",
+                "current": current, "total": total,
+            }));
+        };
+        let result = launcher.import_schematic_as(
                 &instance_id,
                 &path,
+                target_format.as_deref(),
                 provider.as_deref(),
                 project_id.as_deref(),
-            )
-            .map_err(err)
+                &cancel,
+                &mut progress,
+            );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
     })
     .await
     .map_err(err)?
@@ -549,20 +565,75 @@ pub(crate) async fn import_schematic(
 
 #[tauri::command]
 pub(crate) async fn download_schematic(
+    app: AppHandle,
     state: State<'_, AppState>,
     instance_id: String,
     provider: String,
     name: String,
     format: String,
+    operation_id: Option<String>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
+    let operation_id = operation_id.unwrap_or_else(|| format!("schematic-download-{instance_id}"));
+    let cancel = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher
-            .download_schematic(&instance_id, &provider, &name, &format)
-            .map_err(err)
+        let progress_app = app.clone();
+        let mut progress = |phase: &str, current, total| {
+            let _ = progress_app.emit("schematic://progress", serde_json::json!({
+                "operation_id": operation_id, "phase": phase,
+                "current": current, "total": total,
+            }));
+        };
+        let result = launcher.download_schematic_with_progress(
+            &instance_id, &provider, &name, &format, &cancel, &mut progress,
+        );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
     })
     .await
     .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) async fn convert_schematic(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    path: String,
+    format: String,
+    operation_id: String,
+) -> CmdResult<String> {
+    let launcher = state.launcher.clone();
+    let cancel = state.arm_cancel(&operation_id);
+    let cancels = state.cancels.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let progress_app = app.clone();
+        let mut progress = |current, total| {
+            let _ = progress_app.emit("schematic://progress", serde_json::json!({
+                "operation_id": operation_id, "phase": "converting",
+                "current": current, "total": total,
+            }));
+        };
+        let result = launcher.convert_schematic(
+            &instance_id, &path, &format, &cancel, &mut progress,
+        );
+        if let Ok(mut map) = cancels.lock() { map.remove(&operation_id); }
+        result.map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub(crate) fn cancel_schematic_operation(
+    state: State<AppState>,
+    operation_id: String,
+) -> CmdResult<()> {
+    if let Ok(map) = state.cancels.lock() {
+        if let Some(flag) = map.get(&operation_id) { flag.store(true, Ordering::Relaxed); }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -584,7 +655,7 @@ pub(crate) async fn remove_schematic(
 #[tauri::command]
 pub(crate) async fn scan_schematic_downloads(
     folders: Vec<String>,
-) -> CmdResult<Vec<(String, String)>> {
+) -> CmdResult<Vec<(String, String, u64, u64)>> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut out = Vec::new();
         for folder in folders {
@@ -606,7 +677,14 @@ pub(crate) async fn scan_schematic_downloads(
                     .unwrap_or(false);
                 if is_schematic {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    out.push((name, path.to_string_lossy().to_string()));
+                    let metadata = entry.metadata().ok();
+                    let size = metadata.as_ref().map(|value| value.len()).unwrap_or(0);
+                    let modified = metadata
+                        .and_then(|value| value.modified().ok())
+                        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|value| value.as_millis() as u64)
+                        .unwrap_or(0);
+                    out.push((name, path.to_string_lossy().to_string(), size, modified));
                 }
             }
         }

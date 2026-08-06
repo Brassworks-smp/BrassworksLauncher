@@ -469,6 +469,8 @@ pub fn run() {
             commands::set_integration,
             commands::import_schematic,
             commands::download_schematic,
+            commands::convert_schematic,
+            commands::cancel_schematic_operation,
             commands::remove_schematic,
             commands::scan_schematic_downloads,
             commands::import_instance_branding,

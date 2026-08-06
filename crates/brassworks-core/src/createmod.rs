@@ -282,6 +282,8 @@ pub struct InstalledSchematic {
     pub web_url: Option<String>,
     #[serde(default)]
     pub format: String,
+    #[serde(default)]
+    pub original_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -368,6 +370,7 @@ pub fn list_installed_schematics(
             path: path.to_string_lossy().to_string(),
             filename,
             format: "nbt".to_string(),
+            original_format: None,
         });
     }
     installed.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));

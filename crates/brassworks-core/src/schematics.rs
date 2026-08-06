@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +39,8 @@ pub struct SchematicProviderStatus {
     pub enabled: bool,
     pub detected: bool,
     pub formats: Vec<String>,
+    pub native_formats: Vec<String>,
+    pub recommended_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +58,8 @@ struct InstalledMetadata {
     provider: String,
     project_id: String,
     format: String,
+    #[serde(default)]
+    original_format: Option<String>,
     title: String,
     #[serde(default)]
     description: Option<String>,
@@ -253,6 +259,16 @@ pub fn filters(provider: &str) -> Result<SchematicFilters> {
 }
 
 pub fn download(provider: &str, id: &str, format: &str) -> Result<(String, Vec<u8>)> {
+    download_with_progress(provider, id, format, &AtomicBool::new(false), &mut |_, _| {})
+}
+
+pub fn download_with_progress(
+    provider: &str,
+    id: &str,
+    format: &str,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(u64, u64),
+) -> Result<(String, Vec<u8>)> {
     if provider == MINECRAFT_SCHEMATICS_PROVIDER {
         return Err(CoreError::Modpack(
             "Minecraft Schematics requires an account; use the browser download flow".to_string(),
@@ -266,7 +282,7 @@ pub fn download(provider: &str, id: &str, format: &str) -> Result<(String, Vec<u
             "{provider} does not provide .{format} files"
         )));
     }
-    let response = client()?
+    let mut response = client()?
         .get(provider_url(provider, &format!("schematics/{id}/download")))
         .query(&[("format", format)])
         .send()
@@ -290,10 +306,16 @@ pub fn download(provider: &str, id: &str, format: &str) -> Result<(String, Vec<u
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let bytes = response
-        .bytes()
-        .map_err(|e| CoreError::Remote(e.to_string()))?
-        .to_vec();
+    let total = response.content_length().unwrap_or(0);
+    let mut bytes = Vec::with_capacity(total.min(32 * 1024 * 1024) as usize);
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        if cancel.load(Ordering::Relaxed) { return Err(CoreError::Cancelled); }
+        let read = response.read(&mut buffer).map_err(|e| CoreError::Remote(e.to_string()))?;
+        if read == 0 { break; }
+        bytes.extend_from_slice(&buffer[..read]);
+        progress(bytes.len() as u64, total);
+    }
     let trimmed = bytes
         .iter()
         .copied()
@@ -363,38 +385,45 @@ fn resolved(instance: &Instance, key: &str, detected: bool) -> bool {
 
 pub fn status(instance: &Instance, mods: &[InstalledMod]) -> SchematicsStatus {
     let (create, litematica, worldedit) = detect_tools(mods);
-    let external_detected = litematica || worldedit;
-    let providers = vec![
-        SchematicProviderStatus {
+    let any_detected = create || litematica || worldedit;
+    let targets = compatible_formats(
+        litematica,
+        worldedit,
+        &["nbt", "litematic", "schem", "schematic", "mcstructure"],
+    );
+    let recommended = (create && !worldedit).then(|| "nbt".to_string());
+    let create_provider = SchematicProviderStatus {
             id: CREATE_PROVIDER.into(),
             label: "CreateMod.com".into(),
-            enabled: resolved(instance, CREATE_INTEGRATION, create),
-            detected: create,
-            formats: vec!["nbt".into()],
-        },
-        SchematicProviderStatus {
+            enabled: resolved(instance, CREATE_INTEGRATION, any_detected),
+            detected: any_detected,
+            formats: targets.clone(),
+            native_formats: vec!["nbt".into()],
+            recommended_format: recommended.clone(),
+        };
+    let abfielder_provider = SchematicProviderStatus {
             id: ABFIELDER_PROVIDER.into(),
             label: "Abfielder".into(),
-            enabled: resolved(instance, ABFIELDER_INTEGRATION, external_detected),
-            detected: external_detected,
-            formats: compatible_formats(
-                litematica,
-                worldedit,
-                &["litematic", "schem", "mcstructure"],
-            ),
-        },
-        SchematicProviderStatus {
+            enabled: resolved(instance, ABFIELDER_INTEGRATION, any_detected),
+            detected: any_detected,
+            formats: targets.clone(),
+            native_formats: vec!["litematic".into(), "schem".into(), "mcstructure".into()],
+            recommended_format: recommended.clone(),
+        };
+    let minecraft_provider = SchematicProviderStatus {
             id: MINECRAFT_SCHEMATICS_PROVIDER.into(),
             label: "Minecraft Schematics".into(),
-            enabled: resolved(
-                instance,
-                MINECRAFT_SCHEMATICS_INTEGRATION,
-                external_detected,
-            ),
-            detected: external_detected,
-            formats: compatible_formats(litematica, worldedit, &["schem", "schematic"]),
-        },
-    ];
+            enabled: resolved(instance, MINECRAFT_SCHEMATICS_INTEGRATION, any_detected),
+            detected: any_detected,
+            formats: targets,
+            native_formats: vec!["schem".into(), "schematic".into()],
+            recommended_format: recommended,
+        };
+    let providers = if create {
+        vec![create_provider, abfielder_provider, minecraft_provider]
+    } else {
+        vec![abfielder_provider, minecraft_provider, create_provider]
+    };
     SchematicsStatus {
         enabled: providers.iter().any(|p| p.enabled),
         create_detected: create,
@@ -408,7 +437,8 @@ pub fn status(instance: &Instance, mods: &[InstalledMod]) -> SchematicsStatus {
 fn compatible_formats(litematica: bool, worldedit: bool, available: &[&str]) -> Vec<String> {
     let mut formats = Vec::new();
     for value in available {
-        if (*value == "litematic" && litematica)
+        if crate::schematic_convert::can_convert(value)
+            || (*value == "litematic" && litematica)
             || ((*value == "schem" || *value == "schematic") && (worldedit || litematica))
             || (*value == "mcstructure" && litematica)
         {
@@ -455,6 +485,15 @@ fn supported_format(path: &Path) -> Option<String> {
         "nbt" | "litematic" | "schem" | "schematic" | "mcstructure"
     )
     .then_some(ext)
+}
+
+fn provider_native_format(provider: &str, format: &str) -> bool {
+    match provider {
+        CREATE_PROVIDER => format == "nbt",
+        MINECRAFT_SCHEMATICS_PROVIDER => matches!(format, "schem" | "schematic"),
+        ABFIELDER_PROVIDER => matches!(format, "litematic" | "schem" | "mcstructure"),
+        _ => false,
+    }
 }
 
 fn read_index(path: &Path) -> InstalledIndex {
@@ -525,11 +564,43 @@ pub fn list_installed(
                 description: meta.and_then(|m| m.description.clone()),
                 image_url: meta.and_then(|m| m.image_url.clone()),
                 author: meta.and_then(|m| m.author.clone()),
-                source: meta.map(|m| m.provider.clone()),
-                project_id: meta.map(|m| m.project_id.clone()),
+                source: meta
+                    .map(|m| m.provider.clone())
+                    .filter(|value| !value.is_empty()),
+                project_id: meta
+                    .map(|m| m.project_id.clone())
+                    .filter(|value| !value.is_empty()),
                 web_url: meta.and_then(|m| m.web_url.clone()),
                 format,
+                original_format: meta.and_then(|m| m.original_format.clone()),
             });
+        }
+    }
+    // Older index entries predate explicit conversion provenance. Backfill only
+    // when a matching native provider file makes the relationship unambiguous.
+    let installed_snapshot = out.clone();
+    for item in &mut out {
+        if item.original_format.is_some() {
+            continue;
+        }
+        let (Some(source), Some(project_id)) = (&item.source, &item.project_id) else {
+            continue;
+        };
+        if provider_native_format(source, &item.format) {
+            continue;
+        }
+        let native_formats: BTreeSet<_> = installed_snapshot
+            .iter()
+            .filter(|candidate| {
+                candidate.source.as_ref() == Some(source)
+                    && candidate.project_id.as_ref() == Some(project_id)
+                    && candidate.path != item.path
+                    && provider_native_format(source, &candidate.format)
+            })
+            .map(|candidate| candidate.format.clone())
+            .collect();
+        if native_formats.len() == 1 {
+            item.original_format = native_formats.into_iter().next();
         }
     }
     out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
@@ -542,6 +613,7 @@ pub fn record(
     provider: &str,
     id: &str,
     format: &str,
+    original_format: Option<&str>,
     detail: Option<&SchematicDetail>,
 ) -> Result<()> {
     let mut index = read_index(index_path);
@@ -555,6 +627,9 @@ pub fn record(
             provider: provider.into(),
             project_id: id.into(),
             format: format.into(),
+            original_format: original_format
+                .filter(|source| !source.eq_ignore_ascii_case(format))
+                .map(str::to_string),
             title: detail
                 .map(|d| d.title.clone())
                 .filter(|v| !v.is_empty())
@@ -585,6 +660,48 @@ pub fn safe_download_filename(suggested: &str, id: &str, format: &str) -> String
         .map(|v| v.to_string_lossy().to_string())
         .filter(|v| v.to_ascii_lowercase().ends_with(&format!(".{format}")))
         .unwrap_or_else(|| format!("{id}.{format}"))
+}
+
+pub fn converted_filename(source: &Path, source_format: &str, target_format: &str) -> PathBuf {
+    let stem = source
+        .file_stem()
+        .map(|value| value.to_string_lossy().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "schematic".to_string());
+    let base = stem
+        .rsplit_once("-converted-from-")
+        .map(|(base, _)| base)
+        .filter(|base| !base.is_empty())
+        .unwrap_or(&stem);
+    PathBuf::from(format!(
+        "{base}-converted-from-{}.{}",
+        source_format.to_ascii_lowercase(),
+        target_format.to_ascii_lowercase()
+    ))
+}
+
+pub fn non_overwriting_path(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let stem = path
+        .file_stem()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| "schematic".to_string());
+    let extension = path
+        .extension()
+        .map(|value| value.to_string_lossy().to_string());
+    for copy in 2.. {
+        let mut candidate = parent.join(format!("{stem}-{copy}"));
+        if let Some(extension) = &extension {
+            candidate.set_extension(extension);
+        }
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!()
 }
 
 pub fn formats_filter(provider: &str) -> Vec<FilterOption> {
@@ -684,9 +801,139 @@ mod tests {
     }
 
     #[test]
+    fn all_providers_are_available_for_create_only_instances() {
+        let instance = Instance::new_custom(
+            "i", "i", "1.21.1", crate::instance::LoaderKind::Fabric,
+            crate::instance::LoaderVersion::default(), crate::instance::PackSource::None,
+        );
+        let result = status(&instance, &[mc(None, "create-fabric.jar")]);
+        assert_eq!(result.providers[0].id, CREATE_PROVIDER);
+        assert!(result.providers.iter().all(|provider| provider.enabled));
+        assert!(result.providers.iter().all(|provider| {
+            provider.recommended_format.as_deref() == Some("nbt")
+                && provider.formats.iter().any(|format| format == "litematic")
+        }));
+    }
+
+    #[test]
+    fn abfielder_leads_and_createmod_is_available_without_create() {
+        let instance = Instance::new_custom(
+            "i", "i", "1.21.1", crate::instance::LoaderKind::Fabric,
+            crate::instance::LoaderVersion::default(), crate::instance::PackSource::None,
+        );
+        let result = status(&instance, &[mc(None, "worldedit-mod.jar")]);
+        assert_eq!(result.providers[0].id, ABFIELDER_PROVIDER);
+        assert!(result.providers.iter().find(|provider| provider.id == CREATE_PROVIDER).unwrap().enabled);
+        assert!(result.providers.iter().all(|provider| provider.recommended_format.is_none()));
+    }
+
+    #[test]
     fn detects_cache_rate_limit_responses() {
         assert!(is_rate_limited(429, ""));
         assert!(is_rate_limited(502, r#"{"error":"rate limited upstream"}"#));
         assert!(!is_rate_limited(502, r#"{"error":"bad gateway"}"#));
+    }
+
+    #[test]
+    fn classic_schematic_files_are_scanned_as_supported() {
+        assert_eq!(
+            supported_format(Path::new("Roxwood Cabin.SCHEMATIC")).as_deref(),
+            Some("schematic")
+        );
+    }
+
+    #[test]
+    fn converted_filenames_are_explicit_and_never_reuse_the_original_name() {
+        assert_eq!(
+            converted_filename(Path::new("Roxwood Cabin.nbt"), "nbt", "schem"),
+            Path::new("Roxwood Cabin-converted-from-nbt.schem")
+        );
+        assert_eq!(
+            converted_filename(
+                Path::new("Roxwood Cabin-converted-from-nbt.schem"),
+                "schem",
+                "nbt",
+            ),
+            Path::new("Roxwood Cabin-converted-from-schem.nbt")
+        );
+    }
+
+    #[test]
+    fn converted_filenames_do_not_overwrite_an_existing_conversion() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("cabin-converted-from-nbt.schem");
+        std::fs::write(&first, b"first").unwrap();
+        assert_eq!(
+            non_overwriting_path(&first),
+            root.path().join("cabin-converted-from-nbt-2.schem")
+        );
+    }
+
+    #[test]
+    fn converted_local_schematics_keep_their_source_format() {
+        let root = tempfile::tempdir().unwrap();
+        let schematics_dir = root.path().join("schematics");
+        std::fs::create_dir_all(&schematics_dir).unwrap();
+        let schematic = schematics_dir.join("cabin.schem");
+        std::fs::write(&schematic, b"converted").unwrap();
+        let index = root.path().join("installed-schematics.json");
+        record(&index, &schematic, "", "", "schem", Some("nbt"), None).unwrap();
+
+        let instance = Instance::new_custom(
+            "i",
+            "i",
+            "1.21.1",
+            crate::instance::LoaderKind::Fabric,
+            crate::instance::LoaderVersion::default(),
+            crate::instance::PackSource::None,
+        );
+        let installed = list_installed(root.path(), &index, &instance, &[]).unwrap();
+
+        assert_eq!(installed.len(), 1);
+        assert_eq!(installed[0].format, "schem");
+        assert_eq!(installed[0].original_format.as_deref(), Some("nbt"));
+        assert_eq!(installed[0].source, None);
+        assert_eq!(installed[0].project_id, None);
+    }
+
+    #[test]
+    fn legacy_provider_conversion_is_inferred_from_its_native_copy() {
+        let root = tempfile::tempdir().unwrap();
+        let schematics_dir = root.path().join("schematics");
+        std::fs::create_dir_all(&schematics_dir).unwrap();
+        let native = schematics_dir.join("cabin.nbt");
+        let converted = schematics_dir.join("cabin.schem");
+        std::fs::write(&native, b"native").unwrap();
+        std::fs::write(&converted, b"converted").unwrap();
+        let index = root.path().join("installed-schematics.json");
+        record(&index, &native, CREATE_PROVIDER, "42", "nbt", None, None).unwrap();
+        record(
+            &index,
+            &converted,
+            CREATE_PROVIDER,
+            "42",
+            "schem",
+            None,
+            None,
+        )
+        .unwrap();
+
+        let instance = Instance::new_custom(
+            "i",
+            "i",
+            "1.21.1",
+            crate::instance::LoaderKind::Fabric,
+            crate::instance::LoaderVersion::default(),
+            crate::instance::PackSource::None,
+        );
+        let installed = list_installed(root.path(), &index, &instance, &[]).unwrap();
+        let native = installed.iter().find(|item| item.format == "nbt").unwrap();
+        let converted = installed
+            .iter()
+            .find(|item| item.format == "schem")
+            .unwrap();
+
+        assert_eq!(native.original_format, None);
+        assert_eq!(converted.original_format.as_deref(), Some("nbt"));
     }
 }

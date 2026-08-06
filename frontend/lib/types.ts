@@ -82,6 +82,7 @@ export interface InstalledSchematic {
   project_id: string | null;
   web_url: string | null;
   format: string;
+  original_format: string | null;
 }
 
 export interface SchematicMaterial {
@@ -195,6 +196,15 @@ export interface SchematicProviderStatus {
   enabled: boolean;
   detected: boolean;
   formats: string[];
+  native_formats: string[];
+  recommended_format: string | null;
+}
+
+export interface SchematicOperationProgress {
+  operation_id: string;
+  phase: "downloading" | "converting";
+  current: number;
+  total: number;
 }
 
 export interface SchematicStat {

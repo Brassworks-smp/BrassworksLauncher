@@ -5,13 +5,14 @@ import {
   FolderOpen,
   Loader2,
   Plus,
+  Repeat2,
   RefreshCw,
   Search,
   Trash2,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { toast } from "@/lib/toast";
+import { dismissToast, toast, toastProgress } from "@/lib/toast";
 import type { InstalledSchematic } from "@/lib/types";
 import type {
   InstalledMod,
@@ -20,7 +21,7 @@ import type {
   SearchHit,
 } from "@/lib/types";
 import { EMPTY_FILTERS } from "@/lib/types";
-import { accentForProvider, AddSchematicModal } from "./AddSchematicModal";
+import { accentForProvider, AddSchematicModal, FormatPrompt } from "./AddSchematicModal";
 import { AddContentModal } from "./AddContentModal";
 import { CachedImage } from "./CachedImage";
 import { SegmentedTabs, Skeleton } from "./ui";
@@ -61,14 +62,19 @@ function SchematicRow({
   schematic,
   onOpen,
   onRemove,
+  onConvert,
 }: {
   schematic: InstalledSchematic;
   onOpen: () => void;
   onRemove: () => void;
+  onConvert: () => void;
 }) {
   const t = useT();
   const [imageFailed, setImageFailed] = useState(false);
   const hasMetadata = !!schematic.source && !!schematic.project_id;
+  const wasConverted =
+    !!schematic.original_format &&
+    schematic.original_format.toLowerCase() !== schematic.format.toLowerCase();
   return (
     <div
       style={schematic.source ? accentForProvider(schematic.source) : undefined}
@@ -109,7 +115,29 @@ function SchematicRow({
             >
               {schematic.title}
             </span>
+            <span
+              title={schematic.filename}
+              className="max-w-[42%] shrink truncate font-mono text-[10px] text-ink-600/80"
+            >
+              {schematic.filename}
+            </span>
             {hasMetadata && <ExternalLink size={10} className="shrink-0 text-ink-600" />}
+            {wasConverted ? (
+              <span
+                title={t("schematics.convertedFromTo", {
+                  original: schematic.original_format!,
+                  format: schematic.format,
+                })}
+                className="flex shrink-0 items-center gap-1 rounded border border-violet-400/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-violet-300"
+              >
+                <Repeat2 size={9} />
+                {t("schematics.converted")} .{schematic.original_format} → .{schematic.format}
+              </span>
+            ) : (
+              <span className="shrink-0 rounded border border-edge bg-ink-950/35 px-1.5 py-0.5 text-[9px] font-medium uppercase text-ink-600">
+                .{schematic.format}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-600">
             {hasMetadata && (
@@ -117,9 +145,9 @@ function SchematicRow({
                 {schematic.source === "createmod" ? "CreateMod.com" : schematic.source === "minecraft-schematics" ? "Minecraft Schematics" : schematic.source === "abfielder" ? "Abfielder" : schematic.source}
               </span>
             )}
-            <span className="truncate">
-              {schematic.description || schematic.filename}
-            </span>
+            {schematic.description && (
+              <span className="truncate">{schematic.description}</span>
+            )}
             {schematic.author && (
               <span className="shrink-0">· {t("schematics.by")} {schematic.author}</span>
             )}
@@ -129,6 +157,18 @@ function SchematicRow({
           <span className="rounded-md border border-edge bg-ink-900/60 px-2 py-1 text-[10px] uppercase tracking-wide text-ink-600">
             {t("schematics.local")}
           </span>
+        )}
+        {["nbt", "schem", "litematic", "schematic"].includes(schematic.format) && (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onConvert();
+            }}
+            title="Convert schematic"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-600 transition-[color,background-color,transform] duration-150 hover:bg-brass-500/10 hover:text-brass-300 active:scale-[.97]"
+          >
+            <Repeat2 size={14} />
+          </button>
         )}
         <button
           onClick={(event) => {
@@ -157,6 +197,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
   const [adding, setAdding] = useState(false);
   const [detailProject, setDetailProject] = useState<InstalledSchematic | null>(null);
   const [requiredContent, setRequiredContent] = useState<RequiredContentTarget | null>(null);
+  const [converting, setConverting] = useState<InstalledSchematic | null>(null);
 
   const load = useCallback(() => {
     if (!api.isTauri()) {
@@ -212,6 +253,32 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
       setError(String(reason));
       load();
     });
+  };
+
+  const convert = async (schematic: InstalledSchematic, format: string) => {
+    const operationId = globalThis.crypto?.randomUUID?.() ?? `schematic-${Date.now()}-${Math.random()}`;
+    const key = `${operationId}:convert`;
+    const cancel = () => void api.cancelSchematicOperation(operationId);
+    const unlisten = await api.onSchematicProgress((event) => {
+      if (event.operation_id !== operationId) return;
+      toastProgress(
+        key,
+        `Converting ${schematic.title} to .${format}`,
+        event.total > 0 ? Math.min(100, Math.round((event.current / event.total) * 100)) : null,
+        cancel,
+      );
+    });
+    toastProgress(key, `Converting ${schematic.title} to .${format}`, null, cancel);
+    try {
+      await api.convertSchematic(instanceId, schematic.path, format, operationId);
+      toast(`Converted ${schematic.title} to .${format}`, "success");
+      load();
+    } catch (reason) {
+      if (!String(reason).toLowerCase().includes("cancel")) toast(String(reason), "error");
+    } finally {
+      unlisten();
+      dismissToast(key);
+    }
   };
 
   const openRequiredMod = async (mod: SchematicRequiredMod) => {
@@ -345,6 +412,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
                 schematic={schematic}
                 onOpen={() => setDetailProject(schematic)}
                 onRemove={() => remove(schematic)}
+                onConvert={() => setConverting(schematic)}
               />
             ))}
             {filtered.length === 0 && (
@@ -373,6 +441,22 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
           onInstalled={load}
           onOpenRequiredMod={openRequiredMod}
           suspended={!!requiredContent}
+        />
+      )}
+
+      {converting && (
+        <FormatPrompt
+          title={converting.title}
+          formats={["nbt", "schem", "litematic", "schematic"].filter((format) => format !== converting.format)}
+          nativeFormats={[converting.format]}
+          provider={converting.source ?? "createmod"}
+          mode="convert"
+          onClose={() => setConverting(null)}
+          onChoose={(format) => {
+            const item = converting;
+            setConverting(null);
+            void convert(item, format);
+          }}
         />
       )}
 

@@ -27,6 +27,7 @@ import {
   Package,
   Loader2,
   Ruler,
+  Repeat2,
   SlidersHorizontal,
   Star,
   Tag,
@@ -36,7 +37,7 @@ import {
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { toast } from "@/lib/toast";
+import { dismissToast, toast, toastProgress } from "@/lib/toast";
 import type {
   FilterOptions,
   InstalledSchematic,
@@ -218,20 +219,36 @@ function HomeSection({
   );
 }
 
-function FormatPrompt({
+export function FormatPrompt({
   title,
   formats,
+  nativeFormats = formats,
+  recommendedFormat,
   provider,
+  mode = "download",
   onChoose,
   onClose,
 }: {
   title: string;
   formats: string[];
+  nativeFormats?: string[];
+  recommendedFormat?: string | null;
   provider: string;
+  mode?: "download" | "convert";
   onChoose: (format: string) => void;
   onClose: () => void;
 }) {
   const choices = formats.length > 0 ? formats : ["schem"];
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
   return createPortal(
     <div
       style={accentForProvider(provider)}
@@ -241,18 +258,36 @@ function FormatPrompt({
       <div className="rise w-full max-w-sm rounded-xl border border-edge bg-ink-900 p-5 shadow-2xl">
         <h3 className="font-mc text-base text-gray-100">Choose file type</h3>
         <p className="mt-1 line-clamp-2 text-xs text-ink-600">
-          Download {title} in the format used by this instance.
+          {mode === "convert"
+            ? `Convert ${title} to another file type.`
+            : `Download ${title} in the format used by this instance.`}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          {choices.map((format) => (
-            <button
-              key={format}
-              onClick={() => onChoose(format)}
-              className="rounded-lg border border-edge bg-ink-950/40 px-3 py-3 font-mono text-sm text-brass-300 transition hover:border-brass-500/50 hover:bg-brass-500/10 active:scale-[.98]"
-            >
-              .{format}
-            </button>
-          ))}
+          {choices.map((format) => {
+            const native = nativeFormats.includes(format);
+            return (
+              <button
+                key={format}
+                onClick={() => onChoose(format)}
+                className="rounded-lg border border-edge bg-ink-950/40 px-3 py-3 text-left transition hover:border-brass-500/50 hover:bg-brass-500/10 active:scale-[.98]"
+              >
+                <span className="flex items-center gap-1.5 font-mono text-sm text-brass-300">
+                  .{format}
+                  {recommendedFormat === format && <span className="rounded bg-brass-500/15 px-1 text-[8px] font-sans uppercase">Recommended</span>}
+                </span>
+                <span className="mt-1 block text-[10px] text-ink-600">
+                  {format === "nbt" && <span className="block">CreateMod and Vanilla</span>}
+                  {format === "litematic" && (
+                    <span className="block">Litematica and Forgematica</span>
+                  )}
+                  {format === "schem" && (
+                    <span className="block">WorldEdit and other mods</span>
+                  )}
+                  <span className="block">{native ? "Native format" : "Non-native · will convert"}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
         <button
           onClick={onClose}
@@ -270,7 +305,49 @@ type BrowserDownloadTarget = {
   id: string;
   title: string;
   url: string;
+  targetFormat: string;
 };
+
+async function runSchematicDownload(
+  label: string,
+  run: (operationId: string) => Promise<string>,
+) {
+  const operationId = globalThis.crypto?.randomUUID?.() ?? `schematic-${Date.now()}-${Math.random()}`;
+  const downloadKey = `${operationId}:download`;
+  const convertKey = `${operationId}:convert`;
+  const cancel = () => void api.cancelSchematicOperation(operationId);
+  const unlisten = await api.onSchematicProgress((event) => {
+    if (event.operation_id !== operationId) return;
+    const value = event.total > 0 ? Math.min(100, Math.round((event.current / event.total) * 100)) : null;
+    if (event.phase === "converting") {
+      dismissToast(downloadKey);
+      toastProgress(convertKey, `Converting ${label}`, value, cancel);
+    } else {
+      toastProgress(downloadKey, `Downloading ${label}`, value, cancel);
+    }
+  });
+  toastProgress(downloadKey, `Downloading ${label}`, null, cancel);
+  try {
+    return await run(operationId);
+  } finally {
+    unlisten();
+    dismissToast(downloadKey);
+    dismissToast(convertKey);
+  }
+}
+
+const operationWasCancelled = (reason: unknown) =>
+  String(reason).toLowerCase().includes("cancel");
+
+const CONVERTIBLE_SCHEMATIC_FORMATS = new Set(["nbt", "schem", "litematic", "schematic"]);
+
+const availableDownloadFormats = (allowed: string[], native: string[]) =>
+  allowed.filter(
+    (format) =>
+      native.includes(format) ||
+      (CONVERTIBLE_SCHEMATIC_FORMATS.has(format) &&
+        native.some((source) => CONVERTIBLE_SCHEMATIC_FORMATS.has(source))),
+  );
 
 export const schematicProviderUrl = (
   provider: string,
@@ -308,6 +385,8 @@ function MinecraftSchematicsDownloadPrompt({
   const [watching, setWatching] = useState(false);
   const [busy, setBusy] = useState(false);
   const baseline = useRef(new Set<string>());
+  const stableCandidates = useRef(new Map<string, { size: number; modified: number }>());
+  const importFailures = useRef(new Map<string, number>());
   const importing = useRef(false);
 
   const saveFolders = useCallback((next: string[]) => {
@@ -353,23 +432,31 @@ function MinecraftSchematicsDownloadPrompt({
       importing.current = true;
       setBusy(true);
       try {
-        await api.importSchematic(
-          instanceId,
-          path,
-          "minecraft-schematics",
-          target.id,
+        await runSchematicDownload(target.title, (operationId) =>
+          api.importSchematic(
+            instanceId,
+            path,
+            "minecraft-schematics",
+            target.id,
+            target.targetFormat,
+            operationId,
+          ),
         );
         toast(t("schematics.imported"), "success");
         onInstalled();
         onClose();
       } catch (reason) {
-        baseline.current.add(path);
-        toast(t("schematics.importFailed"), "error");
+        const cancelled = operationWasCancelled(reason);
+        const failures = (importFailures.current.get(path) ?? 0) + 1;
+        importFailures.current.set(path, failures);
+        stableCandidates.current.delete(path);
+        if (cancelled || failures >= 3) baseline.current.add(path);
+        if (!cancelled && failures >= 3) toast(t("schematics.importFailed"), "error");
         importing.current = false;
         setBusy(false);
       }
     },
-    [instanceId, onClose, onInstalled, t, target.id],
+    [instanceId, onClose, onInstalled, t, target.id, target.targetFormat, target.title],
   );
 
   useEffect(() => {
@@ -378,8 +465,15 @@ function MinecraftSchematicsDownloadPrompt({
     const poll = async () => {
       const hits = await api.scanSchematicDownloads(folders).catch(() => []);
       if (!alive) return;
-      const downloaded = hits.find(([, path]) => !baseline.current.has(path));
-      if (downloaded) void importFile(downloaded[1]);
+      for (const [, path, size, modified] of hits) {
+        if (baseline.current.has(path) || size === 0) continue;
+        const previous = stableCandidates.current.get(path);
+        stableCandidates.current.set(path, { size, modified });
+        if (previous && previous.size === size && previous.modified === modified) {
+          void importFile(path);
+          break;
+        }
+      }
     };
     void poll();
     const id = window.setInterval(poll, 1200);
@@ -394,6 +488,8 @@ function MinecraftSchematicsDownloadPrompt({
     setBusy(true);
     const existing = await api.scanSchematicDownloads(folders).catch(() => []);
     baseline.current = new Set(existing.map(([, path]) => path));
+    stableCandidates.current.clear();
+    importFailures.current.clear();
     setWatching(true);
     setBusy(false);
     try {
@@ -992,6 +1088,8 @@ function SchematicDetailView({
   instanceId,
   provider,
   allowedFormats,
+  nativeFormats,
+  recommendedFormat,
   hit,
   installed,
   onInstalled,
@@ -1001,6 +1099,8 @@ function SchematicDetailView({
   instanceId: string;
   provider: string;
   allowedFormats: string[];
+  nativeFormats: string[];
+  recommendedFormat: string | null;
   hit: SearchHit;
   installed: InstalledSchematic | null;
   onInstalled: () => void;
@@ -1013,14 +1113,19 @@ function SchematicDetailView({
   const [busy, setBusy] = useState(false);
   const [copiedMaterials, setCopiedMaterials] = useState(false);
   const [removed, setRemoved] = useState(false);
+  const [convertingInstalled, setConvertingInstalled] = useState(false);
   const [choosingFormat, setChoosingFormat] = useState(false);
+  const [choosingConversion, setChoosingConversion] = useState(false);
   const effectiveInstalled = removed ? null : installed;
+  const wasConverted =
+    !!effectiveInstalled?.original_format &&
+    effectiveInstalled.original_format.toLowerCase() !==
+      effectiveInstalled.format.toLowerCase();
   const offeredFormats = detail?.formats ?? hit.formats ?? [];
-  const compatibleFormats = offeredFormats.filter((format) =>
-    allowedFormats.includes(format),
-  );
-  const downloadFormats =
-    compatibleFormats.length > 0 ? compatibleFormats : allowedFormats;
+  const downloadFormats = availableDownloadFormats(allowedFormats, offeredFormats);
+  const canConvertInstalled =
+    !!effectiveInstalled &&
+    CONVERTIBLE_SCHEMATIC_FORMATS.has(effectiveInstalled.format);
 
   useEffect(() => {
     let alive = true;
@@ -1038,29 +1143,34 @@ function SchematicDetailView({
 
   const install = async (format: string) => {
     if (busy) return;
+    if (provider === "minecraft-schematics") {
+      onBrowserDownload({
+        id: hit.project_id,
+        title: detail?.title || hit.title,
+        url: schematicDownloadUrl(hit.project_id, detail?.web_url ?? hit.slug),
+        targetFormat: format,
+      });
+      return;
+    }
     setBusy(true);
     try {
-      await api.downloadSchematic(instanceId, provider, hit.project_id, format);
+      await runSchematicDownload(detail?.title || hit.title, (operationId) =>
+        api.downloadSchematic(instanceId, provider, hit.project_id, format, operationId),
+      );
       toast(t("schematics.imported"), "success");
       setRemoved(false);
       onInstalled();
     } catch (reason) {
-      setError(String(reason));
-      toast(t("schematics.downloadFailed"), "error");
+      if (!operationWasCancelled(reason)) {
+        setError(String(reason));
+        toast(t("schematics.downloadFailed"), "error");
+      }
     } finally {
       setBusy(false);
     }
   };
 
   const requestInstall = () => {
-    if (provider === "minecraft-schematics") {
-      onBrowserDownload({
-        id: hit.project_id,
-        title: detail?.title || hit.title,
-        url: schematicDownloadUrl(hit.project_id, detail?.web_url ?? hit.slug),
-      });
-      return;
-    }
     if (downloadFormats.length === 1) {
       void install(downloadFormats[0]);
     } else {
@@ -1082,6 +1192,55 @@ function SchematicDetailView({
     } catch (reason) {
       setError(String(reason));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const convertInstalled = async (format: string) => {
+    if (busy || !effectiveInstalled) return;
+    setBusy(true);
+    setConvertingInstalled(true);
+    const operationId =
+      globalThis.crypto?.randomUUID?.() ??
+      `schematic-${Date.now()}-${Math.random()}`;
+    const toastKey = `${operationId}:convert`;
+    const cancel = () => void api.cancelSchematicOperation(operationId);
+    let unlisten: (() => void) | null = null;
+    try {
+      unlisten = await api.onSchematicProgress((event) => {
+        if (event.operation_id !== operationId) return;
+        toastProgress(
+          toastKey,
+          `Converting ${effectiveInstalled.title} to .${format}`,
+          event.total > 0
+            ? Math.min(100, Math.round((event.current / event.total) * 100))
+            : null,
+          cancel,
+        );
+      });
+      toastProgress(
+        toastKey,
+        `Converting ${effectiveInstalled.title} to .${format}`,
+        null,
+        cancel,
+      );
+      await api.convertSchematic(
+        instanceId,
+        effectiveInstalled.path,
+        format,
+        operationId,
+      );
+      toast(`Converted ${effectiveInstalled.title} to .${format}`, "success");
+      onInstalled();
+    } catch (reason) {
+      if (!operationWasCancelled(reason)) {
+        setError(String(reason));
+        toast(String(reason), "error");
+      }
+    } finally {
+      unlisten?.();
+      dismissToast(toastKey);
+      setConvertingInstalled(false);
       setBusy(false);
     }
   };
@@ -1127,6 +1286,15 @@ function SchematicDetailView({
       <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-600">
         {detail?.excerpt || hit.description}
       </p>
+      {wasConverted && effectiveInstalled?.original_format && (
+        <div className="mt-2 flex items-center gap-2 rounded-md border border-violet-400/25 bg-violet-500/10 px-2.5 py-2 text-[11px] font-medium text-violet-200">
+          <Repeat2 size={13} className="shrink-0" />
+          {t("schematics.convertedFromTo", {
+            original: effectiveInstalled.original_format,
+            format: effectiveInstalled.format,
+          })}
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-ink-600">
         {detail?.author && (
           <span>
@@ -1181,30 +1349,56 @@ function SchematicDetailView({
           provider: PROVIDER_LABELS[provider] ?? provider,
         })}
         actions={
-          <button
-            disabled={busy}
-            onClick={effectiveInstalled ? uninstall : requestInstall}
-            className={`flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold transition-[color,background-color,transform,opacity] duration-150 active:scale-[.97] disabled:opacity-60 ${
-              effectiveInstalled
-                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                : "bg-brass-500 text-ink-950 hover:bg-brass-400"
-            }`}
-          >
-            {busy ? (
-              <Loader2 size={15} className="animate-spin" />
-            ) : effectiveInstalled ? (
-              <Trash2 size={15} />
-            ) : provider === "minecraft-schematics" ? (
-              <ExternalLink size={15} />
-            ) : (
-              <Download size={15} />
-            )}
-            {effectiveInstalled
-              ? t("schematics.uninstall")
-              : provider === "minecraft-schematics"
+          effectiveInstalled ? (
+            <div className="flex min-w-32 flex-col items-stretch gap-2">
+              <button
+                disabled={busy}
+                onClick={uninstall}
+                className="flex items-center justify-center gap-1.5 rounded-md bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-300 transition-[background-color,transform,opacity] duration-150 hover:bg-red-500/25 active:scale-[.97] disabled:opacity-60"
+              >
+                {busy && !convertingInstalled ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Trash2 size={15} />
+                )}
+                {t("schematics.uninstall")}
+              </button>
+              <button
+                disabled={busy || !canConvertInstalled}
+                onClick={() => setChoosingConversion(true)}
+                title={
+                  canConvertInstalled
+                    ? t("schematics.convert")
+                    : `Conversion from .${effectiveInstalled.format} is not supported`
+                }
+                className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition-[background-color,transform,opacity] duration-150 hover:bg-brass-400 active:scale-[.97] disabled:opacity-60"
+              >
+                {convertingInstalled ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Repeat2 size={15} />
+                )}
+                {t("schematics.convert")}
+              </button>
+            </div>
+          ) : (
+            <button
+              disabled={busy}
+              onClick={requestInstall}
+              className="flex items-center justify-center gap-1.5 rounded-md bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition-[background-color,transform,opacity] duration-150 hover:bg-brass-400 active:scale-[.97] disabled:opacity-60"
+            >
+              {busy ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : provider === "minecraft-schematics" ? (
+                <ExternalLink size={15} />
+              ) : (
+                <Download size={15} />
+              )}
+              {provider === "minecraft-schematics"
                 ? t("schematics.continueOnSite")
                 : t("common.add")}
-          </button>
+            </button>
+          )
         }
         error={error}
         showVersions={false}
@@ -1399,11 +1593,29 @@ function SchematicDetailView({
         <FormatPrompt
           title={detail?.title || hit.title}
           formats={downloadFormats}
+          nativeFormats={offeredFormats.length > 0 ? offeredFormats : nativeFormats}
+          recommendedFormat={recommendedFormat}
           provider={provider}
           onClose={() => setChoosingFormat(false)}
           onChoose={(format) => {
             setChoosingFormat(false);
             void install(format);
+          }}
+        />
+      )}
+      {choosingConversion && effectiveInstalled && (
+        <FormatPrompt
+          title={effectiveInstalled.title}
+          formats={["nbt", "schem", "litematic", "schematic"].filter(
+            (format) => format !== effectiveInstalled.format,
+          )}
+          nativeFormats={[]}
+          provider={provider}
+          mode="convert"
+          onClose={() => setChoosingConversion(false)}
+          onChoose={(format) => {
+            setChoosingConversion(false);
+            void convertInstalled(format);
           }}
         />
       )}
@@ -1601,16 +1813,18 @@ export function AddSchematicModal({
           id: name,
           title: name,
           url: schematicDownloadUrl(name),
+          targetFormat: format,
         });
         return;
       }
       try {
-        await api.downloadSchematic(instanceId, provider, name, format);
+        await runSchematicDownload(name, (operationId) =>
+          api.downloadSchematic(instanceId, provider, name, format, operationId),
+        );
         toast(t("schematics.imported"), "success");
         onInstalled();
       } catch (reason) {
-        toast(t("schematics.downloadFailed"), "error");
-        throw reason;
+        if (!operationWasCancelled(reason)) toast(t("schematics.downloadFailed"), "error");
       }
     },
     [instanceId, onInstalled, provider, t],
@@ -1618,20 +1832,9 @@ export function AddSchematicModal({
 
   const requestQuickInstall = useCallback(
     (card: SchematicCard) => {
-      if (provider === "minecraft-schematics") {
-        setBrowserDownload({
-          id: card.name,
-          title: card.title || card.name,
-          url: schematicDownloadUrl(card.name, card.web_url),
-        });
-        return;
-      }
       const allowed =
         providers.find((item) => item.id === provider)?.formats ?? [];
-      const compatible = card.formats.filter((format) =>
-        allowed.includes(format),
-      );
-      const formats = compatible.length > 0 ? compatible : allowed;
+      const formats = availableDownloadFormats(allowed, card.formats);
       if (formats.length === 1) {
         void install(card.name, formats[0]);
       } else {
@@ -1842,8 +2045,23 @@ export function AddSchematicModal({
                     (item) => item.id === (selected.provider ?? provider),
                   )?.formats ?? []
                 }
+                nativeFormats={
+                  providers.find(
+                    (item) => item.id === (selected.provider ?? provider),
+                  )?.native_formats ?? []
+                }
+                recommendedFormat={
+                  providers.find(
+                    (item) => item.id === (selected.provider ?? provider),
+                  )?.recommended_format ?? null
+                }
                 hit={selected}
-                installed={installedById.get(selected.project_id) ?? null}
+                installed={
+                  initialProject?.project_id === selected.project_id &&
+                  initialProject.source === (selected.provider ?? provider)
+                    ? initialProject
+                    : (installedById.get(selected.project_id) ?? null)
+                }
                 onInstalled={onInstalled}
                 onOpenRequiredMod={onOpenRequiredMod}
                 onBrowserDownload={setBrowserDownload}
@@ -1858,11 +2076,10 @@ export function AddSchematicModal({
           formats={(() => {
             const allowed =
               providers.find((item) => item.id === provider)?.formats ?? [];
-            const compatible = quickInstall.formats.filter((format) =>
-              allowed.includes(format),
-            );
-            return compatible.length > 0 ? compatible : allowed;
+            return availableDownloadFormats(allowed, quickInstall.formats);
           })()}
+          nativeFormats={quickInstall.formats}
+          recommendedFormat={providers.find((item) => item.id === provider)?.recommended_format}
           provider={provider}
           onClose={() => setQuickInstall(null)}
           onChoose={(format) => {

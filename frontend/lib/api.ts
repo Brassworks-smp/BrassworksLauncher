@@ -930,20 +930,36 @@ export const importSchematic = (
   path: string,
   provider?: string,
   projectId?: string,
+  targetFormat?: string,
+  operationId?: string,
 ): Promise<string> =>
   invoke("import_schematic", {
     instanceId,
     path,
     provider: provider ?? null,
     projectId: projectId ?? null,
+    targetFormat: targetFormat ?? null,
+    operationId: operationId ?? null,
   });
 export const downloadSchematic = (
   instanceId: string,
   provider: string,
   name: string,
   format: string,
+  operationId?: string,
 ): Promise<string> =>
-  invoke("download_schematic", { instanceId, provider, name, format });
+  invoke("download_schematic", { instanceId, provider, name, format, operationId: operationId ?? null });
+export const convertSchematic = (
+  instanceId: string,
+  path: string,
+  format: string,
+  operationId: string,
+): Promise<string> => invoke("convert_schematic", { instanceId, path, format, operationId });
+export const cancelSchematicOperation = (operationId: string): Promise<void> =>
+  invoke("cancel_schematic_operation", { operationId });
+export const onSchematicProgress = (
+  cb: (event: import("./types").SchematicOperationProgress) => void,
+): Promise<UnlistenFn> => listen("schematic://progress", (event) => cb(event.payload as import("./types").SchematicOperationProgress));
 export const removeSchematic = (
   instanceId: string,
   path: string,
@@ -952,7 +968,7 @@ export const openSchematicFolder = (instanceId: string, format?: string): Promis
   invoke("open_schematic_folder", { instanceId, format: format ?? null });
 export const scanSchematicDownloads = (
   folders: string[],
-): Promise<[string, string][]> =>
+): Promise<[string, string, number, number][]> =>
   invoke("scan_schematic_downloads", { folders });
 
 export type { Account };
