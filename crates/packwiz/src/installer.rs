@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -18,6 +18,37 @@ struct Planned {
     hash_format: String,
     preserve: bool,
     meta: Option<ManagedMod>,
+}
+
+fn plan_metadata_quality(planned: &Planned) -> u8 {
+    match &planned.meta {
+        Some(meta)
+            if meta.modrinth_id.is_some()
+                || meta.curseforge_id.is_some()
+                || !meta.source.is_empty() => 2,
+        Some(_) => 1,
+        None => 0,
+    }
+}
+
+/// A malformed or older shared export can contain both a metafile and an
+/// override that resolve to the same destination. Downloading both races two
+/// writers and records duplicate content. Keep one destination, preferring the
+/// entry that carries provider/version metadata.
+fn deduplicate_plan(plan: Vec<Planned>) -> Vec<Planned> {
+    let mut positions = HashMap::<String, usize>::new();
+    let mut unique = Vec::<Planned>::with_capacity(plan.len());
+    for planned in plan {
+        if let Some(&position) = positions.get(&planned.dest) {
+            if plan_metadata_quality(&planned) > plan_metadata_quality(&unique[position]) {
+                unique[position] = planned;
+            }
+        } else {
+            positions.insert(planned.dest.clone(), unique.len());
+            unique.push(planned);
+        }
+    }
+    unique
 }
 
 pub struct Installer {
@@ -398,6 +429,8 @@ impl Installer {
                 });
             }
         }
+
+        let plan = deduplicate_plan(plan);
 
                         let need: Vec<bool> = crate::parallel_run(
             &plan,
@@ -947,6 +980,41 @@ fn verify_hash(file: &str, format: &str, expected: &str, data: &[u8]) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn planned(dest: &str, source: Option<&str>) -> Planned {
+        Planned {
+            dest: dest.to_string(),
+            url: format!("https://example.com/{dest}"),
+            hash: String::new(),
+            hash_format: "sha256".to_string(),
+            preserve: false,
+            meta: source.map(|source| ManagedMod {
+                name: dest.to_string(),
+                filename: file_stem(dest).to_string(),
+                path: dest.to_string(),
+                side: "both".to_string(),
+                category: top_dir(dest),
+                modrinth_id: (source == "modrinth").then(|| "project".to_string()),
+                modrinth_version: None,
+                source: source.to_string(),
+                curseforge_id: None,
+                curseforge_file: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn duplicate_destinations_prefer_provider_metadata() {
+        let plan = deduplicate_plan(vec![
+            planned("mods/example.jar", Some("")),
+            planned("config/example.toml", None),
+            planned("mods/example.jar", Some("modrinth")),
+        ]);
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].dest, "mods/example.jar");
+        assert_eq!(plan[0].meta.as_ref().unwrap().source, "modrinth");
+        assert_eq!(plan[1].dest, "config/example.toml");
+    }
 
     #[test]
     fn percent_decode_handles_unicode_and_plain() {

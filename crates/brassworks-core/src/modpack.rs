@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -130,6 +130,12 @@ struct UserItem {
     #[serde(default)]
     curseforge_file: Option<i64>,
     version: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    icon_url: Option<String>,
 }
 
 impl UserItem {
@@ -344,8 +350,11 @@ impl<'a> Modpack<'a> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| CoreError::io(parent, e))?;
         }
-        let json =
-            serde_json::to_vec_pretty(user).map_err(|e| CoreError::serde("user_content", e))?;
+        let mut clean = user.clone();
+        let mut seen = HashSet::new();
+        clean.items.retain(|item| seen.insert(item.path.clone()));
+        let json = serde_json::to_vec_pretty(&clean)
+            .map_err(|e| CoreError::serde("user_content", e))?;
         std::fs::write(&path, json).map_err(|e| CoreError::io(&path, e))
     }
 
@@ -442,7 +451,9 @@ impl<'a> Modpack<'a> {
         let mut out = Vec::new();
 
         for m in manifest.mods {
-            tracked.insert(m.path.clone());
+            if !tracked.insert(m.path.clone()) {
+                continue;
+            }
             let enabled = game_dir.join(&m.path).exists();
             let (source, project_id, version_id) = resolve_ids(
                 &m.source,
@@ -470,7 +481,9 @@ impl<'a> Modpack<'a> {
         }
 
         for u in self.load_user().items {
-            tracked.insert(u.path.clone());
+            if !tracked.insert(u.path.clone()) {
+                continue;
+            }
             let enabled = game_dir.join(&u.path).exists();
             let disabled = game_dir.join(format!("{}.disabled", u.path)).exists();
             if !enabled && !disabled {
@@ -489,9 +502,9 @@ impl<'a> Modpack<'a> {
                 project_id,
                 version_id,
                 version: u.version,
-                title: None,
-                description: None,
-                icon_url: None,
+                title: u.title,
+                description: u.description,
+                icon_url: u.icon_url,
             });
         }
 
@@ -1310,6 +1323,9 @@ impl<'a> Modpack<'a> {
             curseforge_id,
             curseforge_file,
             version: Some(version.version_number.clone()),
+            title: title.clone(),
+            description: description.clone(),
+            icon_url: icon_url.clone(),
         });
         self.save_user(&user)?;
 
@@ -1369,6 +1385,53 @@ impl<'a> Modpack<'a> {
         user.items.retain(|i| !shadows_managed(i));
         self.save_user(&user)?;
         Ok(())
+    }
+
+    /// Turn the content tracked by a managed pack into ordinary user content.
+    /// The files stay in place, while the managed manifest is removed so they
+    /// can be disabled, updated, or uninstalled independently afterward.
+    pub fn fork_managed_content(&self) -> Result<()> {
+        let game_dir = self.game_dir();
+        let manifest = self.manifest()?;
+        let mut items = BTreeMap::<String, UserItem>::new();
+        for item in self.load_user().items {
+            items.insert(item.path.clone(), item);
+        }
+        for managed in manifest.mods {
+            let active = game_dir.join(&managed.path);
+            let disabled = game_dir.join(format!("{}.disabled", managed.path));
+            if !active.is_file() && !disabled.is_file() {
+                continue;
+            }
+            items.insert(
+                managed.path.clone(),
+                UserItem {
+                    name: managed.name,
+                    filename: managed.filename,
+                    path: managed.path,
+                    category: managed.category,
+                    modrinth_id: managed.modrinth_id,
+                    modrinth_version: managed.modrinth_version,
+                    source: managed.source,
+                    curseforge_id: managed.curseforge_id,
+                    curseforge_file: managed.curseforge_file,
+                    version: None,
+                    title: None,
+                    description: None,
+                    icon_url: None,
+                },
+            );
+        }
+        self.save_user(&UserContent {
+            items: items.into_values().collect(),
+        })?;
+
+        let path = self.paths.modpack_manifest(&self.instance_id);
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(CoreError::io(&path, error)),
+        }
     }
 
     fn is_managed_source(source: &str) -> bool {
@@ -2131,5 +2194,59 @@ mod modpack_tests {
         assert_eq!(project_type_for_category("shaderpacks"), "shader");
         assert_eq!(project_type_for_category("mods"), "mod");
         assert_eq!(project_type_for_category("anything"), "mod");
+    }
+
+    fn managed_mod(path: &str) -> packwiz::ManagedMod {
+        packwiz::ManagedMod {
+            name: "Example".to_string(),
+            filename: "example.jar".to_string(),
+            path: path.to_string(),
+            side: "both".to_string(),
+            category: "mods".to_string(),
+            modrinth_id: Some("example-project".to_string()),
+            modrinth_version: Some("example-version".to_string()),
+            source: "modrinth".to_string(),
+            curseforge_id: None,
+            curseforge_file: None,
+        }
+    }
+
+    #[test]
+    fn listing_deduplicates_manifest_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::with_root(root.path());
+        let game_dir = paths.instance_game_dir("pack");
+        std::fs::create_dir_all(game_dir.join("mods")).unwrap();
+        std::fs::write(game_dir.join("mods/example.jar"), b"jar").unwrap();
+        let mut manifest = packwiz::Manifest::default();
+        manifest.mods = vec![managed_mod("mods/example.jar"), managed_mod("mods/example.jar")];
+        manifest.save(&paths.modpack_manifest("pack")).unwrap();
+
+        let pack = Modpack::with_url(&paths, "pack", String::new());
+        let listed = pack.list_mods().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].managed);
+    }
+
+    #[test]
+    fn forking_managed_content_preserves_files_as_user_items() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::with_root(root.path());
+        let game_dir = paths.instance_game_dir("pack");
+        std::fs::create_dir_all(game_dir.join("mods")).unwrap();
+        std::fs::write(game_dir.join("mods/example.jar"), b"jar").unwrap();
+        let mut manifest = packwiz::Manifest::default();
+        manifest.mods = vec![managed_mod("mods/example.jar"), managed_mod("mods/example.jar")];
+        manifest.save(&paths.modpack_manifest("pack")).unwrap();
+
+        let pack = Modpack::with_url(&paths, "pack", String::new());
+        pack.fork_managed_content().unwrap();
+
+        assert!(game_dir.join("mods/example.jar").is_file());
+        assert!(!paths.modpack_manifest("pack").exists());
+        let listed = pack.list_mods().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(!listed[0].managed);
+        assert_eq!(listed[0].project_id.as_deref(), Some("example-project"));
     }
 }

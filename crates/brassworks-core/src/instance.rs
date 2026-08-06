@@ -195,6 +195,10 @@ pub struct Instance {
     pub share: Option<PackShare>,
     #[serde(default)]
     pub shared_by: Option<String>,
+    /// This instance was installed from a Brassworks share link/config. Kept
+    /// separately from `shared_by` because anonymous shares have no author.
+    #[serde(default)]
+    pub shared_origin: bool;
     #[serde(default)]
     pub integrations: std::collections::BTreeMap<String, bool>,
     #[serde(default)]
@@ -332,6 +336,7 @@ impl Instance {
             auto_join: None,
             share: None,
             shared_by: None,
+            shared_origin: false,
             integrations: std::collections::BTreeMap::new(),
             schematic_folders: std::collections::BTreeMap::new(),
         }
@@ -390,6 +395,7 @@ impl Instance {
             auto_join: None,
             share: None,
             shared_by: None,
+            shared_origin: false,
             integrations: std::collections::BTreeMap::new(),
             schematic_folders: std::collections::BTreeMap::new(),
         }

@@ -1271,6 +1271,7 @@ export default function Home() {
               loader={instance?.loader ?? "vanilla"}
               locked={locked}
               shared={!!instance?.share}
+              sharedInstall={instance?.shared_origin || !!instance?.shared_by}
               onContentChanged={() =>
                 setContentRevision((revision) => revision + 1)
               }

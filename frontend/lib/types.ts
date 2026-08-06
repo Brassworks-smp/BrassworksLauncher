@@ -50,6 +50,7 @@ export interface Instance {
   auto_join: QuickPlay | null;
   share: PackShare | null;
   shared_by: string | null;
+  shared_origin: boolean;
   integrations: Record<string, boolean>;
   schematic_folders?: Record<string, string>;
 }

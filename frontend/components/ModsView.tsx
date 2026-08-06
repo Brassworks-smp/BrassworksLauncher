@@ -125,6 +125,7 @@ export function ModsView({
   loader,
   locked,
   shared,
+  sharedInstall,
   onContentChanged,
   onToggleLock,
 }: {
@@ -134,6 +135,7 @@ export function ModsView({
   loader: LoaderKind;
   locked: boolean;
   shared?: boolean;
+  sharedInstall?: boolean;
   onContentChanged?: () => void;
   onToggleLock: () => void;
 }) {
@@ -256,7 +258,7 @@ export function ModsView({
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, locked]);
 
   const contentChanged = useCallback(() => {
     load();
@@ -475,7 +477,11 @@ export function ModsView({
           ) : (
             <button
               onClick={() => (locked ? setConfirmUnlock(true) : onToggleLock())}
-              title={locked ? t("mods.unlockTitle") : t("mods.lockedTitle")}
+              title={
+                locked
+                  ? t(sharedInstall ? "mods.forkTitle" : "mods.unlockTitle")
+                  : t("mods.lockedTitle")
+              }
               className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
                 locked
                   ? "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
@@ -718,17 +724,28 @@ export function ModsView({
           <div className="rise w-[440px] max-w-full rounded-xl border border-amber-500/30 bg-ink-900 p-6 shadow-2xl">
             <div className="mb-3 flex items-center gap-2 text-amber-300">
               <AlertTriangle size={20} />
-              <h2 className="font-mc text-lg tracking-wide">{t("mods.unlockTitleModal")}</h2>
+              <h2 className="font-mc text-lg tracking-wide">
+                {t(sharedInstall ? "mods.forkTitleModal" : "mods.unlockTitleModal")}
+              </h2>
             </div>
-            <p className="text-sm leading-relaxed text-ink-600">
-              {t("mods.unlockBody1")}
-              <span className="text-amber-300/90">{t("mods.unlockPauses")}</span>
-              {t("mods.unlockBody2")}
-              <span className="text-amber-300/90">
-                {t("mods.unlockPrevent")}
-              </span>
-              {t("mods.unlockBody3")}
-            </p>
+            {sharedInstall ? (
+              <div className="space-y-2 text-sm leading-relaxed text-ink-600">
+                <p>{t("mods.forkBody")}</p>
+                <p className="font-medium text-amber-300/90">
+                  {t("mods.forkIrreversible")}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm leading-relaxed text-ink-600">
+                {t("mods.unlockBody1")}
+                <span className="text-amber-300/90">{t("mods.unlockPauses")}</span>
+                {t("mods.unlockBody2")}
+                <span className="text-amber-300/90">
+                  {t("mods.unlockPrevent")}
+                </span>
+                {t("mods.unlockBody3")}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={closeUnlock}
@@ -743,7 +760,8 @@ export function ModsView({
                 }}
                 className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-amber-400"
               >
-                <Unlock size={15} /> {t("mods.unlockAnyway")}
+                <Unlock size={15} />
+                {t(sharedInstall ? "mods.forkAnyway" : "mods.unlockAnyway")}
               </button>
             </div>
           </div>

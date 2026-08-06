@@ -23,6 +23,8 @@ import {
   GitBranch,
   Copy,
   Lock,
+  Unlock,
+  AlertTriangle,
   Pin,
   UserRound,
   Play,
@@ -869,6 +871,8 @@ function ModpackCard({
   const [showVersions, setShowVersions] = useState(false);
   const [branches, setBranches] = useState<api.PackwizBranch[] | null>(null);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [confirmFork, setConfirmFork] = useState(false);
+  const [forking, setForking] = useState(false);
   
   const [flavorGroups, setFlavorGroups] = useState<FlavorGroup[] | "loading" | null>(null);
   const currentVersion =
@@ -1090,17 +1094,64 @@ function ModpackCard({
           </div>
         </div>
       ) : (
-        <Toggle
-          label={t("instanceSettings.modpack.lock")}
-          description={t("instanceSettings.modpack.lockDesc")}
-          checked={instance.modpack_locked}
-          onChange={(v) =>
-            api
-              .setModpackLocked(id, v)
-              .then(() => api.getInstance(id).then(onSaveInstance))
-              .catch((e) => onError(String(e)))
-          }
-        />
+        <>
+          <Toggle
+            label={t("instanceSettings.modpack.lock")}
+            description={t("instanceSettings.modpack.lockDesc")}
+            checked={instance.modpack_locked}
+            onChange={(v) => {
+              if (!v && (instance.shared_origin || instance.shared_by)) {
+                setConfirmFork(true);
+                return;
+              }
+              api
+                .setModpackLocked(id, v)
+                .then(() => api.getInstance(id).then(onSaveInstance))
+                .catch((e) => onError(String(e)));
+            }}
+          />
+          {confirmFork && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.07] p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-300">
+                <AlertTriangle size={15} /> {t("mods.forkTitleModal")}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-ink-600">
+                {t("mods.forkBody")}
+              </p>
+              <p className="mt-1 text-xs font-medium text-amber-300/90">
+                {t("mods.forkIrreversible")}
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  disabled={forking}
+                  onClick={() => setConfirmFork(false)}
+                  className="rounded-lg border border-edge px-3 py-1.5 text-xs text-ink-600 transition hover:text-gray-200 disabled:opacity-50"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  disabled={forking}
+                  onClick={async () => {
+                    setForking(true);
+                    try {
+                      await api.setModpackLocked(id, false);
+                      onSaveInstance(await api.getInstance(id));
+                      setConfirmFork(false);
+                    } catch (error) {
+                      onError(String(error));
+                    } finally {
+                      setForking(false);
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {forking ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />}
+                  {t("mods.forkAnyway")}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {!isPackwiz && projectId ? (

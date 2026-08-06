@@ -951,6 +951,7 @@ impl Launcher {
             }
         }
         let shared = Self::fetch_shared_config(url);
+        inst.shared_origin = inst.shared_by.is_some() || shared.is_some();
         if let Some(sf) = &shared {
             apply_shared_params(&mut inst, &sf.params);
         }
@@ -3340,6 +3341,20 @@ impl Launcher {
 
     pub fn set_modpack_locked(&self, instance_id: &str, locked: bool) -> Result<()> {
         let mut instance = self.instances().get(instance_id)?;
+        let forks_shared_copy = !locked
+            && instance.modpack_locked
+            && (instance.shared_origin || instance.shared_by.is_some())
+            && instance.share.is_none();
+        if forks_shared_copy {
+            self.modpack_for(instance_id).fork_managed_content()?;
+            instance.pack = PackSource::None;
+            instance.shared_by = None;
+            instance.shared_origin = false;
+            instance.optional_mods = None;
+            instance.unsup_flavors = None;
+            instance.unsup_public_key = None;
+            instance.pinned_settings.clear();
+        }
         instance.modpack_locked = locked;
         self.instances().update(&instance)?;
         if locked {
