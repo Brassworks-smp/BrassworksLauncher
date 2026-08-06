@@ -14,6 +14,10 @@ import {
   Shirt,
   CopyPlus,
   Pencil,
+  Blocks,
+  Search,
+  Repeat2,
+  Link2,
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import type { View } from "@/components/Sidebar";
@@ -65,6 +69,15 @@ const INTROS: Partial<Record<View, IntroDef>> = {
       { icon: <Server size={18} />, titleKey: "tabIntro.servers1Title", bodyKey: "tabIntro.servers1Body" },
     ],
   },
+  schematics: {
+    icon: <Blocks size={18} />,
+    headingKey: "tabIntro.schematicsHeading",
+    steps: [
+      { icon: <Search size={18} />, titleKey: "tabIntro.schematics1Title", bodyKey: "tabIntro.schematics1Body" },
+      { icon: <Repeat2 size={18} />, titleKey: "tabIntro.schematics2Title", bodyKey: "tabIntro.schematics2Body" },
+      { icon: <FolderOpen size={18} />, titleKey: "tabIntro.schematics3Title", bodyKey: "tabIntro.schematics3Body" },
+    ],
+  },
   screenshots: {
     icon: <ImageIcon size={18} />,
     headingKey: "tabIntro.screenshotsHeading",
@@ -79,6 +92,15 @@ const INTROS: Partial<Record<View, IntroDef>> = {
       { icon: <Shirt size={18} />, titleKey: "tabIntro.skin1Title", bodyKey: "tabIntro.skin1Body" },
       { icon: <CopyPlus size={18} />, titleKey: "tabIntro.skin2Title", bodyKey: "tabIntro.skin2Body" },
       { icon: <Pencil size={18} />, titleKey: "tabIntro.skin3Title", bodyKey: "tabIntro.skin3Body" },
+    ],
+  },
+  "global-files": {
+    icon: <Link2 size={18} />,
+    headingKey: "tabIntro.globalFilesHeading",
+    steps: [
+      { icon: <CopyPlus size={18} />, titleKey: "tabIntro.globalFiles1Title", bodyKey: "tabIntro.globalFiles1Body" },
+      { icon: <SlidersHorizontal size={18} />, titleKey: "tabIntro.globalFiles2Title", bodyKey: "tabIntro.globalFiles2Body" },
+      { icon: <Lock size={18} />, titleKey: "tabIntro.globalFiles3Title", bodyKey: "tabIntro.globalFiles3Body" },
     ],
   },
 };

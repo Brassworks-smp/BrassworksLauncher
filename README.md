@@ -115,29 +115,48 @@ Star your favourites and keep an eye on live player counts and ping. The Brasswo
 
 ---
 
-## Schematic providers
+## Global Files
 
-<img src="assets/CreateModCom.png" alt="Browse CreateMod.com schematics" width="100%">
+<table>
+<tr>
+<td width="55%">
+<img src="assets/GlobalFiles.png" alt="Global Files profiles and per-instance access" width="100%">
+</td>
+<td width="45%" valign="middle">
+<h3>Share once, use everywhere</h3>
+Keep a file or complete folder-configs, schematics, screenshots, shaders, and more-in shared storage, then symlink it into every instance on the same profile.
+<br><br>
+Each instance can use a different profile or opt out, which leaves a normal local copy behind. Brassworks backs up collisions and repairs links automatically before launch.
+<br><br>
+Launcher metadata travels with shared content too, preserving provider details, versions, artwork, descriptions, and schematic conversion history.
+</td>
+</tr>
+</table>
 
-Each instance can expose a dedicated **Schematics** library. CreateMod.com is available for detected Create installations across Forge, NeoForge, Fabric, and Quilt, including the separate Create Fabric projects on Modrinth and CurseForge. Minecraft Schematics and Abfielder are available for detected Litematica, Forgematica, Schematica forks, or WorldEdit installations, including known Modrinth and CurseForge project IDs. The general providers can also be forced on or off from **Instance Settings → Integrations** when an unfamiliar fork is not detected.
+---
 
-The installed view follows the same local-first model as Content:
+## Schematics
 
-- `.nbt`, `.litematic`, `.schem`, `.schematic`, and `.mcstructure` files are listed, searchable, removable, and filterable by provider or **Local**.
-- Schematics installed through Brassworks retain their provider title, author, artwork, description, project link, format, and provider identity. Files copied into a folder manually remain ordinary local schematics without invented provider metadata.
-- Remote thumbnails, galleries, required-mod icons, and material previews use the launcher's on-disk image cache and continue to fall back safely to their original URLs.
-
-Choose **Add Schematics** to browse every compatible provider. Paid or subscription-only Minecraft Schematics entries are excluded from browse, search, and direct-fallback results. Before downloading, Brassworks asks which available file format to install when the provider offers more than one compatible format. Minecraft-Schematics.com requires an account, so Brassworks explains the handoff, opens the schematic page in the user's browser, watches the configured Downloads folders, and imports the completed file automatically. A downloaded file can also be selected manually.
-
-Opening a schematic shows its upload date, categories, every tag, dimensions, block count, Minecraft/Create versions, rating, downloads, and properly rendered HTML description. Gallery images open in the same full-window keyboard-navigable viewer as Screenshots. The detail view also includes:
-
-- Required mods with cached artwork. Clicking one resolves the compatible Modrinth or CurseForge project and opens its normal Add Content page, including installed status, dependencies, version selection, and installation.
-- A cached block-by-block materials list with counts and a one-click **Copy list** action.
-- CreateMod.com version history with revision dates and change summaries.
-
-Each file type can have its own per-instance folder. Relative paths are resolved inside the instance; absolute paths are supported. Defaults use `schematics`, except `.schem` and `.schematic` use `config/worldedit/schematics` when WorldEdit is installed without a Litematica-compatible mod. The launcher stores provider metadata separately, so replacing a downloaded schematic with a local file correctly removes the old association. Provider pages and images flow through the shared cache service; supported direct downloads are cached there too. Minecraft Schematics downloads stay in the user's authenticated browser session and are imported from Downloads instead.
-
-If the shared cache reports a rate limit, Brassworks falls back to the provider from the desktop client. Fallback JSON and HTML are cached under the user's normal OS cache directory (five minutes for lists/searches, six hours for filters, and seven days for details), and an expired local entry is retained as a last-known-good response if the provider is temporarily unreachable. This keeps direct fallback traffic bounded rather than multiplying upstream requests across every search refresh.
+<table>
+<tr>
+<td width="45%" valign="middle">
+<h3>Browse, install, and convert</h3>
+Browse compatible builds from CreateMod.com, Abfielder, and Minecraft Schematics, or import your own files. Providers are detected from Create, Litematica/Forgematica, and WorldEdit installations and can be overridden in Instance Settings.
+<br><br>
+Built-in conversion works in either direction between:
+<ul>
+<li><code>.nbt</code> - Create and vanilla</li>
+<li><code>.litematic</code> - Litematica and Forgematica</li>
+<li><code>.schem</code> - WorldEdit and Sponge</li>
+<li><code>.schematic</code> - legacy Schematica/WorldEdit</li>
+</ul>
+<code>.mcstructure</code> files can also be installed, but are not currently convertible. Converted copies keep their provider metadata and original format, use collision-safe filenames, never overwrite the source, and show cancellable download and conversion progress.
+</td>
+<td width="55%">
+<img src="assets/CreateModCom.png" alt="Browse and convert schematics" width="100%">
+</td>
+</tr>
+</table>
 
 ---
 

@@ -218,11 +218,6 @@ export function GlobalFilesView({
         </div>
       </header>
 
-      <div className="rounded-xl border border-brass-600/25 bg-brass-500/[0.06] px-4 py-3 text-sm leading-relaxed text-gray-300">
-        <span className="font-medium text-brass-300">{t("globalFiles.howTitle")}</span>{" "}
-        {t("globalFiles.howBody")}
-      </div>
-
       <div className="grid grid-cols-[210px_minmax(0,1fr)] items-start gap-3">
         <section className="row-span-2 flex flex-col rounded-xl border border-edge bg-ink-900/45 p-3">
           <div className="mb-2 flex items-center justify-between">
