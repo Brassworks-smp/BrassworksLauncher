@@ -1,4 +1,8 @@
 import { useMemo, useState } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import {
   X,
   FileDown,
@@ -66,6 +70,80 @@ function esc(s: string): string {
 
 function csvCell(s: string): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function safeRichHtml(markdown: string): string {
+  // CommonMark treats custom HTML blocks as opaque. Blank boundaries let the
+  // Markdown inside provider-authored disclosure blocks parse normally.
+  const normalized = markdown
+    .replace(/(<details\b[^>]*>)[ \t]*/gi, "$1\n\n")
+    .replace(/(<summary\b[^>]*>.*?<\/summary>)[ \t]*/gis, "$1\n\n")
+    .replace(/[ \t]*(<\/details>)/gi, "\n\n$1");
+  const rendered = renderToStaticMarkup(
+    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+      {normalized}
+    </ReactMarkdown>,
+  );
+  const document = new DOMParser().parseFromString(
+    `<div id="brassworks-export-root">${rendered}</div>`,
+    "text/html",
+  );
+  const root = document.getElementById("brassworks-export-root");
+  if (!root) return "";
+  root
+    .querySelectorAll(
+      "script,style,iframe,object,embed,form,input,button,textarea,select,meta,link,base",
+    )
+    .forEach((element) => element.remove());
+  root.querySelectorAll("*").forEach((element) => {
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim().toLowerCase();
+      if (
+        name.startsWith("on") ||
+        name === "srcdoc" ||
+        name === "style" ||
+        ((name === "href" || name === "src") &&
+          (value.startsWith("javascript:") || value.startsWith("data:text/html")))
+      ) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+    if (element.tagName === "A") {
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+  return root.innerHTML;
+}
+
+interface ExportPalette {
+  page: string;
+  surface: string;
+  raised: string;
+  code: string;
+  border: string;
+  muted: string;
+  foreground: string;
+  accent: string;
+  accentStrong: string;
+}
+
+function currentExportPalette(): ExportPalette {
+  const styles = getComputedStyle(document.documentElement);
+  const color = (name: string, fallback: string) =>
+    styles.getPropertyValue(name).trim() || fallback;
+  return {
+    page: color("--color-ink-900", "#0d0d0d"),
+    surface: color("--color-ink-850", "#141414"),
+    raised: color("--color-ink-800", "#1a1a1a"),
+    code: color("--color-ink-950", "#080808"),
+    border: color("--color-edge", "rgba(229,231,235,.1)"),
+    muted: color("--color-ink-600", "#9b9b9b"),
+    foreground: color("--color-fg", "#ededed"),
+    accent: color("--color-brass-300", "#5fe393"),
+    accentStrong: color("--color-brass-500", "#1fbf63"),
+  };
 }
 
 export function ExportContentModal({
@@ -247,22 +325,26 @@ export function ExportContentModal({
     for (const r of rows) {
       out.push("---", "");
       const head = r.icon
-        ? `### <img src="${r.icon}" width="20" height="20" align="absmiddle" /> ${r.name}`
-        : `### ${r.name}`;
+        ? `<h3><img src="${esc(r.icon)}" width="20" height="20" alt="" /> ${esc(r.name)}</h3>`
+        : `<h3>${esc(r.name)}</h3>`;
       out.push(head);
       const meta: string[] = [];
-      if (active.includes("version") && r.version) meta.push(`**Version:** ${r.version}`);
-      if (active.includes("author") && r.author) meta.push(`**Author:** ${r.author}`);
-      if (active.includes("filename")) meta.push(`**File:** \`${r.filename}\``);
-      if (active.includes("url") && r.url) meta.push(`[Project page](${r.url})`);
-      if (meta.length) out.push("", meta.join(" · "));
+      if (active.includes("version") && r.version)
+        meta.push(`<strong>Version:</strong> ${esc(r.version)}`);
+      if (active.includes("author") && r.author)
+        meta.push(`<strong>Author:</strong> ${esc(r.author)}`);
+      if (active.includes("filename"))
+        meta.push(`<strong>File:</strong> <code>${esc(r.filename)}</code>`);
+      if (active.includes("url") && r.url)
+        meta.push(
+          `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Project page</a>`,
+        );
+      if (meta.length) out.push("", `<p>${meta.join(" &middot; ")}</p>`);
       if (r.body.trim()) {
         out.push(
           "",
           "<details><summary>About</summary>",
-          "",
-          r.body.trim(),
-          "",
+          `<div>${safeRichHtml(r.body.trim())}</div>`,
           "</details>",
         );
       }
@@ -315,10 +397,10 @@ export function ExportContentModal({
           ? `<img class="icon" src="${esc(r.icon)}" alt="" />`
           : `<div class="icon placeholder"></div>`;
         const body = r.body.trim()
-          ? `<div class="readme">${esc(r.body.trim())}</div>`
+          ? `<div class="readme">${safeRichHtml(r.body.trim())}</div>`
           : "";
         return `<article class="card">
-  <div class="head">${icon}<div><h2>${esc(r.name)}</h2><div class="meta">${meta.join(" ")}</div>${link}</div></div>
+  <div class="head">${icon}<div class="head-copy"><h2>${esc(r.name)}</h2><div class="meta">${meta.join(" ")}</div>${link}</div></div>
   ${body}
 </article>`;
       })
@@ -331,27 +413,41 @@ export function ExportContentModal({
   };
 
   const htmlDoc = (inner: string, rich: boolean): string => {
+    const palette = currentExportPalette();
     const style = `
-    body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#16130f;color:#e7e2d8;margin:0;padding:40px;}
+    *{box-sizing:border-box;min-width:0;}
+    html{background:${palette.page};color-scheme:${document.documentElement.classList.contains("theme-light") ? "light" : "dark"};}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:${palette.page};color:${palette.foreground};margin:0;padding:clamp(16px,4vw,40px);overflow-x:hidden;}
+    .page{width:min(100%,1120px);margin:0 auto;}
     h1{font-size:26px;margin:0 0 4px;}
-    .sub{color:#9a907f;margin:0 0 28px;}
-    a{color:#d9a441;text-decoration:none;}a:hover{text-decoration:underline;}
-    code{font-family:ui-monospace,monospace;background:#23201a;padding:1px 5px;border-radius:4px;font-size:12px;}
-    table{border-collapse:collapse;width:100%;font-size:14px;}
-    th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #2c2820;}
-    th{color:#bcae93;font-weight:600;}
-    td.name{font-weight:600;color:#fff;}
+    .sub{color:${palette.muted};margin:0 0 28px;}
+    a{color:${palette.accent};text-decoration:none;overflow-wrap:anywhere;}a:hover{text-decoration:underline;}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:${palette.code};padding:1px 5px;border:1px solid ${palette.border};border-radius:4px;font-size:12px;overflow-wrap:anywhere;}
+    table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow-x:auto;}
+    th,td{text-align:left;padding:9px 12px;border-bottom:1px solid ${palette.border};overflow-wrap:anywhere;}
+    th{color:${palette.muted};font-weight:600;}
+    td.name{font-weight:600;color:${palette.foreground};}
     .cards{display:grid;gap:14px;}
-    .card{background:#1d1a14;border:1px solid #2c2820;border-radius:12px;padding:16px;}
+    .card{width:100%;max-width:100%;overflow:hidden;background:${palette.surface};border:1px solid ${palette.border};border-radius:12px;padding:16px;}
     .card .head{display:flex;gap:14px;align-items:flex-start;}
-    .icon{width:54px;height:54px;border-radius:10px;object-fit:cover;flex:none;background:#23201a;}
+    .head-copy{flex:1;min-width:0;}
+    .icon{width:54px;height:54px;border-radius:10px;object-fit:cover;flex:none;background:${palette.raised};}
     .icon.placeholder{display:block;}
-    .card h2{margin:0 0 6px;font-size:17px;color:#fff;}
-    .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:#9a907f;font-size:12px;}
-    .tag{background:#3a2f16;color:#e7c069;padding:1px 7px;border-radius:20px;}
+    .card h2{margin:0 0 6px;font-size:17px;color:${palette.foreground};overflow-wrap:anywhere;}
+    .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:${palette.muted};font-size:12px;}
+    .tag{background:color-mix(in srgb,${palette.accentStrong} 16%,transparent);color:${palette.accent};padding:1px 7px;border-radius:20px;}
     .link{display:inline-block;margin-top:8px;font-size:13px;}
-    .readme{margin-top:12px;padding-top:12px;border-top:1px solid #2c2820;white-space:pre-wrap;font-size:13px;color:#c7bfb0;line-height:1.5;max-height:none;}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(packName)}</title><style>${style}</style></head><body>${inner}</body></html>`;
+    .readme{margin-top:12px;padding-top:12px;border-top:1px solid ${palette.border};font-size:13px;color:${palette.foreground};line-height:1.55;overflow-wrap:anywhere;}
+    .readme h1,.readme h2,.readme h3,.readme h4{line-height:1.25;margin:1.25em 0 .5em;color:${palette.foreground};}
+    .readme p{margin:.7em 0;}.readme ul,.readme ol{padding-left:1.5em;}.readme li{margin:.25em 0;}
+    .readme img,.readme video{display:inline-block;max-width:100%!important;height:auto!important;object-fit:contain;vertical-align:middle;}
+    .readme pre{max-width:100%;overflow-x:auto;background:${palette.code};border:1px solid ${palette.border};border-radius:8px;padding:12px;}
+    .readme pre code{padding:0;border:0;background:transparent;overflow-wrap:normal;}
+    .readme blockquote{margin:.8em 0;padding:.2em 1em;border-left:3px solid ${palette.accentStrong};color:${palette.muted};}
+    .readme hr{border:0;border-top:1px solid ${palette.border};}.readme details{max-width:100%;}.readme summary{color:${palette.accent};cursor:pointer;}
+    @media(max-width:560px){.card .head{gap:10px}.icon{width:42px;height:42px}.meta code{flex-basis:100%}}
+    `;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>${esc(packName)}</title><style>${style}</style></head><body><main class="page">${inner}</main></body></html>`;
   };
 
   const colLabel = (c: Column): string =>
