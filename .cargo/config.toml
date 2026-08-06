@@ -1,0 +1,2 @@
+[alias]
+bump-version = "run --quiet -p xtask -- bump-version"

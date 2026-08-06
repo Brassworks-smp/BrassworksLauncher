@@ -409,6 +409,15 @@ How it fits together:
 
 The project is a Cargo workspace (Rust crates in `crates/` plus the Tauri shell in `frontend/src-tauri/`) with a React (Vite) frontend in `frontend/`.
 
+Use the workspace command to update every release-version source at once:
+
+```bash
+cargo bump-version patch
+cargo bump-version 0.10.0
+```
+
+Use `major`, `minor`, or `patch` to increment the current semantic version, or pass an exact version. The command updates the Cargo workspace and lockfile, frontend package, Tauri configuration, and current changelog heading. Review the diff and run the build checks before committing the release bump.
+
 ### Prerequisites
 
 - **Rust** 1.88 or newer

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/portablemc", "crates/packwiz", "crates/java", "crates/brassworks-core", "frontend/src-tauri"]
+members = ["crates/portablemc", "crates/packwiz", "crates/java", "crates/brassworks-core", "crates/xtask", "frontend/src-tauri"]
 resolver = "2"
 
 [workspace.package]
