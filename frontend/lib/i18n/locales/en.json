@@ -512,6 +512,16 @@
       "tags": "Tags",
       "addTag": "Add tag…"
     },
+    "globalFiles": {
+      "title": "Global Files",
+      "enabled": "Use global files",
+      "enabledHint": "Disable this to replace shared links with normal local copies for this instance.",
+      "profile": "Sharing profile",
+      "profileHint": "Choose which global file preset this instance follows.",
+      "loading": "Loading profiles…",
+      "applying": "Updating shared links…",
+      "updated": "Global Files settings updated"
+    },
     "export": {
       "title": "Export modpack",
       "desc": "Bundle this instance into a shareable modpack file. Saved setups below can be re-run or edited anytime, and finished files land in your Downloads folder.",

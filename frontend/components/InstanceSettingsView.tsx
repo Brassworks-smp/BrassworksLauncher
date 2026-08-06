@@ -32,6 +32,7 @@ import {
   Plus,
   Github,
   Settings,
+  Link2,
 } from "lucide-react";
 import { ShareModal } from "@/components/ShareModal";
 import { appliedPins, QuickSettingsPicker } from "@/lib/quickSettings";
@@ -70,6 +71,7 @@ import type {
   QuickPlay,
   WorldInfo,
   ServerEntry,
+  GlobalFileProfile,
 } from "@/lib/types";
 import {
   Card,
@@ -185,6 +187,39 @@ export function InstanceSettingsView({
   
   const [resetNonce, setResetNonce] = useState(0);
   const [pinPickerOpen, setPinPickerOpen] = useState(false);
+  const [globalProfiles, setGlobalProfiles] = useState<GlobalFileProfile[]>([]);
+  const [globalFilesBusy, setGlobalFilesBusy] = useState(false);
+  const [globalFilesEnabled, setGlobalFilesEnabled] = useState(
+    instance.global_files_enabled,
+  );
+  const [globalFilesProfile, setGlobalFilesProfile] = useState(
+    instance.global_files_profile ?? "default",
+  );
+  useEffect(() => {
+    setGlobalFilesEnabled(instance.global_files_enabled);
+    setGlobalFilesProfile(instance.global_files_profile ?? "default");
+  }, [instance.global_files_enabled, instance.global_files_profile]);
+  useEffect(() => {
+    api
+      .globalFilesConfig()
+      .then((config) => setGlobalProfiles(config.profiles))
+      .catch((error) => toast(String(error), "error"));
+  }, []);
+
+  const updateGlobalFiles = async (enabled: boolean, profileId = globalFilesProfile) => {
+    setGlobalFilesBusy(true);
+    try {
+      await api.setInstanceGlobalFiles(instance.id, enabled, profileId);
+      setGlobalFilesEnabled(enabled);
+      setGlobalFilesProfile(profileId);
+      onRefresh();
+      toast(t("instanceSettings.globalFiles.updated"), "success");
+    } catch (error) {
+      toast(String(error), "error");
+    } finally {
+      setGlobalFilesBusy(false);
+    }
+  };
   const resetInstance = (p: Partial<Instance>) => {
     patch(p);
     setResetNonce((n) => n + 1);
@@ -388,6 +423,36 @@ export function InstanceSettingsView({
                   {t("instanceSettings.account.missing")}
                 </p>
               )}
+          </Card>
+
+          <Card title={t("instanceSettings.globalFiles.title")} icon={<Link2 size={14} />}>
+            <Toggle
+              label={t("instanceSettings.globalFiles.enabled")}
+              description={t("instanceSettings.globalFiles.enabledHint")}
+              checked={globalFilesEnabled}
+              onChange={(enabled) => void updateGlobalFiles(enabled)}
+            />
+            <Field
+              label={t("instanceSettings.globalFiles.profile")}
+              hint={t("instanceSettings.globalFiles.profileHint")}
+            >
+              <Dropdown
+                disabled={globalFilesBusy || !globalFilesEnabled}
+                value={globalFilesProfile}
+                onChange={(profileId) => void updateGlobalFiles(true, profileId)}
+                options={globalProfiles.map((profile) => ({
+                  value: profile.id,
+                  label: profile.name,
+                }))}
+                placeholder={t("instanceSettings.globalFiles.loading")}
+              />
+            </Field>
+            {globalFilesBusy && (
+              <div className="flex items-center gap-2 text-xs text-ink-600">
+                <Loader2 size={12} className="animate-spin" />
+                {t("instanceSettings.globalFiles.applying")}
+              </div>
+            )}
           </Card>
 
           <AutoJoinCard
