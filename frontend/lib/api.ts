@@ -903,19 +903,20 @@ export const sourceUrl = (source: string, slugOrId: string): string =>
 export const sourceLabel = (source: string): string =>
   source === "curseforge" ? "CurseForge" : "Modrinth";
 
-export const schematicsHome = (): Promise<SchematicHome> =>
-  invoke("schematics_home");
+export const schematicsHome = (provider: string): Promise<SchematicHome> =>
+  invoke("schematics_home", { provider });
 export const listSchematics = (instanceId: string): Promise<InstalledSchematic[]> =>
   invoke("list_schematics", { instanceId });
 export const schematicsSearch = (
+  provider: string,
   params: SchematicSearchParams,
-): Promise<SchematicSearch> => invoke("schematics_search", { params });
-export const schematicDetail = (name: string): Promise<SchematicDetail> =>
-  invoke("schematic_detail", { name });
+): Promise<SchematicSearch> => invoke("schematics_search", { provider, params });
+export const schematicDetail = (provider: string, name: string): Promise<SchematicDetail> =>
+  invoke("schematic_detail", { provider, name });
 export const schematicStats = (names: string[]): Promise<SchematicStat[]> =>
   invoke("schematic_stats", { names });
-export const schematicsFilters = (): Promise<SchematicFilters> =>
-  invoke("schematics_filters");
+export const schematicsFilters = (provider: string): Promise<SchematicFilters> =>
+  invoke("schematics_filters", { provider });
 export const schematicsStatus = (
   instanceId: string,
 ): Promise<SchematicsStatus> => invoke("schematics_status", { instanceId });
@@ -927,17 +928,28 @@ export const setIntegration = (
 export const importSchematic = (
   instanceId: string,
   path: string,
-): Promise<string> => invoke("import_schematic", { instanceId, path });
+  provider?: string,
+  projectId?: string,
+): Promise<string> =>
+  invoke("import_schematic", {
+    instanceId,
+    path,
+    provider: provider ?? null,
+    projectId: projectId ?? null,
+  });
 export const downloadSchematic = (
   instanceId: string,
+  provider: string,
   name: string,
-  username?: string,
+  format: string,
 ): Promise<string> =>
-  invoke("download_schematic", { instanceId, name, username });
+  invoke("download_schematic", { instanceId, provider, name, format });
 export const removeSchematic = (
   instanceId: string,
-  filename: string,
-): Promise<void> => invoke("remove_schematic", { instanceId, filename });
+  path: string,
+): Promise<void> => invoke("remove_schematic", { instanceId, path });
+export const openSchematicFolder = (instanceId: string, format?: string): Promise<void> =>
+  invoke("open_schematic_folder", { instanceId, format: format ?? null });
 export const scanSchematicDownloads = (
   folders: string[],
 ): Promise<[string, string][]> =>

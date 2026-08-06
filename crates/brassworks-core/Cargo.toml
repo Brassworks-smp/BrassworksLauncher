@@ -29,6 +29,8 @@ hmac.workspace = true
 hex.workspace = true
 base64 = "0.22"
 regex.workspace = true
+scraper = "0.22"
+url = "2"
 git2 = { version = "0.19", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
 
 [dev-dependencies]

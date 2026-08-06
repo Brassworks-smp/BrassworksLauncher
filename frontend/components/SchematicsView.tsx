@@ -20,7 +20,7 @@ import type {
   SearchHit,
 } from "@/lib/types";
 import { EMPTY_FILTERS } from "@/lib/types";
-import { AddSchematicModal } from "./AddSchematicModal";
+import { accentForProvider, AddSchematicModal } from "./AddSchematicModal";
 import { AddContentModal } from "./AddContentModal";
 import { CachedImage } from "./CachedImage";
 import { SegmentedTabs, Skeleton } from "./ui";
@@ -68,9 +68,10 @@ function SchematicRow({
 }) {
   const t = useT();
   const [imageFailed, setImageFailed] = useState(false);
-  const hasMetadata = schematic.source === "createmod" && !!schematic.project_id;
+  const hasMetadata = !!schematic.source && !!schematic.project_id;
   return (
     <div
+      style={schematic.source ? accentForProvider(schematic.source) : undefined}
       role={hasMetadata ? "button" : undefined}
       tabIndex={hasMetadata ? 0 : undefined}
       onClick={() => hasMetadata && onOpen()}
@@ -113,7 +114,7 @@ function SchematicRow({
           <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-600">
             {hasMetadata && (
               <span className="shrink-0 rounded bg-brass-500/15 px-1.5 text-[9px] font-medium text-brass-300">
-                CreateMod.com
+                {schematic.source === "createmod" ? "CreateMod.com" : schematic.source === "minecraft-schematics" ? "Minecraft Schematics" : schematic.source === "abfielder" ? "Abfielder" : schematic.source}
               </span>
             )}
             <span className="truncate">
@@ -152,7 +153,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [source, setSource] = useState<"all" | "createmod" | "local">("all");
+  const [source, setSource] = useState<string>("all");
   const [adding, setAdding] = useState(false);
   const [detailProject, setDetailProject] = useState<InstalledSchematic | null>(null);
   const [requiredContent, setRequiredContent] = useState<RequiredContentTarget | null>(null);
@@ -180,16 +181,15 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
 
   const counts = useMemo(() => {
     const all = schematics?.length ?? 0;
-    const createmod = schematics?.filter((item) => item.source === "createmod").length ?? 0;
-    return { all, createmod, local: all - createmod };
+    const bySource = new Map<string, number>();
+    for (const item of schematics ?? []) bySource.set(item.source ?? "local", (bySource.get(item.source ?? "local") ?? 0) + 1);
+    return { all, bySource };
   }, [schematics]);
 
   const filtered = useMemo(() => {
     let items = schematics ?? [];
     if (source !== "all") {
-      items = items.filter((item) =>
-        source === "createmod" ? item.source === "createmod" : item.source == null,
-      );
+      items = items.filter((item) => (item.source ?? "local") === source);
     }
     const needle = query.trim().toLowerCase();
     if (needle) {
@@ -204,8 +204,8 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
   }, [query, schematics, source]);
 
   const remove = (schematic: InstalledSchematic) => {
-    setSchematics((items) => items?.filter((item) => item.filename !== schematic.filename) ?? []);
-    api.removeSchematic(instanceId, schematic.filename).then(() => {
+    setSchematics((items) => items?.filter((item) => item.path !== schematic.path) ?? []);
+    api.removeSchematic(instanceId, schematic.path).then(() => {
       toast(t("schematics.removed", { name: schematic.title }), "success");
       load();
     }).catch((reason) => {
@@ -293,7 +293,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
             <Plus size={16} /> {t("schematics.addSchematics")}
           </button>
           <button
-            onClick={() => api.openDir(instanceId, "schematics").catch((reason) => setError(String(reason)))}
+            onClick={() => api.openSchematicFolder(instanceId).catch((reason) => setError(String(reason)))}
             className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
           >
             <FolderOpen size={15} /> {t("schematics.folder")}
@@ -314,8 +314,7 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
           onChange={(value) => setSource(value as typeof source)}
           options={[
             { id: "all", label: <>{t("mods.all")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.all}</span></> },
-            { id: "createmod", label: <>CreateMod.com <span className="ml-1.5 tabular-nums text-ink-600">{counts.createmod}</span></> },
-            { id: "local", label: <>{t("schematics.local")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.local}</span></> },
+            ...Array.from(counts.bySource.entries()).map(([id, count]) => ({ id, label: <>{id === "createmod" ? "CreateMod.com" : id === "minecraft-schematics" ? "Minecraft Schematics" : id === "abfielder" ? "Abfielder" : t("schematics.local")} <span className="ml-1.5 tabular-nums text-ink-600">{count}</span></> })),
           ]}
         />
         <div className="relative flex-1">

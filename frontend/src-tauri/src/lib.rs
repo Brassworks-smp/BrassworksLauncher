@@ -515,6 +515,7 @@ pub fn run() {
             commands::tail_log,
             commands::upload_log,
             commands::open_dir,
+            commands::open_schematic_folder,
             commands::java_info,
             commands::cache_size,
             commands::clear_cache,

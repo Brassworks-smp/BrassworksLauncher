@@ -1736,6 +1736,16 @@ const INTEGRATIONS: { id: string; titleKey: string; descKey: string }[] = [
     titleKey: "instanceSettings.integrations.createmod",
     descKey: "instanceSettings.integrations.createmodDesc",
   },
+  {
+    id: "abfielder_schematics",
+    titleKey: "instanceSettings.integrations.abfielder",
+    descKey: "instanceSettings.integrations.abfielderDesc",
+  },
+  {
+    id: "minecraft_schematics",
+    titleKey: "instanceSettings.integrations.minecraftSchematics",
+    descKey: "instanceSettings.integrations.minecraftSchematicsDesc",
+  },
 ];
 
 function IntegrationsCard({
@@ -1746,13 +1756,17 @@ function IntegrationsCard({
   onSave: (i: Instance) => void;
 }) {
   const t = useT();
-  const [detected, setDetected] = useState(false);
+  const [detected, setDetected] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let alive = true;
     api
       .schematicsStatus(instance.id)
-      .then((s) => alive && setDetected(s.create_detected))
+      .then((s) => alive && setDetected({
+        createmod_schematics: s.create_detected,
+        minecraft_schematics: s.litematica_detected || s.worldedit_detected,
+        abfielder_schematics: s.litematica_detected || s.worldedit_detected,
+      }))
       .catch(() => {});
     return () => {
       alive = false;
@@ -1787,7 +1801,7 @@ function IntegrationsCard({
                 <div className="mt-0.5 text-[11px] text-ink-600">
                   {t(intg.descKey)}
                 </div>
-                {intg.id === "createmod_schematics" && detected && (
+                {detected[intg.id] && (
                   <div className="mt-1 text-[10px] uppercase tracking-wide text-patina-300">
                     {t("instanceSettings.integrations.detected")}
                   </div>
@@ -1805,6 +1819,23 @@ function IntegrationsCard({
             </div>
           );
         })}
+      </div>
+      <div className="mt-4 border-t border-edge pt-4">
+        <div className="font-mc text-[12px] text-gray-100">{t("instanceSettings.integrations.folders")}</div>
+        <p className="mt-1 text-[11px] text-ink-600">{t("instanceSettings.integrations.foldersDesc")}</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {["nbt", "litematic", "schem", "schematic", "mcstructure"].map((format) => (
+            <label key={format} className="block">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-ink-600">.{format}</span>
+              <input
+                value={instance.schematic_folders?.[format] ?? ""}
+                onChange={(event) => onSave({ ...instance, schematic_folders: { ...(instance.schematic_folders ?? {}), [format]: event.target.value } })}
+                placeholder={format === "schem" || format === "schematic" ? "Auto (config/worldedit/schematics when WorldEdit-only)" : "Auto (schematics)"}
+                className={inputCls}
+              />
+            </label>
+          ))}
+        </div>
       </div>
     </Card>
   );

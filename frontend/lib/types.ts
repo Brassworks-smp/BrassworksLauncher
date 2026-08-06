@@ -51,11 +51,14 @@ export interface Instance {
   share: PackShare | null;
   shared_by: string | null;
   integrations: Record<string, boolean>;
+  schematic_folders?: Record<string, string>;
 }
 
 export interface SchematicCard {
+  provider: string;
   name: string;
   title: string;
+  description: string;
   featured_image: string | null;
   rating: number | null;
   views: number;
@@ -64,6 +67,8 @@ export interface SchematicCard {
   categories: string[];
   tags: string[];
   web_url: string | null;
+  formats: string[];
+  supports_views: boolean;
 }
 
 export interface InstalledSchematic {
@@ -73,9 +78,10 @@ export interface InstalledSchematic {
   description: string | null;
   image_url: string | null;
   author: string | null;
-  source: "createmod" | null;
+  source: string | null;
   project_id: string | null;
   web_url: string | null;
+  format: string;
 }
 
 export interface SchematicMaterial {
@@ -104,6 +110,7 @@ export interface SchematicDimensions {
 }
 
 export interface SchematicDetail {
+  provider: string;
   id: string | null;
   name: string;
   title: string;
@@ -131,6 +138,8 @@ export interface SchematicDetail {
   rating_count: number;
   comment_count: number;
   web_url: string | null;
+  formats: string[];
+  supports_views: boolean;
 }
 
 export interface SchematicHome {
@@ -155,6 +164,9 @@ export interface SchematicFilters {
   categories: FilterOption[];
   mc_versions: FilterOption[];
   create_versions: FilterOption[];
+  formats: FilterOption[];
+  themes: FilterOption[];
+  sizes: FilterOption[];
 }
 
 export interface SchematicSearchParams {
@@ -163,13 +175,26 @@ export interface SchematicSearchParams {
   category: string;
   mc_version: string;
   create_version: string;
+  theme: string;
+  size: string;
   page: number;
 }
 
 export interface SchematicsStatus {
   enabled: boolean;
   create_detected: boolean;
+  litematica_detected: boolean;
+  worldedit_detected: boolean;
   mode: string;
+  providers: SchematicProviderStatus[];
+}
+
+export interface SchematicProviderStatus {
+  id: string;
+  label: string;
+  enabled: boolean;
+  detected: boolean;
+  formats: string[];
 }
 
 export interface SchematicStat {
@@ -251,8 +276,7 @@ export interface PushProgress {
 }
 
 export type QuickPlay =
-  | { kind: "server"; ip: string }
-  | { kind: "world"; folder: string };
+  { kind: "server"; ip: string } | { kind: "world"; folder: string };
 
 export interface InstanceFolder {
   id: string;
@@ -292,7 +316,6 @@ export interface SkinProfile {
   capes: SkinCape[];
 }
 
-
 export interface SavedSkin {
   id: string;
   name: string;
@@ -303,7 +326,7 @@ export interface SavedSkin {
 
 export interface SkinLibraryView {
   skins: SavedSkin[];
-  
+
   selected: string | null;
 }
 
@@ -421,7 +444,12 @@ export interface MicrosoftCode {
 }
 
 export type AuthEvent =
-  | { phase: "code"; user_code: string; verification_uri: string; message: string }
+  | {
+      phase: "code";
+      user_code: string;
+      verification_uri: string;
+      message: string;
+    }
   | { phase: "done"; store: AccountStore }
   | { phase: "error"; message: string };
 
@@ -459,7 +487,6 @@ export interface ExitInfo {
   cancelled: boolean;
   started: boolean;
 }
-
 
 export interface ModpackStatus {
   installed_version: string | null;
@@ -596,6 +623,8 @@ export interface SearchHit {
   categories?: string[];
   date_modified?: string | null;
   follows?: number | null;
+  provider?: string;
+  formats?: string[];
 }
 
 export interface SearchFilters {
@@ -626,6 +655,8 @@ export interface FilterOptions {
   sorts: string[];
   supportsEnvironment: boolean;
   supportsAdvancedFacets: boolean;
+  schematicThemes?: FilterOption[];
+  schematicSizes?: FilterOption[];
 }
 
 export const EMPTY_FILTERS: SearchFilters = {
@@ -665,7 +696,6 @@ export interface InstallResult {
   dependencies: string[];
 }
 
-
 export interface FlavorGroup {
   id: string;
   name: string;
@@ -681,22 +711,17 @@ export interface FlavorChoice {
   default: boolean;
 }
 
-
 export function isBooleanFlavor(g: FlavorGroup): boolean {
   if (g.choices.length !== 2) return false;
   const ids = g.choices.map((c) => c.id);
-  return (
-    ids.includes(`${g.id}_on`) && ids.includes(`${g.id}_off`)
-  );
+  return ids.includes(`${g.id}_on`) && ids.includes(`${g.id}_off`);
 }
 
-
 export interface OptionalComponent {
-  
   id: string;
   name: string;
   description: string | null;
-  
+
   default: boolean;
   side: string;
   category: string;
@@ -715,12 +740,12 @@ export interface WorldInfo {
   folder: string;
   name: string;
   icon: boolean;
-  
+
   last_played: number;
-  
+
   game_mode: number;
   hardcore: boolean;
-  
+
   difficulty: number;
   version_name: string | null;
   size_bytes: number;
@@ -741,7 +766,7 @@ export interface DatapackInfo {
   enabled: boolean;
   is_dir: boolean;
   size_bytes: number;
-  
+
   source: string | null;
   project_id: string | null;
   version_id: string | null;
@@ -751,7 +776,6 @@ export interface DatapackInfo {
 }
 
 export interface FeaturedPack {
-
   id: string;
   name: string;
   icon: string | null;
@@ -778,10 +802,10 @@ export interface PackwizShare {
 export interface ServerEntry {
   name: string;
   ip: string;
-  
+
   icon: string | null;
   accept_textures: number | null;
-  
+
   featured: boolean;
   starred: boolean;
 }
@@ -792,7 +816,7 @@ export interface ServerStatus {
   version: string | null;
   players_online: number;
   players_max: number;
-  
+
   favicon: string | null;
   ping_ms: number;
   error: string | null;
@@ -817,7 +841,6 @@ export interface ModpackDone {
   error: string | null;
   cancelled: boolean;
 }
-
 
 export interface NewsItem {
   title: string;

@@ -3,16 +3,13 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use crate::error::{CoreError, Result};
-use crate::modpack::InstalledMod;
 use crate::instance::Instance;
+use crate::modpack::InstalledMod;
 
 pub const CREATEMOD_API_BASE: &str = match option_env!("CREATEMOD_API_BASE") {
     Some(v) => v,
     None => "https://createmod.com",
 };
-const CREATEMOD_API_KEY: &str =
-    "05c26e2012eb82ddd88d40b04ff0ddddc6159385a516338d8cda798f0ea275ea";
-
 // Downloads go straight to createmod.com (never the cache, since files aren't
 // cached) and are authenticated with the shared HMAC secret distributed with
 // the launcher, like a client id. The secret has no per-key rate limit.
@@ -23,10 +20,6 @@ const CREATEMOD_DOWNLOAD_BASE: &str = match option_env!("CREATEMOD_DOWNLOAD_BASE
 const CREATEMOD_DOWNLOAD_SECRET: &str =
     "9bc0fdf937f05a30befb17abb8a455a41887d3f84e93aaa73c3e3e0c1f202a5f";
 
-fn api_key() -> &'static str {
-    option_env!("CREATEMOD_API_KEY").unwrap_or(CREATEMOD_API_KEY)
-}
-
 fn download_secret() -> &'static str {
     option_env!("CREATEMOD_DOWNLOAD_SECRET").unwrap_or(CREATEMOD_DOWNLOAD_SECRET)
 }
@@ -34,12 +27,25 @@ fn download_secret() -> &'static str {
 pub const INTEGRATION_SCHEMATICS: &str = "createmod_schematics";
 pub const CREATE_MODRINTH_ID: &str = "LNytGWDc";
 pub const CREATE_CURSEFORGE_ID: &str = "328085";
+pub const CREATE_FABRIC_MODRINTH_ID: &str = "Xbc0uyRg";
+pub const CREATE_FABRIC_CURSEFORGE_ID: &str = "624165";
+
+const CREATE_PROJECT_IDS: &[&str] = &[
+    CREATE_MODRINTH_ID,
+    CREATE_CURSEFORGE_ID,
+    CREATE_FABRIC_MODRINTH_ID,
+    CREATE_FABRIC_CURSEFORGE_ID,
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchematicCard {
+    #[serde(default = "default_createmod_provider")]
+    pub provider: String,
     pub name: String,
     #[serde(default)]
     pub title: String,
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub featured_image: Option<String>,
     #[serde(default)]
@@ -56,6 +62,10 @@ pub struct SchematicCard {
     pub tags: Vec<String>,
     #[serde(default)]
     pub web_url: Option<String>,
+    #[serde(default)]
+    pub formats: Vec<String>,
+    #[serde(default = "default_true")]
+    pub supports_views: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +107,8 @@ pub struct SchematicDimensions {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchematicDetail {
+    #[serde(default = "default_createmod_provider")]
+    pub provider: String,
     #[serde(default)]
     pub id: Option<String>,
     pub name: String,
@@ -150,6 +162,18 @@ pub struct SchematicDetail {
     pub comment_count: i64,
     #[serde(default)]
     pub web_url: Option<String>,
+    #[serde(default)]
+    pub formats: Vec<String>,
+    #[serde(default = "default_true")]
+    pub supports_views: bool,
+}
+
+fn default_createmod_provider() -> String {
+    "createmod".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -189,6 +213,12 @@ pub struct SchematicFilters {
     pub mc_versions: Vec<FilterOption>,
     #[serde(default)]
     pub create_versions: Vec<FilterOption>,
+    #[serde(default)]
+    pub formats: Vec<FilterOption>,
+    #[serde(default)]
+    pub themes: Vec<FilterOption>,
+    #[serde(default)]
+    pub sizes: Vec<FilterOption>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -203,6 +233,10 @@ pub struct SchematicSearchParams {
     pub mc_version: String,
     #[serde(default)]
     pub create_version: String,
+    #[serde(default)]
+    pub theme: String,
+    #[serde(default)]
+    pub size: String,
     #[serde(default)]
     pub page: u32,
 }
@@ -246,6 +280,8 @@ pub struct InstalledSchematic {
     pub project_id: Option<String>,
     #[serde(default)]
     pub web_url: Option<String>,
+    #[serde(default)]
+    pub format: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -275,15 +311,12 @@ fn read_installed_index(path: &std::path::Path) -> InstalledSchematicsIndex {
         .unwrap_or_default()
 }
 
-fn write_installed_index(
-    path: &std::path::Path,
-    index: &InstalledSchematicsIndex,
-) -> Result<()> {
+fn write_installed_index(path: &std::path::Path, index: &InstalledSchematicsIndex) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| CoreError::io(parent, e))?;
     }
-    let bytes = serde_json::to_vec_pretty(index)
-        .map_err(|e| CoreError::serde("schematics metadata", e))?;
+    let bytes =
+        serde_json::to_vec_pretty(index).map_err(|e| CoreError::serde("schematics metadata", e))?;
     std::fs::write(path, bytes).map_err(|e| CoreError::io(path, e))
 }
 
@@ -308,7 +341,10 @@ pub fn list_installed_schematics(
     let mut installed = Vec::new();
     for entry in read.flatten() {
         let path = entry.path();
-        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
+        if !entry
+            .file_type()
+            .map(|kind| kind.is_file())
+            .unwrap_or(false)
             || !path
                 .extension()
                 .map(|ext| ext.eq_ignore_ascii_case("nbt"))
@@ -331,6 +367,7 @@ pub fn list_installed_schematics(
             web_url: metadata.and_then(|entry| entry.web_url.clone()),
             path: path.to_string_lossy().to_string(),
             filename,
+            format: "nbt".to_string(),
         });
     }
     installed.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
@@ -361,10 +398,7 @@ pub fn record_installed_schematic(
     write_installed_index(index_path, &index)
 }
 
-pub fn forget_installed_schematic(
-    index_path: &std::path::Path,
-    filename: &str,
-) -> Result<()> {
+pub fn forget_installed_schematic(index_path: &std::path::Path, filename: &str) -> Result<()> {
     let mut index = read_installed_index(index_path);
     if index.entries.remove(filename).is_some() {
         write_installed_index(index_path, &index)?;
@@ -392,137 +426,122 @@ fn client() -> Result<reqwest::blocking::Client> {
         .map_err(|e| CoreError::Remote(e.to_string()))
 }
 
-// The cache proxy mirrors the createmod paths and is much faster (tiered cache
-// + image CDN). We prefer it when it is up and fall back to createmod.com
-// directly otherwise. Overridable at runtime with CREATEMOD_CACHE_BASE (set to
-// an empty string to disable the cache entirely).
-fn cache_base() -> Option<String> {
-    let raw = std::env::var("CREATEMOD_CACHE_BASE")
+// The cache proxy mirrors the createmod paths and is the sole source for
+// browsing metadata. Keeping this path unconditional avoids exposing upstream
+// credentials in the launcher and prevents transient health-check failures
+// from bypassing the shared cache for the rest of the process.
+fn cache_base() -> String {
+    let raw = std::env::var("SCHEMATICS_CACHE_BASE")
         .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("CREATEMOD_CACHE_BASE").ok())
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| option_env!("SCHEMATICS_CACHE_BASE").map(|s| s.to_string()))
+        .filter(|value| !value.trim().is_empty())
         .or_else(|| option_env!("CREATEMOD_CACHE_BASE").map(|s| s.to_string()))
         .unwrap_or_else(|| "https://api.opnsoc.org/createmodschem".to_string());
-    let raw = raw.trim().trim_end_matches('/');
-    if raw.is_empty() {
-        None
-    } else {
-        Some(raw.to_string())
-    }
+    raw.trim().trim_end_matches('/').to_string()
 }
 
-// Whether the cache proxy answered a health check. Probed once per process so a
-// down cache doesn't cost a timeout on every request.
-fn cache_healthy() -> bool {
-    static HEALTHY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *HEALTHY.get_or_init(|| {
-        let Some(base) = cache_base() else {
-            return false;
-        };
-        reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
-            .ok()
-            .and_then(|c| c.get(format!("{base}/health")).send().ok())
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-    })
-}
-
-// Bases to try in order for browsing requests: the cache first when healthy,
-// then createmod.com directly as a fallback.
-fn browse_bases() -> Vec<String> {
-    match cache_base().filter(|_| cache_healthy()) {
-        Some(cache) => vec![cache, CREATEMOD_API_BASE.to_string()],
-        None => vec![CREATEMOD_API_BASE.to_string()],
-    }
-}
-
-// Base for image/file URLs baked into cards and details: the cache CDN when
-// healthy, else createmod.com directly.
+// Image/file URLs baked into cards and details use the cache CDN too.
 fn image_base() -> String {
     cache_base()
-        .filter(|_| cache_healthy())
-        .unwrap_or_else(|| CREATEMOD_API_BASE.to_string())
 }
 
 fn get_json<T: serde::de::DeserializeOwned>(path: &str, params: &[(&str, String)]) -> Result<T> {
     let client = client()?;
-    let mut last_err = CoreError::Remote(format!("{path}: no upstream"));
-    for base in browse_bases() {
-        let url = format!("{base}{path}");
-        match client
-            .get(&url)
-            .query(params)
-            .header("Accept", "application/json")
-            .header("X-API-Key", api_key())
-            .send()
-        {
-            Ok(resp) if resp.status().is_success() => {
-                return resp
-                    .json::<T>()
-                    .map_err(|e| CoreError::Remote(format!("decode {path}: {e}")));
-            }
-            Ok(resp) => last_err = CoreError::Remote(format!("{path} -> {}", resp.status())),
-            Err(e) => last_err = CoreError::Remote(e.to_string()),
-        }
+    let url = format!("{}{path}", cache_base());
+    let response = client
+        .get(&url)
+        .query(params)
+        .header("Accept", "application/json")
+        .send()
+        .map_err(|error| CoreError::Remote(error.to_string()))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(CoreError::Remote(format!("{path} -> {status}: {body}")));
     }
-    Err(last_err)
+    response
+        .json()
+        .map_err(|error| CoreError::Remote(format!("decode {path}: {error}")))
+}
+
+fn null_default<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 #[derive(Deserialize, Default)]
 struct RawSchematic {
     #[serde(default)]
     id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     title: String,
     #[serde(default)]
     author: Option<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     created: String,
-    #[serde(default, rename = "htmlContent")]
+    #[serde(default, rename = "htmlContent", deserialize_with = "null_default")]
     html_content: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     content: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     excerpt: String,
-    #[serde(default, rename = "featuredImage")]
+    #[serde(default, rename = "featuredImage", deserialize_with = "null_default")]
     featured_image: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     gallery: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     video: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     categories: Vec<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     tags: Vec<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     mods: Vec<String>,
-    #[serde(default, rename = "htmlDependencies")]
+    #[serde(
+        default,
+        rename = "htmlDependencies",
+        deserialize_with = "null_default"
+    )]
     html_dependencies: String,
     #[serde(default)]
     materials: serde_json::Value,
-    #[serde(default, rename = "minecraftVersion")]
+    #[serde(
+        default,
+        rename = "minecraftVersion",
+        deserialize_with = "null_default"
+    )]
     minecraft_version: String,
-    #[serde(default, rename = "createmodVersion")]
+    #[serde(
+        default,
+        rename = "createmodVersion",
+        deserialize_with = "null_default"
+    )]
     createmod_version: String,
-    #[serde(default, rename = "blockCount")]
+    #[serde(default, rename = "blockCount", deserialize_with = "null_default")]
     block_count: i64,
-    #[serde(default, rename = "dimX")]
+    #[serde(default, rename = "dimX", deserialize_with = "null_default")]
     dim_x: i64,
-    #[serde(default, rename = "dimY")]
+    #[serde(default, rename = "dimY", deserialize_with = "null_default")]
     dim_y: i64,
-    #[serde(default, rename = "dimZ")]
+    #[serde(default, rename = "dimZ", deserialize_with = "null_default")]
     dim_z: i64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     views: i64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     downloads: i64,
     #[serde(default)]
     rating: serde_json::Value,
-    #[serde(default, rename = "ratingCount")]
+    #[serde(default, rename = "ratingCount", deserialize_with = "null_default")]
     rating_count: i64,
-    #[serde(default, rename = "commentCount")]
+    #[serde(default, rename = "commentCount", deserialize_with = "null_default")]
     comment_count: i64,
 }
 
@@ -580,8 +599,7 @@ fn parse_material_line(line: &str) -> Option<SchematicMaterial> {
     let bytes = line.as_bytes();
     if bytes[0].is_ascii_digit() {
         let mut i = 0;
-        while i < bytes.len()
-            && (bytes[i].is_ascii_digit() || bytes[i] == b',' || bytes[i] == b'.')
+        while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b',' || bytes[i] == b'.')
         {
             i += 1;
         }
@@ -634,10 +652,7 @@ fn parse_materials(v: &serde_json::Value) -> Vec<SchematicMaterial> {
                     .map(|s| s.to_string());
                 let name = json_str(m, &["name", "Name"])
                     .or_else(|| block_id.as_deref().map(friendly_block_name))?;
-                let count = m
-                    .get("count")
-                    .and_then(|c| c.as_i64())
-                    .unwrap_or(0);
+                let count = m.get("count").and_then(|c| c.as_i64()).unwrap_or(0);
                 Some(SchematicMaterial {
                     name,
                     count,
@@ -667,6 +682,7 @@ impl RawSchematic {
     fn into_card(self) -> SchematicCard {
         let image = image_url(self.id.as_deref(), &self.featured_image);
         SchematicCard {
+            provider: default_createmod_provider(),
             web_url: if self.name.is_empty() {
                 None
             } else {
@@ -680,6 +696,7 @@ impl RawSchematic {
             categories: name_list(&self.categories),
             tags: name_list(&self.tags),
             featured_image: image,
+            description: self.excerpt.clone(),
             title: if self.title.is_empty() {
                 self.name.clone()
             } else {
@@ -688,6 +705,8 @@ impl RawSchematic {
             name: self.name,
             views: self.views,
             downloads: self.downloads,
+            formats: vec!["nbt".to_string()],
+            supports_views: true,
         }
     }
 
@@ -714,6 +733,7 @@ impl RawSchematic {
             })
             .collect();
         SchematicDetail {
+            provider: default_createmod_provider(),
             web_url: if self.name.is_empty() {
                 None
             } else {
@@ -756,6 +776,8 @@ impl RawSchematic {
             comment_count: self.comment_count,
             id: self.id,
             name: self.name,
+            formats: vec!["nbt".to_string()],
+            supports_views: true,
         }
     }
 }
@@ -1048,6 +1070,11 @@ pub fn filters() -> Result<SchematicFilters> {
         categories,
         mc_versions,
         create_versions,
+        formats: vec![FilterOption {
+            value: "nbt".to_string(),
+            label: ".nbt".to_string(),
+        }],
+        ..Default::default()
     })
 }
 
@@ -1057,8 +1084,10 @@ pub fn search(p: &SchematicSearchParams) -> Result<SchematicSearch> {
 
 pub fn create_mod_detected(mods: &[InstalledMod]) -> bool {
     mods.iter().any(|m| {
-        if m.project_id.as_deref() == Some(CREATE_MODRINTH_ID)
-            || m.project_id.as_deref() == Some(CREATE_CURSEFORGE_ID)
+        if m.project_id
+            .as_deref()
+            .map(|id| CREATE_PROJECT_IDS.contains(&id))
+            .unwrap_or(false)
         {
             return true;
         }
@@ -1106,7 +1135,26 @@ mod tests {
 
     #[test]
     fn detects_create_by_modrinth_id() {
-        assert!(create_mod_detected(&[mc(Some(CREATE_MODRINTH_ID), "create.jar")]));
+        assert!(create_mod_detected(&[mc(
+            Some(CREATE_MODRINTH_ID),
+            "create.jar"
+        )]));
+    }
+
+    #[test]
+    fn detects_create_fabric_from_both_providers() {
+        assert!(create_mod_detected(&[mc(
+            Some(CREATE_FABRIC_MODRINTH_ID),
+            "renamed.jar"
+        )]));
+        assert!(create_mod_detected(&[mc(
+            Some(CREATE_FABRIC_CURSEFORGE_ID),
+            "renamed.jar"
+        )]));
+        assert!(create_mod_detected(&[mc(
+            None,
+            "create-fabric-0.5.1-build.1417.jar"
+        )]));
     }
 
     #[test]
@@ -1126,6 +1174,33 @@ mod tests {
         assert_eq!(mats[0].count, 285);
         assert_eq!(mats[0].block_id.as_deref(), Some("minecraft:grass_block"));
         assert_eq!(mats[1].name, "Gantry Shaft");
+    }
+
+    #[test]
+    fn search_tolerates_nullable_upstream_fields() {
+        let raw: RawList = serde_json::from_str(
+            r#"{
+                "items": [{
+                    "id": "abc",
+                    "name": "iron-farm",
+                    "title": "Iron Farm",
+                    "tags": null,
+                    "categories": null,
+                    "gallery": null,
+                    "mods": null,
+                    "featuredImage": null,
+                    "views": null,
+                    "downloads": null
+                }],
+                "page": 1,
+                "hasNext": false,
+                "total": 1
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(raw.items.len(), 1);
+        assert!(raw.items[0].tags.is_empty());
+        assert_eq!(raw.items[0].views, 0);
     }
 
     #[test]
@@ -1168,13 +1243,7 @@ mod tests {
         std::fs::write(dir.join("local-build.nbt"), b"local").unwrap();
         std::fs::write(dir.join("launcher-build.nbt"), b"managed").unwrap();
 
-        record_installed_schematic(
-            &index,
-            "launcher-build.nbt",
-            "steam-engine",
-            None,
-        )
-        .unwrap();
+        record_installed_schematic(&index, "launcher-build.nbt", "steam-engine", None).unwrap();
         let installed = list_installed_schematics(&dir, &index).unwrap();
         let local = installed
             .iter()

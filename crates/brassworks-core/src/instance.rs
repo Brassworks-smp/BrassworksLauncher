@@ -197,6 +197,8 @@ pub struct Instance {
     pub shared_by: Option<String>,
     #[serde(default)]
     pub integrations: std::collections::BTreeMap<String, bool>,
+    #[serde(default)]
+    pub schematic_folders: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -331,6 +333,7 @@ impl Instance {
             share: None,
             shared_by: None,
             integrations: std::collections::BTreeMap::new(),
+            schematic_folders: std::collections::BTreeMap::new(),
         }
     }
 
@@ -388,6 +391,7 @@ impl Instance {
             share: None,
             shared_by: None,
             integrations: std::collections::BTreeMap::new(),
+            schematic_folders: std::collections::BTreeMap::new(),
         }
     }
 

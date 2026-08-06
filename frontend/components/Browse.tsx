@@ -170,13 +170,17 @@ export function ResultRow({
   showSource,
   onOpen,
   onQuickInstall,
+  quickInstallMode = "download",
+  quickInstallTitle,
 }: {
   hit: SearchHit;
   installed?: boolean;
   featured?: boolean;
   showSource?: boolean;
   onOpen: () => void;
-  onQuickInstall?: () => Promise<void>;
+  onQuickInstall?: () => Promise<void | boolean>;
+  quickInstallMode?: "download" | "external";
+  quickInstallTitle?: string;
 }) {
   const t = useT();
   const [iconFailed, setIconFailed] = useState(false);
@@ -188,8 +192,8 @@ export function ResultRow({
     if (installing || isInstalled || !onQuickInstall) return;
     setInstalling(true);
     try {
-      await onQuickInstall();
-      setJustInstalled(true);
+      const completed = await onQuickInstall();
+      if (completed !== false) setJustInstalled(true);
     } catch {
       
     } finally {
@@ -275,14 +279,18 @@ export function ResultRow({
           type="button"
           onClick={quickInstall}
           disabled={installing}
-          title={t("addContent.quickInstall")}
-          aria-label={t("addContent.quickInstall")}
+          title={quickInstallTitle ?? t("addContent.quickInstall")}
+          aria-label={quickInstallTitle ?? t("addContent.quickInstall")}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:bg-brass-500/10 hover:text-brass-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {installing ? (
             <Loader2 size={15} className="animate-spin" />
           ) : (
-            <Download size={15} />
+            quickInstallMode === "external" ? (
+              <ExternalLink size={15} />
+            ) : (
+              <Download size={15} />
+            )
           )}
         </button>
       )}

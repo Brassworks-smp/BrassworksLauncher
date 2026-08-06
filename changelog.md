@@ -1,24 +1,30 @@
-### **Additions:**
-* **CreateMod.com schematic library** - instances with Create installed now get a dedicated Schematics page for browsing installed `.nbt` files, searching them, removing them, and distinguishing launcher downloads from schematics added locally. The integration can also be forced on or off from Instance Settings.
-* **Add Schematics browser** - search CreateMod.com from inside the launcher with the same familiar layout as Add Content, including provider tabs, categories, sorting, compatibility filters, quick installs, and continuously loading Trending, Latest, Highest Rated, and search results.
-* **Detailed schematic pages** - open a schematic to see its author, upload date, categories, all tags, dimensions, block count, Minecraft and Create versions, ratings, downloads, version history, and fully rendered description.
-* **Galleries, materials, and dependencies** - schematic galleries open in the launcher's full-window image viewer, material lists include block previews and a one-click copy action, and required mods include artwork and direct links into Add Content for seamless Modrinth or CurseForge installation.
-* **More Linux packages** - releases now include ready-to-install Flatpak, Arch Linux (`.pkg.tar.zst`), Snap, and Void Linux (`.xbps`) packages alongside the existing AppImage, Debian, and RPM builds.
-* **Folder-first instance layout** - a new launcher setting can place your instance folders above the ungrouped **Your instances** section.
+# 0.8.1
 
-### **Improvements:**
-* **Consistent content browsing** - Schematics reuses the launcher's shared cards, buttons, segmented tabs, filters, dropdowns, modal layout, transitions, hover states, and install styling, with CreateMod.com's blue used only as the provider accent.
-* **Local image caching** - thumbnails, galleries, required-mod icons, and material previews are cached on disk for faster browsing and better behavior when an image host is unavailable.
-* **Accurate installed metadata** - downloads made through Brassworks keep their CreateMod.com title, author, artwork, description, link, and provider identity, while manually copied files remain clean local entries. Replacing a downloaded file also clears stale provider metadata.
-* **Smarter Create integration** - the Schematics sidebar entry appears only when the integration is available, updates with an animation when that state changes, and uses the launcher's standard segmented control in Instance Settings.
-* **Cached API with live statistics** - CreateMod.com browsing uses the Brassworks cache proxy by default for responsive metadata and images while overlaying fresh download and rating statistics. The proxy is configurable and direct API access remains available as a fallback.
-* **Advanced filters now carry through installation** - choosing another Minecraft version or loader in Add Content now affects the project versions shown, quick installs, selected-version installs, and required dependencies instead of only changing the search results.
-* **More reliable Microsoft sessions** - account refreshes are serialized, briefly reused between account checks and launch, and automatically retried when Microsoft or Xbox returns a transient failure.
+## Additions
 
-### **Fixes:**
-* **Infinite schematic browsing** - home feeds and search results now continue loading as you scroll instead of stopping after the first page.
-* **Description rendering** - HTML descriptions, including complex pages such as Ryujin All Terrain Hovercraft, now render correctly instead of exposing broken markup.
-* **Schematic detail polish** - fullscreen gallery previews now cover the whole launcher window, required-mod actions have proper spacing and hover feedback, and missing modal transitions and list animations have been restored.
-* **Linux Snap versioning** - corrected the Snap build scriptlet so release versions are assigned properly during packaging.
-* **Installed content actions** - opening an already-installed mod, schematic, or datapack now offers **Uninstall** and removes the installed file instead of offering to reinstall it. Modpack-managed files remain protected, while datapack version switching stays available separately.
-* **Pre-launch errors stay visible** - authentication and other failures that happen before Minecraft starts no longer open the game log as if the game crashed, so the real launcher error remains visible. Actual game crashes still follow the console-on-crash setting.
+- Added Abfielder and Minecraft Schematics as alternate schematic providers alongside CreateMod.com, with a provider-neutral backend that makes additional providers easier to add.
+- Added automatic provider availability detection for Create on Forge, NeoForge, Fabric, and Quilt; Litematica, Forgematica, Schematica-compatible forks; and WorldEdit projects from both Modrinth and CurseForge.
+- Added independent Auto, On, and Off integration controls for CreateMod.com, Abfielder, and Minecraft Schematics.
+- Added per-instance schematic folders with a separate path for `.nbt`, `.litematic`, `.schem`, `.schematic`, and `.mcstructure` files. WorldEdit-only instances default WorldEdit formats to `config/worldedit/schematics`.
+- Added native provider filters: Abfielder tags and Minecraft Schematics categories, themes, and build sizes.
+- Added provider-specific accents and provider-aware installed-schematic filters, metadata, links, and file-format compatibility.
+
+## Improvements
+
+- Abfielder is shown before Minecraft Schematics and is available to both Litematica-compatible and WorldEdit instances. Its searches explicitly request free schematic products and its full tag catalog is cached when available.
+- Minecraft Schematics excludes paid and subscription-only creations. Downloads clearly explain the account requirement, open the correct provider page, watch the user's Downloads folders, and import the completed file using the existing manual-download workflow.
+- Download format selection is limited to formats compatible with the current instance and is skipped when only one format is available.
+- Provider descriptions, authors, images, downloads, categories, tags, supported formats, and other available metadata are cached and displayed without inventing unsupported view counts.
+- The shared cache now handles provider metadata, filters, images, and supported downloads. Rate-limited Abfielder and Minecraft Schematics requests fall back to bounded, locally cached client-side fetching.
+- CreateMod.com browsing now always uses the shared cache instead of permanently bypassing it after a transient health-check failure. The obsolete direct API-key fallback was removed.
+- Schematic imports, removals, folder opening, metadata tracking, and installed-file discovery now support every configured schematic format and custom folder.
+
+## Fixes
+
+- Fixed CreateMod.com searches such as “iron farm” failing while decoding `/api/schematics` responses.
+- Fixed download cards showing a completed check mark before a download finished or after a failed download.
+- Fixed Minecraft Schematics cards opening unrelated CreateMod.com URLs when provider IDs overlap.
+- Fixed Minecraft Schematics pagination and infinite scrolling for native category, theme, size, and latest listings.
+- Fixed stale or incomplete provider metadata only appearing after opening a schematic detail page.
+- Fixed Minecraft Schematics manual-download actions using an ordinary download icon instead of clearly indicating the browser handoff.
+- Fixed transient cache failures being hidden behind a misleading `401 Unauthorized` response from CreateMod.com.

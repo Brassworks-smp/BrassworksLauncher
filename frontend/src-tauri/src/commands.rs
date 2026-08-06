@@ -440,8 +440,8 @@ pub(crate) async fn list_mods(
 }
 
 #[tauri::command]
-pub(crate) async fn schematics_home() -> CmdResult<SchematicHome> {
-    tauri::async_runtime::spawn_blocking(|| brassworks_core::createmod::home().map_err(err))
+pub(crate) async fn schematics_home(provider: String) -> CmdResult<SchematicHome> {
+    tauri::async_runtime::spawn_blocking(move || brassworks_core::schematics::home(&provider).map_err(err))
         .await
         .map_err(err)?
 }
@@ -461,19 +461,20 @@ pub(crate) async fn list_schematics(
 
 #[tauri::command]
 pub(crate) async fn schematics_search(
+    provider: String,
     params: SchematicSearchParams,
 ) -> CmdResult<SchematicSearch> {
     tauri::async_runtime::spawn_blocking(move || {
-        brassworks_core::createmod::search(&params).map_err(err)
+        brassworks_core::schematics::search(&provider, &params).map_err(err)
     })
     .await
     .map_err(err)?
 }
 
 #[tauri::command]
-pub(crate) async fn schematic_detail(name: String) -> CmdResult<SchematicDetail> {
+pub(crate) async fn schematic_detail(provider: String, name: String) -> CmdResult<SchematicDetail> {
     tauri::async_runtime::spawn_blocking(move || {
-        brassworks_core::createmod::detail(&name).map_err(err)
+        brassworks_core::schematics::detail(&provider, &name).map_err(err)
     })
     .await
     .map_err(err)?
@@ -489,8 +490,8 @@ pub(crate) async fn schematic_stats(names: Vec<String>) -> CmdResult<Vec<Schemat
 }
 
 #[tauri::command]
-pub(crate) async fn schematics_filters() -> CmdResult<SchematicFilters> {
-    tauri::async_runtime::spawn_blocking(|| brassworks_core::createmod::filters().map_err(err))
+pub(crate) async fn schematics_filters(provider: String) -> CmdResult<SchematicFilters> {
+    tauri::async_runtime::spawn_blocking(move || brassworks_core::schematics::filters(&provider).map_err(err))
         .await
         .map_err(err)?
 }
@@ -528,10 +529,19 @@ pub(crate) async fn import_schematic(
     state: State<'_, AppState>,
     instance_id: String,
     path: String,
+    provider: Option<String>,
+    project_id: Option<String>,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        launcher.import_schematic(&instance_id, &path).map_err(err)
+        launcher
+            .import_schematic(
+                &instance_id,
+                &path,
+                provider.as_deref(),
+                project_id.as_deref(),
+            )
+            .map_err(err)
     })
     .await
     .map_err(err)?
@@ -541,13 +551,14 @@ pub(crate) async fn import_schematic(
 pub(crate) async fn download_schematic(
     state: State<'_, AppState>,
     instance_id: String,
+    provider: String,
     name: String,
-    username: Option<String>,
+    format: String,
 ) -> CmdResult<String> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .download_schematic(&instance_id, &name, username.as_deref().unwrap_or(""))
+            .download_schematic(&instance_id, &provider, &name, &format)
             .map_err(err)
     })
     .await
@@ -558,12 +569,12 @@ pub(crate) async fn download_schematic(
 pub(crate) async fn remove_schematic(
     state: State<'_, AppState>,
     instance_id: String,
-    filename: String,
+    path: String,
 ) -> CmdResult<()> {
     let launcher = state.launcher.clone();
     tauri::async_runtime::spawn_blocking(move || {
         launcher
-            .remove_schematic(&instance_id, &filename)
+            .remove_schematic(&instance_id, &path)
             .map_err(err)
     })
     .await
@@ -583,11 +594,17 @@ pub(crate) async fn scan_schematic_downloads(
             };
             for entry in read.flatten() {
                 let path = entry.path();
-                let is_nbt = path
+                let is_schematic = path
                     .extension()
-                    .map(|e| e.eq_ignore_ascii_case("nbt"))
+                    .and_then(|value| value.to_str())
+                    .map(|extension| {
+                        matches!(
+                            extension.to_ascii_lowercase().as_str(),
+                            "nbt" | "litematic" | "schem" | "schematic" | "mcstructure"
+                        )
+                    })
                     .unwrap_or(false);
-                if is_nbt {
+                if is_schematic {
                     let name = entry.file_name().to_string_lossy().to_string();
                     out.push((name, path.to_string_lossy().to_string()));
                 }
@@ -865,6 +882,35 @@ pub(crate) fn open_dir(state: State<AppState>, instance_id: String, sub: Option<
     if let Some(s) = sub.filter(|s| !s.is_empty()) {
         dir = dir.join(s);
     }
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    open_in_file_manager(&dir).map_err(err)
+}
+
+#[tauri::command]
+pub(crate) fn open_schematic_folder(
+    state: State<AppState>,
+    instance_id: String,
+    format: Option<String>,
+) -> CmdResult<()> {
+    let instance = state.launcher.instances().get(&instance_id).map_err(err)?;
+    let mods = state.launcher.list_mods(&instance_id).unwrap_or_default();
+    let game_dir = state.launcher.paths().instance_game_dir(&instance_id);
+    let (_, litematica, worldedit) = brassworks_core::schematics::detect_tools(&mods);
+    let format = format.unwrap_or_else(|| {
+        if litematica {
+            "litematic".to_string()
+        } else if worldedit {
+            "schem".to_string()
+        } else {
+            "nbt".to_string()
+        }
+    });
+    let dir = brassworks_core::schematics::folder_for_format(
+        &game_dir,
+        &instance,
+        &mods,
+        &format,
+    );
     std::fs::create_dir_all(&dir).map_err(err)?;
     open_in_file_manager(&dir).map_err(err)
 }
