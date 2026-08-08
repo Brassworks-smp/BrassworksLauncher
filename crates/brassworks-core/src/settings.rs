@@ -69,6 +69,9 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub folders_above_instances: bool,
 
+    #[serde(default)]
+    pub advanced_mode: bool,
+
     pub auto_update: bool,
     pub last_version: Option<String>,
 
@@ -137,6 +140,7 @@ impl Default for LauncherSettings {
             global_files_enabled: true,
             instance_folders: Vec::new(),
             folders_above_instances: false,
+            advanced_mode: false,
 
             auto_update: true,
             last_version: None,
