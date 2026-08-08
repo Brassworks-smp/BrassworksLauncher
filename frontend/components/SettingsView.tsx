@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Link2,
   AlertTriangle,
+  LayoutGrid,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "@/lib/api";
@@ -76,6 +77,7 @@ export function SettingsView({
   onShowChangelog,
   onUpdateInstalled,
   onReplayOnboarding,
+  embedded,
 }: {
   settings: LauncherSettings | null;
   javaInstanceId: string | null;
@@ -86,6 +88,7 @@ export function SettingsView({
   onShowChangelog: () => void;
   onUpdateInstalled: (version: string) => void;
   onReplayOnboarding?: () => void;
+  embedded?: boolean;
 }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("defaults");
@@ -165,12 +168,16 @@ export function SettingsView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <h1 className="pb-1 font-mc text-2xl tracking-wide text-gray-100">
-        {t("settings.title")}
-      </h1>
-      <p className="pb-4 text-xs text-ink-600">
-        {t("settings.subtitle")}
-      </p>
+      {!embedded && (
+        <>
+          <h1 className="pb-1 font-mc text-2xl tracking-wide text-gray-100">
+            {t("settings.title")}
+          </h1>
+          <p className="pb-4 text-xs text-ink-600">
+            {t("settings.subtitle")}
+          </p>
+        </>
+      )}
 
       <SegmentedTabs
         className="mb-4 self-start"
@@ -534,6 +541,19 @@ export function SettingsView({
                 description={t("settings.instances.foldersFirstDesc")}
                 checked={settings.folders_above_instances}
                 onChange={(v) => patch({ folders_above_instances: v })}
+              />
+            </Card>
+
+            <Card
+              title={t("settings.advanced.title")}
+              icon={<LayoutGrid size={14} />}
+              onReset={cardReset(["advanced_mode"])}
+            >
+              <Toggle
+                label={t("settings.advanced.toggle")}
+                description={t("settings.advanced.toggleDesc")}
+                checked={settings.advanced_mode}
+                onChange={(v) => patch({ advanced_mode: v })}
               />
             </Card>
 
