@@ -380,6 +380,7 @@ export interface LauncherSettings {
   global_files_enabled: boolean;
   instance_folders: InstanceFolder[];
   folders_above_instances: boolean;
+  advanced_mode: boolean;
 
   auto_update: boolean;
   last_version: string | null;
