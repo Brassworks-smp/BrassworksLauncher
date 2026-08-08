@@ -45,7 +45,8 @@
     "viewLastLog": "View last log",
     "viewPrevLog": "View the previous session's log",
     "searchPlaceholder": "Search…",
-    "openPalette": "Open the command palette"
+    "openPalette": "Open the command palette",
+    "overview": "Overview"
   },
   "globalFiles": {
     "title": "Global Files",
@@ -234,7 +235,8 @@
     "noFolder": "No folder",
     "newFolderDots": "New folder…",
     "launcherDefault": "Launcher default",
-    "share": "Share with friends"
+    "share": "Share with friends",
+    "viewAll": "View all ({count})"
   },
   "theme": {
     "matchSystem": "Match system",
@@ -285,7 +287,15 @@
     "signInBody": "Sign in with Microsoft to play online and use skins, or add an offline account for single-player.",
     "signInLater": "You can skip this and sign in later from the account menu.",
     "doneTitle": "You're all set",
-    "doneBody": "That's it - you're ready to play. You can revisit everything here from Settings whenever you like. Have fun!"
+    "doneBody": "That's it - you're ready to play. You can revisit everything here from Settings whenever you like. Have fun!",
+    "layoutTitle": "Pick a layout",
+    "layoutBody": "Two ways to browse: the classic sidebar, or a Prism-style single page where your instances live in the sidebar and each one opens with its own tabs.",
+    "layoutClassic": "Classic",
+    "layoutClassicDesc": "A sidebar with every page - Instances, Play, Content, Worlds, Servers and more.",
+    "layoutPrism": "Prism",
+    "layoutPrismDesc": "One focused page: instance list on the left, and Play, Content, Worlds and more as tabs for the selected instance.",
+    "layoutClassicActive": "Classic layout",
+    "layoutPrismActive": "Prism layout"
   },
   "tabIntro": {
     "onceNote": "A quick intro - you'll only see this once.",
@@ -443,6 +453,11 @@
       "foldersFirst": "Show folders first",
       "foldersFirstDesc": "Place instance folders above the Your instances section."
     },
+    "advanced": {
+      "title": "Advanced mode",
+      "toggle": "Prism-style layout",
+      "toggleDesc": "Put the instance list and its tabs (Play, Content, Worlds, Servers…) together on one page, like Prism Launcher. Instances collapse into a compact list and their actions move to the list's toolbar instead of hovering over cards."
+    },
     "curseforge": {
       "title": "CurseForge",
       "key": "CurseForge API key",
@@ -529,6 +544,7 @@
   },
   "instanceSettings": {
     "subtitle": "Instance settings - overrides apply only to this instance.",
+    "title": "Edit instance",
     "featuredNameLocked": "Featured pack names can't be changed",
     "featuredNameLockedHint": "Featured pack names can't be changed.",
     "renameInstance": "Rename instance",
@@ -970,7 +986,8 @@
       "apply": "Apply",
       "showMore": "Show more",
       "showLess": "Show less"
-    }
+    },
+    "filters": "Filters"
   },
   "worlds": {
     "title": "Worlds",
@@ -1205,7 +1222,11 @@
       "installingLoader": "Installing NeoForge",
       "launching": "Launching",
       "running": "Running"
-    }
+    },
+    "statsPlaytime": "Playtime",
+    "statsVersion": "Version",
+    "statsPack": "Pack",
+    "statsLastPlayed": "Last played"
   },
   "quickSettings": {
     "title": "Quick settings",
