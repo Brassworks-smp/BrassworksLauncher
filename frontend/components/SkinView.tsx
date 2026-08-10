@@ -408,10 +408,12 @@ export function SkinView({
   accountId,
   username,
   onSkinApplied,
+  embedded,
 }: {
   accountId: string | null;
   username?: string;
   onSkinApplied?: () => void;
+  embedded?: boolean;
 }) {
   const t = useT();
   const [profile, setProfile] = useState<SkinProfile | null>(
@@ -643,7 +645,9 @@ export function SkinView({
         onChange={onPickFile}
         className="hidden"
       />
-      <h1 className="pb-4 font-mc text-2xl tracking-wide text-gray-100">{t("skin.title")}</h1>
+      {!embedded && (
+        <h1 className="pb-4 font-mc text-2xl tracking-wide text-gray-100">{t("skin.title")}</h1>
+      )}
 
       {error && (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
