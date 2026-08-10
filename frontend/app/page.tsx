@@ -36,6 +36,8 @@ import { TooltipLayer } from "@/components/Tooltip";
 import { SettingsView } from "@/components/SettingsView";
 import { InstancesView } from "@/components/InstancesView";
 import { InstanceSettingsView } from "@/components/InstanceSettingsView";
+import { AllInstancesModal } from "@/components/AllInstancesModal";
+import { InstanceTabBar } from "@/components/InstanceTabBar";
 import { GlobalFilesView } from "@/components/GlobalFilesView";
 import { useGlobalFilesSymlinkSupport } from "@/components/GlobalFilesSymlinkSetup";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
@@ -50,6 +52,9 @@ import {
   hasTabIntro,
   tabIntroSeen,
   markTabIntroSeen,
+  markAllTabIntrosSeen,
+  hasLaunchedBefore,
+  markLaunched,
   resetTabIntros,
 } from "@/components/TabIntro";
 import { RestartPrompt } from "@/components/RestartPrompt";
@@ -59,6 +64,7 @@ import * as api from "@/lib/api";
 import { runLauncherUpdate } from "@/lib/downloadOperations";
 import { I18nProvider, translate } from "@/lib/i18n";
 import { applyAccent } from "@/lib/colors";
+import { recordLastClicked } from "@/lib/instanceRecency";
 import { isCacheableBranding } from "@/lib/instanceIcons";
 import { ToastHost, toast, toastProgress, dismissToast } from "@/lib/toast";
 import type {
@@ -154,8 +160,17 @@ export default function Home() {
   
   const [importFromOnboarding, setImportFromOnboarding] = useState(false);
   const [tabIntro, setTabIntro] = useState<View | null>(null);
-  const { ensureSymlinkSupport, symlinkSetupModal } =
-    useGlobalFilesSymlinkSupport(settings?.global_files_enabled ?? false);
+  const { ensureSymlinkSupport, symlinkSetupModal } = useGlobalFilesSymlinkSupport(
+    settings?.global_files_enabled ?? false,
+    () => {
+      setSettings((s) => {
+        if (!s) return s;
+        const next = { ...s, global_files_enabled: false };
+        api.saveSettings(next).catch((e) => setError(String(e)));
+        return next;
+      });
+    },
+  );
 
   useEffect(() => {
     if (view === "global-files" && settings && !settings.global_files_enabled) {
@@ -209,6 +224,8 @@ export default function Home() {
   );
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [recencyVersion, setRecencyVersion] = useState(0);
+  const [allInstancesOpen, setAllInstancesOpen] = useState(false);
 
   
   
@@ -222,7 +239,8 @@ export default function Home() {
     !!restartVersion ||
     aboutOpen ||
     onboardingOpen ||
-    paletteOpen;
+    paletteOpen ||
+    allInstancesOpen;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -231,8 +249,10 @@ export default function Home() {
         setPaletteOpen((o) => !o);
         return;
       }
-      if (e.key === "Escape" && view === "play" && !anyOverlayOpen)
-        setView("instances");
+      if (e.key === "Escape" && view === "play" && !anyOverlayOpen) {
+        if (settingsRef.current?.advanced_mode) setAllInstancesOpen(true);
+        else setView("instances");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -285,6 +305,8 @@ export default function Home() {
   const selectInstance = useCallback(
     async (id: string) => {
       setSelectedId(id);
+      recordLastClicked(id);
+      setRecencyVersion((v) => v + 1);
       setModStatus(null);
       api.setActiveInstance(id).catch(() => {});
       api.modpackStatus(id).then(setModStatus).catch(() => {});
@@ -292,6 +314,14 @@ export default function Home() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!api.isTauri()) return;
+    try {
+      if (hasLaunchedBefore()) markAllTabIntrosSeen();
+      else markLaunched();
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!api.isTauri()) return;
@@ -464,7 +494,10 @@ export default function Home() {
   
   useEffect(() => {
     if (!settings) return;
-    if (!selectedId && INSTANCE_VIEWS.includes(view)) setView("instances");
+    if (!selectedId && INSTANCE_VIEWS.includes(view)) {
+      if (settings.advanced_mode) setAllInstancesOpen(true);
+      else setView("instances");
+    }
     
     const acc =
       accounts.accounts.find((a) => a.id === accounts.selected) ??
@@ -501,6 +534,7 @@ export default function Home() {
     if (view === "global-files" && !settings.global_files_enabled) return;
     if (!hasTabIntro(view) || tabIntroSeen(view)) return;
     if (INSTANCE_VIEWS.includes(view) && !selectedId) return;
+    markTabIntroSeen(view);
     setTabIntro(view);
   }, [settings, onboardingOpen, view, selectedId]);
 
@@ -845,6 +879,27 @@ export default function Home() {
     }
   }, []);
 
+  const handleDeleteInstance = useCallback(
+    (id: string) => {
+      api
+        .deleteInstance(id)
+        .then(() =>
+          refreshInstances().then((list) => {
+            if (selectedRef.current === id) {
+              const next = defaultInstanceId(
+                list,
+                settingsRef.current?.show_featured ?? true,
+              );
+              if (next) void selectInstance(next);
+              else setSelectedId(null);
+            }
+          }),
+        )
+        .catch((e) => setError(String(e)));
+    },
+    [refreshInstances, selectInstance],
+  );
+
   useEffect(() => {
     maintainingIds.forEach((id) => {
       if (view === "play" && selectedId === id) {
@@ -1040,7 +1095,14 @@ export default function Home() {
           featuredEnabled: e.featuredEnabled,
         };
       },
-      nav: (v) => setView(v),
+      nav: (v) => {
+        const e = env();
+        if (e.settings?.advanced_mode && v === "instances") {
+          setAllInstancesOpen(true);
+          return;
+        }
+        setView(v);
+      },
       selectInstance: (id) => env().selectInstance(id),
       play: (id, qp) => env().onPlay(id, qp),
       stop: () => void env().onStop(),
@@ -1108,6 +1170,247 @@ export default function Home() {
     };
   }, [cmdCtx, openPackwizShare]);
 
+  const advancedMode = !!settings?.advanced_mode;
+  const isInstanceSubpage =
+    advancedMode && !!selectedId && INSTANCE_VIEWS.includes(view);
+  const isGlobalSubpage = advancedMode && (view === "settings" || view === "skin" || view === "global-files");
+
+  const renderViews = () => (
+    <>
+      {view === "instances" && (
+        <InstancesView
+          instances={instances}
+          showFeatured={featuredEnabled}
+          foldersAboveInstances={settings?.folders_above_instances ?? false}
+          folders={settings?.instance_folders ?? []}
+          settingsAccent={settings?.accent_color ?? null}
+          onSaveFolders={(f) => {
+            setSettings((s) => {
+              if (!s) return s;
+              const next = { ...s, instance_folders: f };
+              api.saveSettings(next).catch((e) => setError(String(e)));
+              return next;
+            });
+          }}
+          onSaveInstance={onSaveInstance}
+          selectedId={selectedId}
+          runningIds={runningIds}
+          maintainingIds={maintainingIds}
+          workingIds={workingIds}
+          installingId={installingInstanceId}
+          onSelect={(id) => {
+            void selectInstance(id);
+            setView("play");
+          }}
+          onOpenSettings={(id) => {
+            if (advancedMode && id !== selectedId) void selectInstance(id);
+            setGearId(id);
+            setView("instance-settings");
+          }}
+          onStar={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
+          onAdd={() => setAddOpen(true)}
+          onImportFile={(file) => {
+            setImportFile(file);
+            setAddOpen(true);
+          }}
+          onPlay={(id) => void launchNow(id)}
+          onDelete={handleDeleteInstance}
+        />
+      )}
+
+      {view === "play" && (
+        <PlayView
+          instance={instance}
+          busy={working || maintaining}
+          running={running}
+          progress={progress}
+          canPlay={canPlay}
+          modStatus={modStatus}
+          locked={locked}
+          notInstalled={managed && !!modStatus && !modStatus.installed_version}
+          showPlaytime={settings?.show_playtime ?? true}
+          playtimeHours={settings?.playtime_in_hours ?? false}
+          featuredEnabled={featuredEnabled}
+          players={players}
+          playersError={playersError}
+          playerCountAddress={
+            instance?.auto_join?.kind === "server"
+              ? instance.auto_join.ip
+              : featuredPacks.find((pack) => pack.id === instance?.id)?.server?.ip ??
+                instance?.playercount_url ??
+                ""
+          }
+          news={news}
+          newsError={newsError}
+          onRefreshPlayers={refreshPlayers}
+          onRefreshNews={refreshNews}
+          onPlay={(qp) => onPlay(undefined, qp)}
+          onUpdate={() => onPlay()}
+          onStop={onStop}
+          onCancel={onCancel}
+          onSaveInstance={onSaveInstance}
+          onShareChanged={() => void refreshInstances()}
+          onOpenSettings={() => {
+            if (selectedId) {
+              setGearId(selectedId);
+              setView("instance-settings");
+            }
+          }}
+          launcherSettings={settings}
+          overrideAccount={
+            instance?.account_override
+              ? accounts.accounts.find((a) => a.id === instance.account_override)
+                  ?.username ?? null
+              : null
+          }
+          compact={advancedMode}
+        />
+      )}
+
+      {view === "mods" && selectedId && (
+        <ModsView
+          instanceId={selectedId}
+          packName={instance?.name ?? ""}
+          mc={instance?.minecraft_version ?? ""}
+          loader={instance?.loader ?? "vanilla"}
+          locked={locked}
+          shared={!!instance?.share}
+          sharedInstall={instance?.shared_origin || !!instance?.shared_by}
+          onContentChanged={() => setContentRevision((revision) => revision + 1)}
+          onToggleLock={() => {
+            if (!instance) return;
+            api
+              .setModpackLocked(instance.id, !instance.modpack_locked)
+              .then(() => api.getInstance(instance.id).then(onSaveInstance))
+              .catch((e) => setError(String(e)));
+          }}
+          embedded={advancedMode}
+        />
+      )}
+
+      {view === "worlds" && selectedId && (
+        <WorldsView
+          instanceId={selectedId}
+          canPlay={canPlay && !running}
+          onQuickPlay={(qp) => onPlay(selectedId, qp)}
+          onRemoved={(folder) => clearAutoJoinIfRemoved("world", folder)}
+          embedded={advancedMode}
+        />
+      )}
+
+      {view === "servers" && selectedId && (
+        <ServersView
+          instanceId={selectedId}
+          canPlay={canPlay && !running}
+          onQuickPlay={(qp) => onPlay(selectedId, qp)}
+          onRemoved={(ip) => clearAutoJoinIfRemoved("server", ip)}
+          embedded={advancedMode}
+        />
+      )}
+
+      {view === "screenshots" && selectedId && (
+        <ScreenshotsView instanceId={selectedId} embedded={advancedMode} />
+      )}
+
+      {view === "schematics" && selectedId && (
+        <SchematicsView instanceId={selectedId} embedded={advancedMode} />
+      )}
+
+      {view === "skin" &&
+        (() => {
+          const acc =
+            accounts.accounts.find((a) => a.id === accounts.selected) ??
+            accounts.accounts[0] ??
+            null;
+          return (
+            <SkinView
+              key={acc?.id ?? "none"}
+              accountId={acc?.id ?? null}
+              username={acc?.username}
+              onSkinApplied={() => setAvatarVersion((v) => v + 1)}
+            />
+          );
+        })()}
+
+      {view === "instance-settings" && gearInstance && settings && (
+        <InstanceSettingsView
+          instance={gearInstance}
+          settings={settings}
+          accounts={accounts}
+          modStatus={gearId === selectedId ? modStatus : null}
+          maintaining={gearMaintaining}
+          progress={gearProgress}
+          ensureSymlinkSupport={ensureSymlinkSupport}
+          onBack={() => setView(advancedMode ? "play" : "instances")}
+          onSaveInstance={onSaveInstance}
+          onRefresh={() => void refreshInstances()}
+          onDeleted={(id) => {
+            refreshInstances().then((list) => {
+              if (selectedId === id) {
+                const next = defaultInstanceId(list, featuredEnabled);
+                if (next) void selectInstance(next);
+                else setSelectedId(null);
+              }
+            });
+            setView(advancedMode ? "play" : "instances");
+          }}
+          onError={setError}
+          onCheckUpdates={() => {
+            if (!gearId) return;
+            api
+              .modpackStatus(gearId)
+              .then((st) => {
+                if (gearId === selectedRef.current) setModStatus(st);
+              })
+              .catch(() => {});
+            api.syncModpack(gearId).catch((e) => setError(String(e)));
+          }}
+          embedded={advancedMode}
+        />
+      )}
+
+      {view === "settings" && (
+        <SettingsView
+          settings={settings}
+          javaInstanceId={selectedId}
+          appVersion={appVer}
+          ensureSymlinkSupport={ensureSymlinkSupport}
+          onShowChangelog={() =>
+            setChangelog({ version: appVer, updated: false })
+          }
+          onUpdateInstalled={(v) => setRestartVersion(v)}
+          onSaveSettings={(s) => {
+            setSettings(s);
+            api.saveSettings(s).catch(async (e) => {
+              setError(String(e));
+              try {
+                setSettings(await api.getSettings());
+              } catch {}
+            });
+          }}
+          onReplayOnboarding={() => {
+            try {
+              localStorage.removeItem(ONBOARDED_KEY);
+            } catch {}
+            resetTabIntros();
+            setTabIntro(null);
+            setView("play");
+            setOnboardingOpen(true);
+          }}
+          onError={(e) => setError(e)}
+        />
+      )}
+      {view === "global-files" && settings?.global_files_enabled && (
+        <GlobalFilesView
+          instances={instances}
+          selectedInstanceId={selectedId}
+          onInstancesChanged={refreshInstances}
+          ensureSymlinkSupport={ensureSymlinkSupport}
+        />
+      )}
+    </>
+  );
+
   return (
     <I18nProvider
       locale={settings?.locale ?? "en"}
@@ -1118,7 +1421,13 @@ export default function Home() {
       <div className="flex min-h-0 flex-1">
         <Sidebar
           view={view}
-          onChange={setView}
+          onChange={(v) => {
+            if (advancedMode && v === "instances") {
+              setAllInstancesOpen(true);
+              return;
+            }
+            setView(v);
+          }}
           running={runningIds.size > 0}
           onStop={onStop}
           onViewLogs={setLogView}
@@ -1127,7 +1436,43 @@ export default function Home() {
           hasInstance={!!selectedId}
           skinsAvailable={skinsAvailable}
           schematicsAvailable={schematicsAvailable}
-          globalFilesAvailable={settings?.global_files_enabled ?? true}
+          globalFilesAvailable={settings?.global_files_enabled ?? false}
+          advancedMode={advancedMode}
+          instances={instances}
+          folders={settings?.instance_folders ?? []}
+          settingsAccent={settings?.accent_color ?? null}
+          featuredEnabled={featuredEnabled}
+          recencyVersion={recencyVersion}
+          allInstancesOpen={allInstancesOpen}
+          onAllInstancesOpenChange={setAllInstancesOpen}
+          selectedId={selectedId}
+          runningIds={runningIds}
+          maintainingIds={maintainingIds}
+          workingIds={workingIds}
+          installingId={installingInstanceId}
+          onSelectInstance={(id) => {
+            void selectInstance(id);
+            setView("play");
+          }}
+          onOpenInstanceSettings={(id) => {
+            if (id !== selectedId) void selectInstance(id);
+            setGearId(id);
+            setView("instance-settings");
+          }}
+          onStarInstance={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
+          onAddInstance={() => setAddOpen(true)}
+          onSaveFolders={(f) => {
+            setSettings((s) => {
+              if (!s) return s;
+              const next = { ...s, instance_folders: f };
+              api.saveSettings(next).catch((e) => setError(String(e)));
+              return next;
+            });
+          }}
+          onSaveInstance={onSaveInstance}
+          onPlayInstance={(id) => void launchNow(id)}
+          onDeleteInstance={handleDeleteInstance}
+          canPlay={canPlay}
           activeName={instance?.name}
           onActiveClick={() => {
             if (selectedId) {
@@ -1166,10 +1511,7 @@ export default function Home() {
             </div>
           )}
 
-          <div
-            key={view}
-            className="view-anim flex min-h-0 flex-1 flex-col"
-          >
+          <div className="flex min-h-0 flex-1 flex-col">
           {tabIntro === view && (
             <TabIntro
               view={tabIntro}
@@ -1179,248 +1521,51 @@ export default function Home() {
               }}
             />
           )}
-          {view === "instances" && (
-            <InstancesView
-              instances={instances}
-              showFeatured={featuredEnabled}
-              foldersAboveInstances={settings?.folders_above_instances ?? false}
-              folders={settings?.instance_folders ?? []}
-              settingsAccent={settings?.accent_color ?? null}
-              onSaveFolders={(f) => {
-                setSettings((s) => {
-                  if (!s) return s;
-                  const next = { ...s, instance_folders: f };
-                  api.saveSettings(next).catch((e) => setError(String(e)));
-                  return next;
-                });
-              }}
-              onSaveInstance={onSaveInstance}
-              selectedId={selectedId}
-              runningIds={runningIds}
-              maintainingIds={maintainingIds}
-              workingIds={workingIds}
-              installingId={installingInstanceId}
-              onSelect={(id) => {
-                void selectInstance(id);
-                setView("play");
-              }}
-              onOpenSettings={(id) => {
-                setGearId(id);
-                setView("instance-settings");
-              }}
-              onStar={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
-              onAdd={() => setAddOpen(true)}
-              onImportFile={(file) => {
-                setImportFile(file);
-                setAddOpen(true);
-              }}
-              onPlay={(id) => void launchNow(id)}
-              onDelete={(id) => {
-                api
-                  .deleteInstance(id)
-                  .then(() =>
-                    refreshInstances().then((list) => {
-                      if (selectedRef.current === id) {
-                        const next = defaultInstanceId(
-                          list,
-                          settingsRef.current?.show_featured ?? true,
-                        );
-                        if (next) void selectInstance(next);
-                        else setSelectedId(null);
-                      }
-                    }),
-                  )
-                  .catch((e) => setError(String(e)));
-              }}
-            />
-          )}
-
-          {view === "play" && (
-            <PlayView
-              instance={instance}
-              busy={working || maintaining}
-              running={running}
-              progress={progress}
-              canPlay={canPlay}
-              modStatus={modStatus}
-              locked={locked}
-              notInstalled={managed && !!modStatus && !modStatus.installed_version}
-              showPlaytime={settings?.show_playtime ?? true}
-              playtimeHours={settings?.playtime_in_hours ?? false}
-              featuredEnabled={featuredEnabled}
-              players={players}
-              playersError={playersError}
-              playerCountAddress={
-                instance?.auto_join?.kind === "server"
-                  ? instance.auto_join.ip
-                  : featuredPacks.find((pack) => pack.id === instance?.id)?.server?.ip ??
-                    instance?.playercount_url ??
-                    ""
-              }
-              news={news}
-              newsError={newsError}
-              onRefreshPlayers={refreshPlayers}
-              onRefreshNews={refreshNews}
-              onPlay={(qp) => onPlay(undefined, qp)}
-              onUpdate={() => onPlay()}
-              onStop={onStop}
-              onCancel={onCancel}
-              onSaveInstance={onSaveInstance}
-              onShareChanged={() => void refreshInstances()}
-              onOpenSettings={() => {
-                if (selectedId) {
-                  setGearId(selectedId);
-                  setView("instance-settings");
-                }
-              }}
-              launcherSettings={settings}
-              overrideAccount={
-                instance?.account_override
-                  ? accounts.accounts.find((a) => a.id === instance.account_override)
-                      ?.username ?? null
-                  : null
-              }
-            />
-          )}
-
-          {view === "mods" && selectedId && (
-            <ModsView
-              instanceId={selectedId}
-              packName={instance?.name ?? ""}
-              mc={instance?.minecraft_version ?? ""}
-              loader={instance?.loader ?? "vanilla"}
-              locked={locked}
-              shared={!!instance?.share}
-              sharedInstall={instance?.shared_origin || !!instance?.shared_by}
-              onContentChanged={() =>
-                setContentRevision((revision) => revision + 1)
-              }
-              onToggleLock={() => {
-                if (!instance) return;
-                api
-                  .setModpackLocked(instance.id, !instance.modpack_locked)
-                  .then(() => api.getInstance(instance.id).then(onSaveInstance))
-                  .catch((e) => setError(String(e)));
-              }}
-            />
-          )}
-
-          {view === "worlds" && selectedId && (
-            <WorldsView
-              instanceId={selectedId}
-              canPlay={canPlay && !running}
-              onQuickPlay={(qp) => onPlay(selectedId, qp)}
-              onRemoved={(folder) => clearAutoJoinIfRemoved("world", folder)}
-            />
-          )}
-
-          {view === "servers" && selectedId && (
-            <ServersView
-              instanceId={selectedId}
-              canPlay={canPlay && !running}
-              onQuickPlay={(qp) => onPlay(selectedId, qp)}
-              onRemoved={(ip) => clearAutoJoinIfRemoved("server", ip)}
-            />
-          )}
-
-          {view === "screenshots" && selectedId && (
-            <ScreenshotsView instanceId={selectedId} />
-          )}
-
-          {view === "schematics" && selectedId && (
-            <SchematicsView instanceId={selectedId} />
-          )}
-
-          {view === "skin" &&
-            (() => {
-              const acc =
-                accounts.accounts.find((a) => a.id === accounts.selected) ??
-                accounts.accounts[0] ??
-                null;
-              return (
-                <SkinView
-                  key={acc?.id ?? "none"}
-                  accountId={acc?.id ?? null}
-                  username={acc?.username}
-                  onSkinApplied={() => setAvatarVersion((v) => v + 1)}
-                />
-              );
-            })()}
-
-          {view === "instance-settings" && gearInstance && settings && (
-            <InstanceSettingsView
-              instance={gearInstance}
-              settings={settings}
-              accounts={accounts}
-              modStatus={gearId === selectedId ? modStatus : null}
-              maintaining={gearMaintaining}
-              progress={gearProgress}
-              ensureSymlinkSupport={ensureSymlinkSupport}
-              onBack={() => setView("instances")}
-              onSaveInstance={onSaveInstance}
-              onRefresh={() => void refreshInstances()}
-              onDeleted={(id) => {
-                refreshInstances().then((list) => {
-                  if (selectedId === id) {
-                    const next = defaultInstanceId(list, featuredEnabled);
-                    if (next) void selectInstance(next);
-                    else setSelectedId(null);
-                  }
-                });
-                setView("instances");
-              }}
-              onError={setError}
-              onCheckUpdates={() => {
-                if (!gearId) return;
-                api
-                  .modpackStatus(gearId)
-                  .then((st) => {
-                    if (gearId === selectedRef.current) setModStatus(st);
-                  })
-                  .catch(() => {});
-                api.syncModpack(gearId).catch((e) => setError(String(e)));
-              }}
-            />
-          )}
-
-          {view === "settings" && (
-            <SettingsView
-              settings={settings}
-              javaInstanceId={selectedId}
-              appVersion={appVer}
-              ensureSymlinkSupport={ensureSymlinkSupport}
-              onShowChangelog={() =>
-                setChangelog({ version: appVer, updated: false })
-              }
-              onUpdateInstalled={(v) => setRestartVersion(v)}
-              onSaveSettings={(s) => {
-                setSettings(s);
-                api.saveSettings(s).catch(async (e) => {
-                  setError(String(e));
-                  try {
-                    setSettings(await api.getSettings());
-                  } catch {}
-                });
-              }}
-              onReplayOnboarding={() => {
-                try {
-                  localStorage.removeItem(ONBOARDED_KEY);
-                } catch {}
-                resetTabIntros();
-                setTabIntro(null);
-                setView("play");
-                setOnboardingOpen(true);
-              }}
-              onError={(e) => setError(e)}
-            />
-          )}
-          {view === "global-files" && settings?.global_files_enabled && (
-            <GlobalFilesView
-              instances={instances}
-              selectedInstanceId={selectedId}
-              onInstancesChanged={refreshInstances}
-              ensureSymlinkSupport={ensureSymlinkSupport}
-            />
+          {advancedMode ? (
+            <>
+              {isInstanceSubpage ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <InstanceTabBar
+                    view={view}
+                    schematicsAvailable={schematicsAvailable}
+                    onChange={(v) => {
+                      if (v === "instance-settings" && selectedId)
+                        setGearId(selectedId);
+                      setView(v);
+                    }}
+                  />
+                  <div className="mt-3 flex min-h-0 flex-1 flex-col">
+                    <div
+                      key={`${view}:${selectedId}`}
+                      className="view-anim flex min-h-0 flex-1 flex-col"
+                    >
+                      {renderViews()}
+                    </div>
+                  </div>
+                </div>
+              ) : isGlobalSubpage ? (
+                <div
+                  key={view}
+                  className="view-anim flex min-h-0 flex-1 flex-col"
+                >
+                  {renderViews()}
+                </div>
+              ) : (
+                <div
+                  key={view}
+                  className="view-anim flex min-h-0 flex-1 flex-col"
+                >
+                  {renderViews()}
+                </div>
+              )}
+            </>
+          ) : (
+            <div
+              key={view}
+              className="view-anim flex min-h-0 flex-1 flex-col"
+            >
+              {renderViews()}
+            </div>
           )}
           </div>
         </main>
@@ -1589,6 +1734,48 @@ export default function Home() {
       )}
       {paletteOpen && (
         <CommandPalette ctx={cmdCtx} onClose={() => setPaletteOpen(false)} />
+      )}
+      {allInstancesOpen && (
+        <AllInstancesModal
+          instances={instances}
+          showFeatured={featuredEnabled}
+          folders={settings?.instance_folders ?? []}
+          settingsAccent={settings?.accent_color ?? null}
+          selectedId={selectedId}
+          runningIds={runningIds}
+          maintainingIds={maintainingIds}
+          workingIds={workingIds}
+          installingId={installingInstanceId}
+          onSelect={(id) => {
+            setAllInstancesOpen(false);
+            void selectInstance(id);
+            setView("play");
+          }}
+          onOpenSettings={(id) => {
+            setAllInstancesOpen(false);
+            if (id !== selectedId) void selectInstance(id);
+            setGearId(id);
+            setView("instance-settings");
+          }}
+          onStar={(i) => onSaveInstance({ ...i, pinned: !i.pinned })}
+          onAdd={() => setAddOpen(true)}
+          onImportFile={(file) => {
+            setImportFile(file);
+            setAddOpen(true);
+          }}
+          onSaveFolders={(f) => {
+            setSettings((s) => {
+              if (!s) return s;
+              const next = { ...s, instance_folders: f };
+              api.saveSettings(next).catch((e) => setError(String(e)));
+              return next;
+            });
+          }}
+          onSaveInstance={onSaveInstance}
+          onPlay={(id) => void launchNow(id)}
+          onDelete={handleDeleteInstance}
+          onClose={() => setAllInstancesOpen(false)}
+        />
       )}
       {symlinkSetupModal}
       <ToastHost />
