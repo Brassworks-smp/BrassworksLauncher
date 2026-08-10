@@ -126,7 +126,13 @@ function GridThumb({ path, alt }: { path: string; alt: string }) {
   );
 }
 
-export function ScreenshotsView({ instanceId }: { instanceId: string }) {
+export function ScreenshotsView({
+  instanceId,
+  embedded,
+}: {
+  instanceId: string;
+  embedded?: boolean;
+}) {
   const t = useT();
   const [shots, setShots] = useState<Screenshot[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -200,14 +206,16 @@ export function ScreenshotsView({ instanceId }: { instanceId: string }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex items-center justify-between pb-4">
-        <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-            {t("screenshots.title")}
-          </h1>
-          <p className="text-sm text-ink-600">
-            {shots ? t("screenshots.captured", { count: list.length }) : t("common.loading")}
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="font-mc text-2xl tracking-wide text-gray-100">
+              {t("screenshots.title")}
+            </h1>
+            <p className="text-sm text-ink-600">
+              {shots ? t("screenshots.captured", { count: list.length }) : t("common.loading")}
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <SegmentedTabs
             size="sm"
