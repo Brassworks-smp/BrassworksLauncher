@@ -185,7 +185,13 @@ function SchematicRow({
   );
 }
 
-export function SchematicsView({ instanceId }: { instanceId: string }) {
+export function SchematicsView({
+  instanceId,
+  embedded,
+}: {
+  instanceId: string;
+  embedded?: boolean;
+}) {
   const t = useT();
   const [schematics, setSchematics] = useState<InstalledSchematic[] | null>(
     () => schematicsCache.get(instanceId) ?? null,
@@ -341,17 +347,36 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
-      <div className="flex items-center justify-between pb-4">
-        <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-            {t("schematics.heroTitle")}
-          </h1>
-          <p className="text-sm text-ink-600">
-            {schematics
-              ? t("schematics.installed", { count: schematics.length })
-              : t("common.loading")}
-          </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-4">
+        {!embedded && (
+          <div className="mr-1">
+            <h1 className="font-mc text-2xl tracking-wide text-gray-100">
+              {t("schematics.heroTitle")}
+            </h1>
+            <p className="text-sm text-ink-600">
+              {schematics
+                ? t("schematics.installed", { count: schematics.length })
+                : t("common.loading")}
+            </p>
+          </div>
+        )}
+        <div className="relative min-w-[180px] flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-600" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("schematics.searchInstalled")}
+            className="w-full rounded-lg bg-ink-900/50 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
+          />
         </div>
+        <SegmentedTabs
+          value={source}
+          onChange={(value) => setSource(value as typeof source)}
+          options={[
+            { id: "all", label: <>{t("mods.all")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.all}</span></> },
+            ...Array.from(counts.bySource.entries()).map(([id, count]) => ({ id, label: <>{id === "createmod" ? "CreateMod.com" : id === "minecraft-schematics" ? "Minecraft Schematics" : id === "abfielder" ? "Abfielder" : t("schematics.local")} <span className="ml-1.5 tabular-nums text-ink-600">{count}</span></> })),
+          ]}
+        />
         <div className="flex gap-2">
           <button
             onClick={() => setAdding(true)}
@@ -372,26 +397,6 @@ export function SchematicsView({ instanceId }: { instanceId: string }) {
           >
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
-        </div>
-      </div>
-
-      <div className="mb-3 flex items-center gap-2">
-        <SegmentedTabs
-          value={source}
-          onChange={(value) => setSource(value as typeof source)}
-          options={[
-            { id: "all", label: <>{t("mods.all")} <span className="ml-1.5 tabular-nums text-ink-600">{counts.all}</span></> },
-            ...Array.from(counts.bySource.entries()).map(([id, count]) => ({ id, label: <>{id === "createmod" ? "CreateMod.com" : id === "minecraft-schematics" ? "Minecraft Schematics" : id === "abfielder" ? "Abfielder" : t("schematics.local")} <span className="ml-1.5 tabular-nums text-ink-600">{count}</span></> })),
-          ]}
-        />
-        <div className="relative flex-1">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-600" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("schematics.searchInstalled")}
-            className="w-full rounded-lg bg-ink-900/50 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
-          />
         </div>
       </div>
 
