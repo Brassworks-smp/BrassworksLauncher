@@ -20,6 +20,7 @@ import {
   X,
   FileDown,
   Share2,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -128,6 +129,7 @@ export function ModsView({
   sharedInstall,
   onContentChanged,
   onToggleLock,
+  embedded,
 }: {
   instanceId: string;
   packName?: string;
@@ -138,6 +140,7 @@ export function ModsView({
   sharedInstall?: boolean;
   onContentChanged?: () => void;
   onToggleLock: () => void;
+  embedded?: boolean;
 }) {
   const t = useT();
   const [mods, setMods] = useState<InstalledMod[] | null>(
@@ -156,6 +159,7 @@ export function ModsView({
   const [originFilter, setOriginFilter] = useState<"all" | "modpack" | "user">(
     "all",
   );
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState<SearchHit | null>(null);
@@ -454,17 +458,19 @@ export function ModsView({
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
       <div className="flex items-center justify-between pb-4">
-        <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">
-            {t("mods.title")}
-          </h1>
-          <p className="text-sm text-ink-600">
-            {mods ? t("mods.installed", { count: mods.length }) : t("common.loading")}
-            {!locked && !shared && (
-              <span className="ml-2 text-amber-400/80">{t("mods.unlocked")}</span>
-            )}
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="font-mc text-2xl tracking-wide text-gray-100">
+              {t("mods.title")}
+            </h1>
+            <p className="text-sm text-ink-600">
+              {mods ? t("mods.installed", { count: mods.length }) : t("common.loading")}
+              {!locked && !shared && (
+                <span className="ml-2 text-amber-400/80">{t("mods.unlocked")}</span>
+              )}
+            </p>
+          </div>
+        )}
         <div className="flex gap-2">
           {shared ? (
             <span
@@ -565,41 +571,55 @@ export function ModsView({
             className="w-full rounded-lg bg-ink-900/50 py-2 pl-9 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
           />
         </div>
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          title={t("mods.filters")}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition ${
+            filtersOpen
+              ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
+              : "border-edge text-ink-600 hover:border-brass-600/40 hover:text-brass-300"
+          }`}
+        >
+          <SlidersHorizontal size={15} />
+          {t("mods.filters")}
+        </button>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-        <Segmented
-          label={t("mods.sourceLabel")}
-          value={sourceFilter}
-          onChange={(v) => setSourceFilter(v as typeof sourceFilter)}
-          options={[
-            { id: "all", label: t("mods.all") },
-            { id: "modrinth", label: t("mods.modrinth") },
-            { id: "curseforge", label: t("mods.curseforge") },
-            { id: "local", label: t("mods.local") },
-          ]}
-        />
-        <Segmented
-          label={t("mods.statusLabel")}
-          value={statusFilter}
-          onChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          options={[
-            { id: "all", label: t("mods.all") },
-            { id: "enabled", label: t("mods.enabled") },
-            { id: "disabled", label: t("mods.disabled") },
-          ]}
-        />
-        <Segmented
-          label={t("mods.originLabel")}
-          value={originFilter}
-          onChange={(v) => setOriginFilter(v as typeof originFilter)}
-          options={[
-            { id: "all", label: t("mods.all") },
-            { id: "modpack", label: t("mods.modpack") },
-            { id: "user", label: t("mods.addedByYou") },
-          ]}
-        />
-      </div>
+      {filtersOpen && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Segmented
+            label={t("mods.sourceLabel")}
+            value={sourceFilter}
+            onChange={(v) => setSourceFilter(v as typeof sourceFilter)}
+            options={[
+              { id: "all", label: t("mods.all") },
+              { id: "modrinth", label: t("mods.modrinth") },
+              { id: "curseforge", label: t("mods.curseforge") },
+              { id: "local", label: t("mods.local") },
+            ]}
+          />
+          <Segmented
+            label={t("mods.statusLabel")}
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+            options={[
+              { id: "all", label: t("mods.all") },
+              { id: "enabled", label: t("mods.enabled") },
+              { id: "disabled", label: t("mods.disabled") },
+            ]}
+          />
+          <Segmented
+            label={t("mods.originLabel")}
+            value={originFilter}
+            onChange={(v) => setOriginFilter(v as typeof originFilter)}
+            options={[
+              { id: "all", label: t("mods.all") },
+              { id: "modpack", label: t("mods.modpack") },
+              { id: "user", label: t("mods.addedByYou") },
+            ]}
+          />
+        </div>
+      )}
 
       {showDup && (
         <div className="dup-warn mb-3 rounded-lg border px-3 py-2 text-xs">
