@@ -62,11 +62,13 @@ export function ServersView({
   canPlay,
   onQuickPlay,
   onRemoved,
+  embedded,
 }: {
   instanceId: string;
   canPlay: boolean;
   onQuickPlay: (qp: api.QuickPlay) => void;
   onRemoved?: (ip: string) => void;
+  embedded?: boolean;
 }) {
   const t = useT();
   const [servers, setServers] = useState<ServerEntry[] | null>(
@@ -186,15 +188,51 @@ export function ServersView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-1 -mx-1">
-      <div className="flex items-center justify-between pb-4">
-        <div>
-          <h1 className="font-mc text-2xl tracking-wide text-gray-100">{t("servers.title")}</h1>
-          <p className="text-sm text-ink-600">
-            {servers
-              ? t("servers.count", { count: servers.length })
-              : t("common.loading")}
-          </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-4">
+        {!embedded && (
+          <div className="mr-1">
+            <h1 className="font-mc text-2xl tracking-wide text-gray-100">{t("servers.title")}</h1>
+            <p className="text-sm text-ink-600">
+              {servers
+                ? t("servers.count", { count: servers.length })
+                : t("common.loading")}
+            </p>
+          </div>
+        )}
+        <div className="relative min-w-[180px] flex-1">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-600"
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("servers.searchPlaceholder")}
+            className="w-full rounded-lg bg-ink-900/50 py-2 pl-8 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
+          />
         </div>
+        <SegmentedTabs
+          size="sm"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { id: "all", label: t("servers.all") },
+            { id: "online", label: t("servers.online") },
+          ]}
+        />
+        {starredCount > 0 && (
+          <button
+            onClick={() => setStarredOnly((v) => !v)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-medium transition ${
+              starredOnly
+                ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
+                : "border-edge text-ink-600 hover:text-brass-300"
+            }`}
+          >
+            <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={12} />
+            {t("servers.starred")}
+          </button>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={load}
@@ -213,43 +251,6 @@ export function ServersView({
             <Plus size={16} /> {t("servers.addServer")}
           </button>
         </div>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <div className="relative">
-          <Search
-            size={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-600"
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("servers.searchPlaceholder")}
-            className="w-56 rounded-lg bg-ink-900/50 py-2 pl-8 pr-3 text-sm outline-none ring-1 ring-edge focus:ring-brass-500/60"
-          />
-        </div>
-        <SegmentedTabs
-          size="sm"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { id: "all", label: t("servers.all") },
-            { id: "online", label: t("servers.online") },
-          ]}
-        />
-        {starredCount > 0 && (
-          <button
-            onClick={() => setStarredOnly((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-medium transition ${
-              starredOnly
-                ? "border-brass-500/50 bg-brass-500/10 text-brass-300"
-                : "border-edge text-ink-600 hover:text-brass-300"
-            }`}
-          >
-            <StarButton starred={starredOnly} onClick={() => setStarredOnly((v) => !v)} size={12} />
-            {t("servers.starred")}
-          </button>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1">
