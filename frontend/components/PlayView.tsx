@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Children, useEffect, useRef, useState } from "react";
 import {
   Play,
   Loader2,
@@ -17,6 +17,7 @@ import {
   Server,
   Share2,
   Copy,
+  CalendarDays,
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { ShareModal } from "./ShareModal";
@@ -155,6 +156,7 @@ export function PlayView({
   onOpenSettings,
   launcherSettings,
   overrideAccount,
+  compact,
 }: {
   instance: Instance | null;
   busy: boolean;
@@ -183,6 +185,7 @@ export function PlayView({
   onOpenSettings: () => void;
   launcherSettings: LauncherSettings | null;
   overrideAccount?: string | null;
+  compact?: boolean;
 }) {
   const t = useT();
   const [shareOpen, setShareOpen] = useState(false);
@@ -258,6 +261,284 @@ export function PlayView({
   
   const sidebarPx = sidebarWidth || (appliedPins(instance).length > 0 ? 300 : 248);
 
+  const chipRow = (slim: boolean) => (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
+      <Chip icon={<Package size={13} />}>{kindLabel(t, instance)}</Chip>
+      <Chip icon={<Box size={13} />}>
+        {loaderLabel(instance)} {instance.minecraft_version}
+      </Chip>
+      {instance.account_override && (
+        <Chip icon={<UserRound size={13} />}>
+          {overrideAccount ?? t("play.accountMissing")}
+        </Chip>
+      )}
+      {instance.auto_join && (
+        <AutoJoinChip instanceId={instance.id} autoJoin={instance.auto_join} />
+      )}
+      {!slim && showPlaytime && (
+        <Chip icon={<Clock size={13} />}>
+          {t("play.played", {
+            time: formatPlaytime(t, instance.playtime_seconds, playtimeHours),
+          })}
+        </Chip>
+      )}
+      {!slim && modStatus?.installed_version && (
+        <Chip>{t("play.packChip", { version: modStatus.installed_version })}</Chip>
+      )}
+      {!slim && instance.last_played && (
+        <Chip>
+          {t("play.lastPlayedChip", {
+            date: new Date(instance.last_played).toLocaleDateString(),
+          })}
+        </Chip>
+      )}
+      {canShare && instance.share && (
+        <button
+          onClick={() => setShareOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-brass-500/50 bg-brass-500/15 px-2.5 py-1 text-sm text-brass-200 transition hover:bg-brass-500/25"
+        >
+          <Share2 size={13} />
+          {t("share.sharedChip")}
+          {sharePending && (
+            <span
+              title={t("share.cardPending")}
+              className="h-1.5 w-1.5 rounded-full bg-amber-400"
+            />
+          )}
+        </button>
+      )}
+      {instance.shared_by && (
+        <Chip icon={<Share2 size={13} />}>
+          {t("share.sharedByChip", { user: instance.shared_by })}
+        </Chip>
+      )}
+    </div>
+  );
+
+  const banners = busy || shareDiverged || hasUpdate ? (
+    <div className="flex shrink-0 flex-col gap-3">
+      {shareDiverged ? (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 rise">
+          <ArrowUpCircle size={16} />
+          <span className="flex-1">{t("play.shareDiverged")}</span>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="shrink-0 rounded-md border border-amber-400/40 px-2.5 py-1 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20"
+          >
+            {t("play.shareManage")}
+          </button>
+        </div>
+      ) : hasUpdate ? (
+        <div
+          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm rise ${
+            locked
+              ? "border-brass-500/40 bg-brass-500/10 text-brass-200"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+          }`}
+        >
+          <ArrowUpCircle size={16} />
+          <span className="flex-1">
+            {locked
+              ? modStatus?.latest_version
+                ? t("play.updateAvailableVersion", {
+                    version: modStatus.latest_version,
+                  })
+                : t("play.updateAvailable")
+              : t("play.updateLockHint")}
+          </span>
+        </div>
+      ) : null}
+
+      {busy && (
+        <div className="rounded-xl border border-edge bg-ink-900/40 p-4 rise">
+          <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+            <span className="min-w-0 truncate font-medium text-brass-300">
+              {progress ? stageLabelOf(t, progress.stage) : t("play.preparing")}
+              {progress?.message ? (
+                <span className="ml-2 text-ink-600">{progress.message}</span>
+              ) : null}
+            </span>
+            {pct !== null && (
+              <span className="shrink-0 tabular-nums text-ink-600">{pct}%</span>
+            )}
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-ink-800">
+            <div
+              className="progress-fill h-full rounded-full transition-[width] duration-300"
+              style={{ width: pct !== null ? `${pct}%` : "40%" }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const mainAction = (
+    <>
+      <MainButton
+        busy={busy}
+        running={running}
+        canPlay={canPlay}
+        updateAvailable={updateAvailable}
+        notInstalled={notInstalled}
+        autoJoin={instance.auto_join}
+        onPlay={() => onPlay(instance.auto_join ?? undefined)}
+        onUpdate={onUpdate}
+        onStop={onStop}
+        onCancel={onCancel}
+        stageLabel={
+          progress ? stageLabelOf(t, progress.stage) : t("play.preparing")
+        }
+      />
+      {busy && (
+        <button
+          onClick={onCancel}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 text-xs text-ink-600 transition hover:text-red-300"
+        >
+          <X size={13} /> {t("play.cancelDownload")}
+        </button>
+      )}
+      {!canPlay && (
+        <p className="mt-2 text-center text-xs text-amber-400/80">
+          {t("play.signInToPlay")}
+        </p>
+      )}
+      {!busy &&
+        !running &&
+        modStatus &&
+        !modStatus.complete &&
+        modStatus.failed.length > 0 && (
+          <button
+            type="button"
+            onClick={() => toast(failureSummary(t, modStatus), "error")}
+            title={t("play.filesFailedDetails")}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 text-center text-xs text-amber-400/80 transition hover:text-amber-300"
+          >
+            <AlertTriangle size={12} />
+            {t("play.filesFailed", { count: modStatus.failed.length })}
+          </button>
+        )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-edge bg-ink-900/40 p-4">
+          <BrandingImage
+            value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+            src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON)}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-lg object-cover shadow-lg"
+          />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-mc text-2xl tracking-wide text-gray-100">
+              {instance.name}
+            </h1>
+            {chipRow(true)}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className={busy ? "w-40 sm:w-44" : "w-full sm:w-56"}>
+              <MainButton
+                size="md"
+                busy={busy}
+                running={running}
+                canPlay={canPlay}
+                updateAvailable={updateAvailable}
+                notInstalled={notInstalled}
+                autoJoin={instance.auto_join}
+                onPlay={() => onPlay(instance.auto_join ?? undefined)}
+                onUpdate={onUpdate}
+                onStop={onStop}
+                onCancel={onCancel}
+                stageLabel={
+                  progress
+                    ? stageLabelOf(t, progress.stage)
+                    : t("play.preparing")
+                }
+              />
+              {!canPlay && (
+                <p className="mt-1.5 text-center text-[11px] text-amber-400/80">
+                  {t("play.signInToPlay")}
+                </p>
+              )}
+            </div>
+            {busy && (
+              <button
+                onClick={onCancel}
+                title={t("play.cancelDownload")}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-edge text-ink-600 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+              >
+                <X size={17} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile
+            icon={<Clock size={15} />}
+            label={t("play.statsPlaytime")}
+            value={formatPlaytime(t, instance.playtime_seconds, playtimeHours)}
+          />
+          <StatTile
+            icon={<Package size={15} />}
+            label={t("play.statsPack")}
+            value={modStatus?.installed_version ?? "—"}
+          />
+          <StatTile
+            icon={<Box size={15} />}
+            label={t("play.statsVersion")}
+            value={`${loaderLabel(instance)} ${instance.minecraft_version}`}
+          />
+          <StatTile
+            icon={<CalendarDays size={15} />}
+            label={t("play.statsLastPlayed")}
+            value={
+              instance.last_played
+                ? new Date(instance.last_played).toLocaleDateString()
+                : "—"
+            }
+          />
+        </div>
+
+        {banners}
+
+        <OverviewCards>
+          <QuickSettingsCard
+            instance={instance}
+            settings={launcherSettings}
+            onSaveInstance={onSaveInstance}
+            onOpenSettings={onOpenSettings}
+          />
+          {showPlayers && (
+            <ServerCard
+              address={playerCountAddress}
+              data={players}
+              error={playersError}
+              onRefresh={onRefreshPlayers}
+            />
+          )}
+          {showNews && (
+            <NewsCard news={news} error={newsError} onRefresh={onRefreshNews} />
+          )}
+          {canShare && (
+            <ShareCard instance={instance} onManage={() => setShareOpen(true)} />
+          )}
+          <InstanceMetaCard instance={instance} modStatus={modStatus} />
+        </OverviewCards>
+
+        {shareOpen && (
+          <ShareModal
+            instance={instance}
+            onChanged={onShareChanged}
+            onClose={() => setShareOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`flex min-h-0 flex-1 ${resizing ? "cursor-col-resize select-none" : ""}`}>
       {}
@@ -278,165 +559,13 @@ export function PlayView({
                 {instance.name}
               </h1>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
-              <Chip icon={<Package size={13} />}>{kindLabel(t, instance)}</Chip>
-              <Chip icon={<Box size={13} />}>
-                {loaderLabel(instance)} {instance.minecraft_version}
-              </Chip>
-              {instance.account_override && (
-                <Chip icon={<UserRound size={13} />}>
-                  {overrideAccount ?? t("play.accountMissing")}
-                </Chip>
-              )}
-              {instance.auto_join && (
-                <AutoJoinChip
-                  instanceId={instance.id}
-                  autoJoin={instance.auto_join}
-                />
-              )}
-              {showPlaytime && (
-                <Chip icon={<Clock size={13} />}>
-                  {t("play.played", {
-                    time: formatPlaytime(t, instance.playtime_seconds, playtimeHours),
-                  })}
-                </Chip>
-              )}
-              {modStatus?.installed_version && (
-                <Chip>{t("play.packChip", { version: modStatus.installed_version })}</Chip>
-              )}
-              {instance.last_played && (
-                <Chip>
-                  {t("play.lastPlayedChip", {
-                    date: new Date(instance.last_played).toLocaleDateString(),
-                  })}
-                </Chip>
-              )}
-              {canShare && instance.share && (
-                <button
-                  onClick={() => setShareOpen(true)}
-                  className="flex items-center gap-1.5 rounded-full border border-brass-500/50 bg-brass-500/15 px-2.5 py-1 text-sm text-brass-200 transition hover:bg-brass-500/25"
-                >
-                  <Share2 size={13} />
-                  {t("share.sharedChip")}
-                  {sharePending && (
-                    <span
-                      title={t("share.cardPending")}
-                      className="h-1.5 w-1.5 rounded-full bg-amber-400"
-                    />
-                  )}
-                </button>
-              )}
-              {instance.shared_by && (
-                <Chip icon={<Share2 size={13} />}>
-                  {t("share.sharedByChip", { user: instance.shared_by })}
-                </Chip>
-              )}
-            </div>
+            {chipRow(false)}
           </div>
 
 
-          <div className="shrink-0 pt-4">
-            {shareDiverged ? (
-              <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 rise">
-                <ArrowUpCircle size={16} />
-                <span className="flex-1">{t("play.shareDiverged")}</span>
-                <button
-                  onClick={() => setShareOpen(true)}
-                  className="shrink-0 rounded-md border border-amber-400/40 px-2.5 py-1 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20"
-                >
-                  {t("play.shareManage")}
-                </button>
-              </div>
-            ) : hasUpdate ? (
-              <div
-                className={`mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm rise ${
-                  locked
-                    ? "border-brass-500/40 bg-brass-500/10 text-brass-200"
-                    : "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                }`}
-              >
-                <ArrowUpCircle size={16} />
-                <span className="flex-1">
-                  {locked
-                    ? modStatus?.latest_version
-                      ? t("play.updateAvailableVersion", {
-                          version: modStatus.latest_version,
-                        })
-                      : t("play.updateAvailable")
-                    : t("play.updateLockHint")}
-                </span>
-              </div>
-            ) : null}
-
-            {}
-            {busy && (
-              <div className="mb-4 rise">
-                <div className="mb-1.5 flex items-center justify-between text-xs">
-                  <span className="font-medium text-brass-300">
-                    {progress
-                      ? stageLabelOf(t, progress.stage)
-                      : t("play.preparing")}
-                    {progress?.message ? (
-                      <span className="ml-2 text-ink-600">
-                        {progress.message}
-                      </span>
-                    ) : null}
-                  </span>
-                  {pct !== null && (
-                    <span className="tabular-nums text-ink-600">{pct}%</span>
-                  )}
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-ink-800">
-                  <div
-                    className="progress-fill h-full rounded-full transition-[width] duration-300"
-                    style={{ width: pct !== null ? `${pct}%` : "40%" }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <MainButton
-              busy={busy}
-              running={running}
-              canPlay={canPlay}
-              updateAvailable={updateAvailable}
-              notInstalled={notInstalled}
-              autoJoin={instance.auto_join}
-              onPlay={() => onPlay(instance.auto_join ?? undefined)}
-              onUpdate={onUpdate}
-              onStop={onStop}
-              stageLabel={
-                progress ? stageLabelOf(t, progress.stage) : t("play.preparing")
-              }
-            />
-            {busy && (
-              <button
-                onClick={onCancel}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 text-xs text-ink-600 transition hover:text-red-300"
-              >
-                <X size={13} /> {t("play.cancelDownload")}
-              </button>
-            )}
-            {!canPlay && (
-              <p className="mt-2 text-center text-xs text-amber-400/80">
-                {t("play.signInToPlay")}
-              </p>
-            )}
-            {!busy &&
-              !running &&
-              modStatus &&
-              !modStatus.complete &&
-              modStatus.failed.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => toast(failureSummary(t, modStatus), "error")}
-                  title={t("play.filesFailedDetails")}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 text-center text-xs text-amber-400/80 transition hover:text-amber-300"
-                >
-                  <AlertTriangle size={12} />
-                  {t("play.filesFailed", { count: modStatus.failed.length })}
-                </button>
-              )}
+          <div className="flex shrink-0 flex-col gap-4 pt-4">
+            {banners}
+            {mainAction}
           </div>
         </div>
       </div>
@@ -822,6 +951,47 @@ function AutoJoinChip({
   );
 }
 
+function OverviewCards({ children }: { children: React.ReactNode }) {
+  const items = Children.toArray(children).filter(Boolean);
+  const left = items.filter((_, i) => i % 2 === 0);
+  const right = items.filter((_, i) => i % 2 === 1);
+  return (
+    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
+      <div className="flex flex-col gap-3">{left}</div>
+      <div className="flex flex-col gap-3">{right}</div>
+    </div>
+  );
+}
+
+function StatTile({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-edge bg-ink-900/40 px-3.5 py-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-brass-300">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <div className="truncate text-[10px] uppercase tracking-widest text-ink-600">
+          {label}
+        </div>
+        <div
+          className="truncate font-mc text-sm text-gray-100"
+          title={value}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MainButton({
   busy,
   running,
@@ -832,7 +1002,9 @@ function MainButton({
   onPlay,
   onUpdate,
   onStop,
+  onCancel,
   stageLabel,
+  size = "lg",
 }: {
   busy: boolean;
   running: boolean;
@@ -843,21 +1015,28 @@ function MainButton({
   onPlay: () => void;
   onUpdate: () => void;
   onStop: () => void;
+  onCancel: () => void;
   stageLabel: string;
+  size?: "lg" | "md";
 }) {
   const t = useT();
+  const md = size === "md";
+  const h = md ? "h-11" : "h-14";
+  const text = md ? "text-base" : "text-xl";
+  const gap = md ? "gap-2" : "gap-3";
+  const icon = md ? 17 : 22;
   if (running) {
     return (
       <button
         onClick={onStop}
-        className="group font-mc tracking-wide flex h-14 w-full items-center justify-center gap-3 rounded-lg border border-patina-500/40 bg-patina-500/10 text-lg text-patina-400 transition-all hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
+        className={`group font-mc tracking-wide flex w-full min-w-0 items-center justify-center ${gap} rounded-lg border border-patina-500/40 bg-patina-500/10 ${text} ${h} text-patina-400 transition-all hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300`}
       >
-        <span className="inline-flex items-center gap-2 group-hover:hidden">
-          <span className="h-2.5 w-2.5 rounded-full bg-patina-400 animate-pulse" />
-          {t("sidebar.gameRunning")}
+        <span className="inline-flex min-w-0 items-center gap-2 group-hover:hidden">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-patina-400 animate-pulse" />
+          <span className="truncate">{t("sidebar.gameRunning")}</span>
         </span>
         <span className="hidden items-center gap-2 group-hover:inline-flex">
-          <Square size={16} className="fill-current" />
+          <Square size={md ? 14 : 16} className="fill-current" />
           {t("play.stopGame")}
         </span>
       </button>
@@ -867,11 +1046,17 @@ function MainButton({
   if (busy) {
     return (
       <button
-        disabled
-        className="font-mc tracking-wide flex h-14 w-full items-center justify-center gap-3 rounded-lg border border-brass-600/40 bg-brass-600/10 text-lg text-brass-300"
+        onClick={onCancel}
+        className={`group font-mc tracking-wide flex w-full min-w-0 items-center justify-center ${gap} rounded-lg border border-brass-600/40 bg-brass-600/10 ${text} ${h} text-brass-300 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300`}
       >
-        <Loader2 size={20} className="animate-spin" />
-        {stageLabel}…
+        <span className="inline-flex min-w-0 items-center gap-2 group-hover:hidden">
+          <Loader2 size={md ? 17 : 20} className="shrink-0 animate-spin" />
+          <span className="truncate">{stageLabel}…</span>
+        </span>
+        <span className="hidden items-center gap-2 group-hover:inline-flex">
+          <X size={md ? 15 : 18} />
+          {t("play.cancelDownload")}
+        </span>
       </button>
     );
   }
@@ -881,9 +1066,9 @@ function MainButton({
       <button
         disabled={!canPlay}
         onClick={onUpdate}
-        className="group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-amber-500 text-xl text-ink-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className={`group font-mc tracking-widest flex w-full items-center justify-center ${gap} rounded-lg bg-amber-500 ${text} ${h} text-ink-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40`}
       >
-        <Download size={22} />
+        <Download size={icon} />
         {t("play.update")}
       </button>
     );
@@ -893,16 +1078,16 @@ function MainButton({
     <button
       disabled={!canPlay}
       onClick={onPlay}
-      className="brass-btn group font-mc tracking-widest flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-brass-500 text-xl text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40"
+      className={`brass-btn group font-mc tracking-widest flex w-full items-center justify-center ${gap} rounded-lg bg-brass-500 ${text} ${h} text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40`}
     >
       {notInstalled ? (
         <>
-          <Download size={22} />
+          <Download size={icon} />
           {t("play.install")}
         </>
       ) : (
         <>
-          <Play size={22} className="fill-current" />
+          <Play size={icon} className="fill-current" />
           {autoJoin ? t("play.playJoin") : t("play.play")}
         </>
       )}
