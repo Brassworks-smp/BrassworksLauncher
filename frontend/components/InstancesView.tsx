@@ -149,6 +149,7 @@ export function InstancesView({
   onSaveInstance,
   onPlay,
   onDelete,
+  embedded,
 }: {
   instances: Instance[];
   showFeatured?: boolean;
@@ -169,10 +170,11 @@ export function InstancesView({
   onSaveInstance: (instance: Instance) => void;
   onPlay?: (id: string) => void;
   onDelete?: (id: string) => void;
+  embedded?: boolean;
 }) {
   const tr = useT();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-  const [compact, setCompact] = useState(false);
+  const [compact, setCompact] = useState(embedded ?? false);
   const [fileDrop, setFileDrop] = useState(false);
   const isFileDrag = (e: React.DragEvent) =>
     Array.from(e.dataTransfer.types).includes("Files");
@@ -183,6 +185,7 @@ export function InstancesView({
   
   const [draggingFrom, setDraggingFrom] = useState<string | null | undefined>(undefined);
   useEffect(() => {
+    if (embedded) return;
     try {
       setCompact(localStorage.getItem(COMPACT_KEY) === "1");
     } catch {
@@ -330,42 +333,44 @@ export function InstancesView({
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between pb-3">
-        <h1 className="font-mc text-2xl tracking-wide text-gray-100">{tr("instances.title")}</h1>
-        <div className="flex items-center gap-2">
-          <SegmentedTabs
-            size="sm"
-            value={compact ? "compact" : "grid"}
-            onChange={(v) => setDensity(v === "compact")}
-            options={[
-              {
-                id: "grid",
-                label: "",
-                icon: <LayoutGrid size={15} />,
-                title: tr("instances.gridView"),
-              },
-              {
-                id: "compact",
-                label: "",
-                icon: <LayoutList size={15} />,
-                title: tr("instances.compactView"),
-              },
-            ]}
-          />
-          <button
-            onClick={() => createFolder()}
-            className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-          >
-            <FolderPlus size={16} /> {tr("instances.newFolder")}
-          </button>
-          <button
-            onClick={onAdd}
-            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
-          >
-            <Plus size={16} /> {tr("instances.newInstance")}
-          </button>
+      {!embedded && (
+        <div className="flex items-center justify-between pb-3">
+          <h1 className="font-mc text-2xl tracking-wide text-gray-100">{tr("instances.title")}</h1>
+          <div className="flex items-center gap-2">
+            <SegmentedTabs
+              size="sm"
+              value={compact ? "compact" : "grid"}
+              onChange={(v) => setDensity(v === "compact")}
+              options={[
+                {
+                  id: "grid",
+                  label: "",
+                  icon: <LayoutGrid size={15} />,
+                  title: tr("instances.gridView"),
+                },
+                {
+                  id: "compact",
+                  label: "",
+                  icon: <LayoutList size={15} />,
+                  title: tr("instances.compactView"),
+                },
+              ]}
+            />
+            <button
+              onClick={() => createFolder()}
+              className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2 text-sm text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <FolderPlus size={16} /> {tr("instances.newFolder")}
+            </button>
+            <button
+              onClick={onAdd}
+              className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brass-400"
+            >
+              <Plus size={16} /> {tr("instances.newInstance")}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {allTags.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -703,7 +708,7 @@ function FolderGroup({
                   maxHeight: menu.maxHeight,
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="rise fixed z-[61] w-56 overflow-y-auto rounded-lg border border-edge bg-ink-850 p-2.5 shadow-2xl"
+                className="rise fixed z-[75] w-56 overflow-y-auto rounded-lg border border-edge bg-ink-850 p-2.5 shadow-2xl"
               >
               <div className="mb-1 text-[10px] uppercase tracking-widest text-ink-600">
                 {tr("common.rename")}
@@ -804,7 +809,7 @@ function FolderGroup({
   );
 }
 
-function InstanceCard({
+export function InstanceCard({
   instance,
   folders,
   selected,
@@ -825,6 +830,7 @@ function InstanceCard({
   onShare,
   accent,
   compact,
+  rail,
 }: {
   instance: Instance;
   folders: InstanceFolder[];
@@ -846,6 +852,7 @@ function InstanceCard({
   onShare?: () => void;
   accent?: string;
   compact?: boolean;
+  rail?: boolean;
 }) {
   const tr = useT();
   const [folderMenu, setFolderMenu] = useState<MenuPos | null>(null);
@@ -904,7 +911,7 @@ function InstanceCard({
   
   
   const dragProps = {
-    draggable: !instance.featured,
+    draggable: !instance.featured && !rail,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.setData("text/instance", instance.id);
       e.dataTransfer.setData("text/plain", instance.id);
@@ -973,7 +980,7 @@ function InstanceCard({
               : { right: folderMenu.right }),
           }}
           ref={menuRef}
-          className="rise fixed z-[61] w-56 rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
+          className="rise fixed z-[75] w-56 rounded-lg border border-edge bg-ink-850 p-1.5 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 flex shrink-0 items-center gap-2 border-b border-edge px-2 pb-2 pt-1">
@@ -1170,9 +1177,9 @@ function InstanceCard({
         onContextMenu={openContextMenu}
         {...dragProps}
         style={accent ? ({ "--accent": accent } as React.CSSProperties) : undefined}
-        className={`group relative flex items-center gap-2.5 overflow-hidden rounded-lg border bg-ink-900/40 px-2.5 py-2.5 transition-opacity ${stateCls} ${
-          dragging ? "opacity-0" : ""
-        }`}
+        className={`group relative flex items-center gap-2.5 overflow-hidden rounded-lg border bg-ink-900/40 transition-opacity ${
+          rail ? "w-full px-2 py-1.5" : "px-2.5 py-2.5"
+        } ${stateCls} ${dragging ? "opacity-0" : ""}`}
       >
         <BrandingImage
           value={instance.icon ?? DEFAULT_INSTANCE_ICON}
@@ -1232,12 +1239,15 @@ function InstanceCard({
             ) : instance.pinned && !instance.featured ? (
               <Star
                 size={13}
-                className="fill-current text-brass-300 transition-[max-width,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:max-w-0 group-hover:opacity-0"
+                className={`fill-current text-brass-300 transition-[max-width,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  rail ? "" : "group-hover:max-w-0 group-hover:opacity-0"
+                }`}
                 style={accent ? { color: accent } : undefined}
               />
             ) : null}
 
             {}
+            {!rail && (
             <div
               className={`flex items-center gap-1 overflow-hidden opacity-0 transition-[max-width,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:opacity-100 ${
                 folderMenu ? "max-w-[120px] opacity-100" : "max-w-0 group-hover:max-w-[120px]"
@@ -1285,6 +1295,7 @@ function InstanceCard({
                 <Settings size={14} />
               </button>
             </div>
+            )}
           </div>
         )}
         {folderMenuPortal}
