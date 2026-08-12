@@ -167,6 +167,7 @@ export function InstanceSettingsView({
   onError,
   onCheckUpdates,
   onRefresh,
+  embedded,
 }: {
   instance: Instance;
   settings: LauncherSettings;
@@ -181,6 +182,7 @@ export function InstanceSettingsView({
   onError: (e: string) => void;
   onCheckUpdates: () => void;
   onRefresh: () => void;
+  embedded?: boolean;
 }) {
   const t = useT();
   const patch = (p: Partial<Instance>) => onSaveInstance({ ...instance, ...p });
@@ -271,55 +273,57 @@ export function InstanceSettingsView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-3 pb-4">
-        <button
-          onClick={onBack}
-          className="grid h-8 w-8 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div className="flex items-center gap-3">
-          <BrandingImage
-            value={instance.icon ?? DEFAULT_INSTANCE_ICON}
-            src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON)}
-            alt=""
-            className="h-9 w-9 rounded-md object-cover"
-          />
-          <div>
-            {instance.featured ? (
-              <div
-                title={t("instanceSettings.featuredNameLocked")}
-                className="-mx-1.5 max-w-md truncate px-1.5 font-mc text-2xl tracking-wide text-gray-100"
-              >
-                {instance.name}
+      {!embedded && (
+        <div className="flex items-center gap-3 pb-4">
+          <button
+            onClick={onBack}
+            className="grid h-8 w-8 place-items-center rounded-md border border-edge text-ink-600 transition hover:border-brass-600/40 hover:text-brass-300"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="flex items-center gap-3">
+            <BrandingImage
+              value={instance.icon ?? DEFAULT_INSTANCE_ICON}
+              src={iconSrc(instance.icon ?? DEFAULT_INSTANCE_ICON)}
+              alt=""
+              className="h-9 w-9 rounded-md object-cover"
+            />
+            <div>
+              {instance.featured ? (
+                <div
+                  title={t("instanceSettings.featuredNameLocked")}
+                  className="-mx-1.5 max-w-md truncate px-1.5 font-mc text-2xl tracking-wide text-gray-100"
+                >
+                  {instance.name}
+                </div>
+              ) : (
+                <input
+                  defaultValue={instance.name}
+                  key={instance.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== instance.name) patch({ name: v });
+                    else e.target.value = instance.name;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      e.currentTarget.value = instance.name;
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  title={t("instanceSettings.renameInstance")}
+                  spellCheck={false}
+                  className="-mx-1.5 w-full max-w-md rounded-md bg-transparent px-1.5 font-mc text-2xl tracking-wide text-gray-100 outline-none transition hover:bg-ink-800/60 focus:bg-ink-800 focus:ring-1 focus:ring-brass-500/50"
+                />
+              )}
+              <div className="text-xs text-ink-600">
+                {t("instanceSettings.subtitle")}
               </div>
-            ) : (
-              <input
-                defaultValue={instance.name}
-                key={instance.name}
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (v && v !== instance.name) patch({ name: v });
-                  else e.target.value = instance.name;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                  if (e.key === "Escape") {
-                    e.currentTarget.value = instance.name;
-                    e.currentTarget.blur();
-                  }
-                }}
-                title={t("instanceSettings.renameInstance")}
-                spellCheck={false}
-                className="-mx-1.5 w-full max-w-md rounded-md bg-transparent px-1.5 font-mc text-2xl tracking-wide text-gray-100 outline-none transition hover:bg-ink-800/60 focus:bg-ink-800 focus:ring-1 focus:ring-brass-500/50"
-              />
-            )}
-            <div className="text-xs text-ink-600">
-              {t("instanceSettings.subtitle")}
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="flex-1 overflow-y-auto pr-1">
         <CardColumns>
