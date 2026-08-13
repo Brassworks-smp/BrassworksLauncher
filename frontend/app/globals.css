@@ -285,6 +285,19 @@
   .no-scrollbar {
     scrollbar-width: none;
   }
+  @keyframes rail-swap {
+    0% {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .rail-swap {
+    animation: rail-swap 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   .menu-scroll::-webkit-scrollbar {
     width: 8px;
   }
