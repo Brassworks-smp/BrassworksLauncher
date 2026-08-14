@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, ShieldAlert, Unlink } from "lucide-react";
 import * as api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useT } from "@/lib/i18n";
 import type { GlobalFilesSymlinkSupport } from "@/lib/types";
 
-export function useGlobalFilesSymlinkSupport(checkOnMount = false) {
+export function useGlobalFilesSymlinkSupport(
+  checkOnMount = false,
+  onDisableGlobalFiles?: () => void,
+) {
   const [support, setSupport] = useState<GlobalFilesSymlinkSupport | null>(null);
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -41,6 +44,7 @@ export function useGlobalFilesSymlinkSupport(checkOnMount = false) {
         error={support?.error ?? null}
         onClose={() => setOpen(false)}
         onRetry={() => void check(true)}
+        onDisableGlobalFiles={onDisableGlobalFiles}
       />
     ),
   };
@@ -52,12 +56,14 @@ function WindowsSymlinkSetupModal({
   error,
   onClose,
   onRetry,
+  onDisableGlobalFiles,
 }: {
   open: boolean;
   checking: boolean;
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  onDisableGlobalFiles?: () => void;
 }) {
   const t = useT();
 
@@ -100,27 +106,40 @@ function WindowsSymlinkSetupModal({
             </p>
           )}
         </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            onClick={() => api.openWindowsDeveloperSettings().catch((cause) => toast(String(cause), "error"))}
-            className="flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
-          >
-            <ExternalLink size={14} /> {t("globalFiles.openDeveloperSettings")}
-          </button>
-          <button
-            disabled={checking}
-            onClick={onRetry}
-            className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 disabled:opacity-50"
-          >
-            {checking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            {t("globalFiles.checkAgain")}
-          </button>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+          {onDisableGlobalFiles && (
+            <button
+              onClick={() => {
+                onDisableGlobalFiles();
+                onClose();
+              }}
+              className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-500/20"
+            >
+              <Unlink size={14} /> {t("globalFiles.turnOff")}
+            </button>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-edge px-4 py-2 text-sm text-ink-600 transition hover:text-gray-200"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onClick={() => api.openWindowsDeveloperSettings().catch((cause) => toast(String(cause), "error"))}
+              className="flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm text-gray-200 transition hover:border-brass-600/40 hover:text-brass-300"
+            >
+              <ExternalLink size={14} /> {t("globalFiles.openDeveloperSettings")}
+            </button>
+            <button
+              disabled={checking}
+              onClick={onRetry}
+              className="brass-btn flex items-center gap-2 rounded-lg bg-brass-500 px-4 py-2 text-sm font-semibold text-ink-950 disabled:opacity-50"
+            >
+              {checking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {t("globalFiles.checkAgain")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
