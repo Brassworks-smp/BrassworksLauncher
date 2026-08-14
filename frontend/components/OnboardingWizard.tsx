@@ -13,6 +13,7 @@ import {
   Sparkles,
   Loader2,
   Plus,
+  LayoutGrid,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Select, Toggle } from "@/components/ui";
@@ -55,6 +56,7 @@ export function OnboardingWizard({
     { key: "welcome", node: <WelcomeStep /> },
     { key: "language", node: <LanguageStep settings={settings} onPatch={onPatch} /> },
     { key: "theme", node: <ThemeStep settings={settings} onPatch={onPatch} /> },
+    { key: "layout", node: <LayoutStep settings={settings} onPatch={onPatch} /> },
     { key: "import", node: <ImportStep onOpenImport={onOpenImport} /> },
     { key: "featured", node: <FeaturedStep settings={settings} onPatch={onPatch} /> },
     { key: "ram", node: <RamStep settings={settings} onPatch={onPatch} /> },
@@ -543,6 +545,130 @@ function SignInStep({
         </p>
       </div>
     </StepShell>
+  );
+}
+
+function LayoutStep({
+  settings,
+  onPatch,
+}: {
+  settings: LauncherSettings;
+  onPatch: (p: Partial<LauncherSettings>) => void;
+}) {
+  const t = useT();
+  const prism = settings.advanced_mode;
+  return (
+    <StepShell
+      icon={<LayoutGrid size={26} />}
+      title={t("onboarding.layoutTitle")}
+      subtitle={t("onboarding.layoutBody")}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <LayoutChoice
+          label={t("onboarding.layoutClassic")}
+          desc={t("onboarding.layoutClassicDesc")}
+          active={!prism}
+          onClick={() => onPatch({ advanced_mode: false })}
+          preview={<ClassicLayoutPreview />}
+        />
+        <LayoutChoice
+          label={t("onboarding.layoutPrism")}
+          desc={t("onboarding.layoutPrismDesc")}
+          active={prism}
+          onClick={() => onPatch({ advanced_mode: true })}
+          preview={<PrismLayoutPreview />}
+        />
+      </div>
+    </StepShell>
+  );
+}
+
+function LayoutChoice({
+  label,
+  desc,
+  active,
+  onClick,
+  preview,
+}: {
+  label: string;
+  desc: string;
+  active: boolean;
+  onClick: () => void;
+  preview: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col gap-2.5 rounded-xl border p-2.5 text-left transition ${
+        active
+          ? "border-brass-500/60 bg-brass-500/10 ring-1 ring-brass-500/30"
+          : "border-edge bg-ink-950/30 hover:border-brass-600/40 hover:bg-ink-800/30"
+      }`}
+    >
+      <div className="pointer-events-none select-none overflow-hidden rounded-lg border border-edge bg-ink-950/70 p-2">
+        {preview}
+      </div>
+      <div className="flex items-start gap-1.5">
+        {active && <Check size={14} className="mt-0.5 shrink-0 text-brass-300" />}
+        <div className="min-w-0">
+          <span
+            className={`font-mc text-sm tracking-wide ${
+              active ? "text-brass-200" : "text-gray-200"
+            }`}
+          >
+            {label}
+          </span>
+          <p className="mt-0.5 text-[11px] leading-snug text-ink-600">{desc}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ClassicLayoutPreview() {
+  return (
+    <div className="flex h-24 gap-1.5">
+      <div className="flex w-1/3 shrink-0 flex-col gap-1 border-r border-edge/50 pr-1.5">
+        <div className="skeleton h-2.5 w-3/4 rounded" />
+        <div className="skeleton h-2.5 w-2/3 rounded" />
+        <div className="skeleton h-2.5 w-3/4 rounded" />
+        <div className="skeleton h-2.5 w-1/2 rounded" />
+        <div className="skeleton h-2.5 w-2/3 rounded" />
+      </div>
+      <div className="flex flex-1 flex-col gap-1">
+        <div className="skeleton h-3 w-1/2 rounded" />
+        <div className="skeleton h-6 flex-1 rounded-md" />
+        <div className="skeleton h-4 w-3/4 rounded" />
+      </div>
+    </div>
+  );
+}
+
+function PrismLayoutPreview() {
+  return (
+    <div className="flex h-24 gap-1.5">
+      <div className="flex w-1/3 shrink-0 flex-col gap-1 border-r border-edge/50 pr-1.5">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-1">
+            <div className="skeleton h-2.5 w-2.5 shrink-0 rounded-sm" />
+            <div className="skeleton h-2.5 flex-1 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-1 flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <div className="skeleton h-2.5 flex-1 rounded-sm" />
+          <div className="skeleton h-2.5 flex-1 rounded-sm" />
+          <div className="skeleton h-2.5 flex-1 rounded-sm" />
+          <div className="skeleton h-2.5 flex-1 rounded-sm" />
+        </div>
+        <div className="skeleton h-6 flex-1 rounded-md" />
+        <div className="grid grid-cols-2 gap-1">
+          <div className="skeleton h-4 rounded" />
+          <div className="skeleton h-4 rounded" />
+        </div>
+      </div>
+    </div>
   );
 }
 
