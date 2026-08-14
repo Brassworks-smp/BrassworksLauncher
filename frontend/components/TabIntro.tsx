@@ -23,6 +23,7 @@ import { useT } from "@/lib/i18n";
 import type { View } from "@/components/Sidebar";
 
 export const TAB_INTRO_PREFIX = "bw-tab-intro-";
+export const HAS_LAUNCHED_KEY = "bw-has-launched-before";
 
 type IntroStep = { icon: React.ReactNode; titleKey: string; bodyKey: string };
 type IntroDef = { icon: React.ReactNode; headingKey: string; steps: IntroStep[] };
@@ -136,6 +137,20 @@ export function resetTabIntros() {
 
 export function markAllTabIntrosSeen() {
   for (const v of TAB_INTRO_VIEWS) markTabIntroSeen(v);
+}
+
+export function hasLaunchedBefore(): boolean {
+  try {
+    return !!localStorage.getItem(HAS_LAUNCHED_KEY);
+  } catch {
+    return true;
+  }
+}
+
+export function markLaunched() {
+  try {
+    localStorage.setItem(HAS_LAUNCHED_KEY, "1");
+  } catch {}
 }
 
 
