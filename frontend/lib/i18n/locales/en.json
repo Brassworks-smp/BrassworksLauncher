@@ -81,7 +81,9 @@
     "windowsSetupStep3": "Return to Brassworks, select Check again, then retry your Global Files action.",
     "windowsSetupAdminFallback": "If your PC is managed and Developer Mode is unavailable, an administrator must grant your account the Create symbolic links user right or run Brassworks with elevated permission.",
     "openDeveloperSettings": "Open Developer settings",
-    "checkAgain": "Check again"
+    "checkAgain": "Check again",
+    "editorTitle": "Shared files & folders",
+    "turnOff": "Turn off Global Files"
   },
   "schematics": {
     "heroTitle": "Schematics",
