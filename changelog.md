@@ -1,5 +1,13 @@
 # 0.9.0
 
+## Advanced mode
+
+- Added an opt-in Advanced mode in Settings (Launcher → Advanced mode) that reworks the layout into a Prism Launcher-style single page. The sidebar transforms into a compact, always-visible instance list with its actions in a toolbar instead of hover menus; the Instances page stays as home, and Skins, Global Files, Settings and every instance page open as subpages with a back button.
+- The instance list in the sidebar shows the most recently used instances that fit the window, with a View All button that opens the full Instances page as a modal in compact view for picking one.
+- Reworked the Play screen into a compact overview: a modest launch button and settings shortcut beside the instance name, stat tiles for playtime, pack version, version and last played, plus a responsive grid of quick settings, player count, news, share and pack details. The full-page layout stays for non-advanced mode.
+- Kept the instance name in the subpage header (inline rename on the Edit tab) instead of re-showing it inside instance settings.
+- Moved the Content tab's source/status/origin filters behind a Filters toggle, and separated search bars from filter rows in Servers and Worlds so options sit on one line.
+
 ## Developer tooling
 
 - Added `cargo bump-version <major|minor|patch|version>` to update Cargo, Tauri, frontend package metadata, the lockfile, and the changelog heading in one cross-platform command.
