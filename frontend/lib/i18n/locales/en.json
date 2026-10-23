@@ -1,4 +1,11 @@
 {
+  "error": {
+    "toggleExpand": "Show full error",
+    "copiedToast": "Error copied to clipboard",
+    "copyTooltip": "Click to copy error to clipboard",
+    "error.copyFailedToast": "Failed to copy error to clipboard",
+    "copy": "Copy"
+  },
   "common": {
     "cancel": "Cancel",
     "save": "Save",

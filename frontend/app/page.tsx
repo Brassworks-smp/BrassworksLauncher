@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   X,
+  Copy,
+  Bug,
   Play,
   Package,
   Globe2,
@@ -136,6 +138,7 @@ export default function Home() {
     Record<string, LaunchProgress>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [errorExpanded, setErrorExpanded] = useState(false);
   const [msAuth, setMsAuth] = useState<MsAuthState | null>(null);
   const [accountsRecheck, setAccountsRecheck] = useState(0);
 
@@ -1502,13 +1505,49 @@ export default function Home() {
 
         <main className="flex min-w-0 flex-1 flex-col p-5">
           {error && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300 rise">
-              <AlertTriangle size={16} />
-              <span className="flex-1 truncate">{error}</span>
-              <button onClick={() => setError(null)}>
-                <X size={15} />
-              </button>
-            </div>
+              <div className="mb-4 flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300 rise">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span
+                      onClick={() => setErrorExpanded((e) => !e)}
+                      title={tr("error.toggleExpand")}
+                      className={
+                        errorExpanded
+                            ? "flex-1 cursor-pointer whitespace-pre-wrap break-all font-mono text-xs select-text"
+                            : "flex-1 cursor-pointer truncate"
+                      }
+                  >
+                  {error}
+                </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                        onClick={async () => {
+                          try {
+                            await api.copyText(error);
+                            toast(tr("error.copiedToast"), "success");
+                          } catch(err) {
+                            toast(tr("error.copyFailedToast"), "error");
+                          }
+                        }}
+                        className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-xs hover:bg-red-500/30"
+                        title={tr("error.copyTooltip")}
+                    >
+                      <Copy size={12} />
+                      <span>{tr("error.copy")}</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                          setError(null);
+                          setErrorExpanded(false);
+                        }}
+                        className="ml-1 opacity-70 hover:opacity-100"
+                        title={tr("common.close")}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </div>
+              </div>
           )}
 
           <div className="flex min-h-0 flex-1 flex-col">
