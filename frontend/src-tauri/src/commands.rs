@@ -3043,14 +3043,14 @@ pub(crate) struct MenuCommand {
 
 #[tauri::command]
 pub(crate) fn set_menu_commands(app: AppHandle, items: Vec<MenuCommand>) -> CmdResult<()> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos"))]
     {
         let pinned: Vec<(String, String)> =
             items.into_iter().map(|c| (c.id, c.label)).collect();
         let menu = crate::build_menu(&app, &pinned).map_err(err)?;
         app.set_menu(menu).map_err(err)?;
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos")))]
     {
         let _ = (&app, &items);
     }
