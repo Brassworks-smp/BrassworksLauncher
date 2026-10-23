@@ -1521,9 +1521,13 @@ export default function Home() {
                 </span>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
-                        onClick={() => {
-                          void api.copyText(error);
-                          toast(tr("error.copiedToast"), "success");
+                        onClick={async () => {
+                          try {
+                            await api.copyText(error);
+                            toast(tr("error.copiedToast"), "success");
+                          } catch(err) {
+                            toast(tr("error.copyFailedToast"), "error");
+                          }
                         }}
                         className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-xs hover:bg-red-500/30"
                         title={tr("error.copyTooltip")}
