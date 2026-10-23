@@ -242,7 +242,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 /// Build the full native menu. `pinned` is a list of (command-path, label)
 /// pairs surfaced under a "Commands" submenu so pinned palette commands can be
 /// run straight from the menu bar; each emits `menu://action` with a `cmd:` id.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos"))]
 pub(crate) fn build_menu(
     app: &tauri::AppHandle,
     pinned: &[(String, String)],
@@ -318,7 +318,7 @@ pub(crate) fn build_menu(
         .build()
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos"))]
 fn setup_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     let menu = build_menu(app, &[])?;
     app.set_menu(menu)?;
@@ -431,7 +431,7 @@ pub fn run() {
                 let _ = app.deep_link().register_all();
             }
 
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos"))]
             setup_menu(app.handle())?;
 
             if let Some(window) = app.get_webview_window("main") {
